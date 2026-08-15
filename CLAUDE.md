@@ -60,18 +60,25 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
+No build step — pi loads `llm-router.ts` directly (registered in
+`~/.pi/agent/settings.json`). Smoke test (fixtures + one live verdict):
 
 ```bash
-# Example:
-# npm install
-# npm test
+node --experimental-strip-types smoke.ts ["task text"]
 ```
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+Single-file pi extension (`llm-router.ts`): a judge LLM routes each
+session's first prompt to one of 7 model arms via CPA/CLIProxyAPI, with
+post-verdict quota swaps and an interactive `/llm-router-config` menu.
+`exemplars.jsonl` provides measured-outcome few-shot for the judge.
+See README.md for the full design.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- User-facing config lives in `~/.pi/agent/llm-router.json`, re-read per
+  routed prompt — never require a pi restart for a config change.
+- Pure logic (swap resolution, quota aggregation) stays in exported
+  functions with fixtures in `smoke.ts`; probe failures degrade to
+  ungated routing with a visible notice, never a blocked session.
