@@ -1,84 +1,24 @@
-# Project Instructions for AI Agents
+# proper-pi-extensions
 
-This file provides instructions and context for AI coding agents working on this project.
+## Task tracking
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:1105d646 -->
-## Beads Issue Tracker
+Beads (`bd`). Context loads via the SessionStart hook in
+`.claude/settings.json` — run `bd prime` if it is missing or stale.
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+## Repository layout
 
-### Quick Reference
+Each extension lives in its own top-level directory with its source,
+package manifest, tests, documentation, and extension-specific agent guidance.
+Read that directory's `CLAUDE.md` before changing it.
 
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
+## lat.md
 
-### Rules
+- Before coding: `lat search "<task>"` to find relevant design intent.
+- After changing behavior, architecture, or tests: update that extension's
+  section under root `lat.md/`, then run `lat check` from the repository root.
+- Syntax and section rules live in the `lat-md` skill, not here.
 
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+## Validation
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/core-concepts/sync-concepts.md for details and anti-patterns.
-
-## Agent Context Profiles
-
-The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
-
-- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
-- **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
-- **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
-
-## Session Completion
-
-This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, and orchestrator instructions.
-
-1. **File issues for remaining work** - Create beads for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **Handle git/sync by active profile**:
-   ```bash
-   # Conservative/minimal/default: report status and proposed commands; wait for approval.
-   git status
-
-   # Team-maintainer opt-in only, unless current instructions forbid it:
-   git pull --rebase
-   git push
-   git status
-   ```
-5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
-
-**Critical rules:**
-- Explicit user or orchestrator instructions override this Beads block.
-- Do not commit or push without clear authority from the active profile or the current user request.
-- If a required sync or push is blocked, stop and report the exact command and error.
-<!-- END BEADS INTEGRATION -->
-
-
-## Build & Test
-
-No build step — pi loads `llm-router.ts` directly (registered in
-`~/.pi/agent/settings.json`). Smoke test (fixtures + one live verdict):
-
-```bash
-node --experimental-strip-types smoke.ts ["task text"]
-```
-
-## Architecture Overview
-
-Single-file pi extension (`llm-router.ts`): a judge LLM routes each
-session's first prompt to one of 7 model arms via CPA/CLIProxyAPI, with
-post-verdict quota swaps and an interactive `/llm-router-config` menu.
-`exemplars.jsonl` provides measured-outcome few-shot for the judge.
-See README.md for the full design.
-
-## Conventions & Patterns
-
-- User-facing config lives in `~/.pi/agent/llm-router.json`, re-read per
-  routed prompt — never require a pi restart for a config change.
-- Pure logic (swap resolution, quota aggregation) stays in exported
-  functions with fixtures in `smoke.ts`; probe failures degrade to
-  ungated routing with a visible notice, never a blocked session.
+Run each extension's checks from its directory. Pi loads installed local
+packages directly from their registered directory paths.

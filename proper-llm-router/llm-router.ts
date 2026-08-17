@@ -31,10 +31,16 @@
  *   "exemplarsPath": ".../exemplars.jsonl",   // optional few-shot corpus
  *   "quotaMaxPct": null,                      // gate: exclude arms >= this % used
  *   "cpaManagementKey": "",                   // plaintext; env fallback below
- *   "cpaManagementKeyEnv": "CPA_MANAGEMENT_KEY"
+ *   "cpaManagementKeyEnv": "CPA_MANAGEMENT_KEY",
+ *   "judgeModelOverrides": {                  // arm slot -> enabled CPA model
+ *     "claude-fable-5": "another-enabled-model"
+ *   },
+ *   "commandPins": {                          // slash command -> fixed arm,
+ *     "file": { "model": "claude-fable-5", "effort": "xhigh" }  // judge skipped
+ *   }
  * }
  *
- * Quota: the judge is NEVER menu-filtered — it always sees all 7 arms.
+ * Quota: the judge is NEVER menu-filtered — it always sees all 7 slots.
  * Availability is checked after the verdict (probes run concurrently
  * with the judge call): CPA's /v1/models listing, plus — with
  * quotaMaxPct set and the CPA management key configured
@@ -62,17 +68,45 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { fileURLToPath } from "node:url";
+import type {
+	ExtensionAPI,
+	ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 
 const PROVIDER = "llm-router";
 const CPA_PROVIDER = "cliproxyapi";
 const CONFIG_PATH = path.join(os.homedir(), ".pi/agent/llm-router.json");
+const EXTENSION_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 export interface JudgeConfig {
 	baseUrl: string;
 	apiKeyEnv: string;
 	model: string;
 	effort: string | null;
+}
+// pi's own thinking levels (@earendil-works/pi-agent-core ThinkingLevel;
+// not re-exported from the coding-agent entrypoint, so redeclared here)
+export type ThinkingLevel =
+	| "off"
+	| "minimal"
+	| "low"
+	| "medium"
+	| "high"
+	| "xhigh"
+	| "max";
+export const THINKING_LEVELS: ThinkingLevel[] = [
+	"off",
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+];
+export interface CommandPin {
+	model: string; // arm key, CPA id, or unique fragment (resolveArm)
+	effort: ThinkingLevel | null; // null = leave the session's thinking level
 }
 export interface Config {
 	judge: JudgeConfig;
@@ -86,6 +120,12 @@ export interface Config {
 	quotaMaxPct: number | null;
 	cpaManagementKey: string;
 	cpaManagementKeyEnv: string;
+	// replace a judge arm's execution model while preserving that arm's
+	// rubric use cases and stable schema selection key
+	judgeModelOverrides: Record<string, string>;
+	// slash commands routed without asking the judge (key = command name,
+	// leading "/" optional). Quota swaps still apply to the pinned arm.
+	commandPins: Record<string, CommandPin>;
 }
 
 const DEFAULTS: Config = {
@@ -98,17 +138,26 @@ const DEFAULTS: Config = {
 	fallbackModel: "gpt-5.6-terra",
 	cpaBase: "http://127.0.0.1:8317",
 	cpaKeyEnv: "ANTHROPIC_AUTH_TOKEN",
-	exemplarsPath: path.join(os.homedir(), "work/llm-router/exemplars.jsonl"),
+	exemplarsPath: path.join(EXTENSION_DIR, "exemplars.jsonl"),
 	quotaMaxPct: null,
 	cpaManagementKey: "",
 	cpaManagementKeyEnv: "CPA_MANAGEMENT_KEY",
+	judgeModelOverrides: {},
+	commandPins: {
+		file: { model: "claude-fable-5", effort: "xhigh" },
+		triage: { model: "claude-fable-5", effort: "xhigh" },
+		spec: { model: "claude-fable-5", effort: "xhigh" },
+		"implement-ready": { model: "gpt-5-6-sol", effort: "xhigh" },
+	},
 };
 
 function managementKey(cfg: Config): string {
 	return cfg.cpaManagementKey || process.env[cfg.cpaManagementKeyEnv] || "";
 }
 
-async function validateManagementKey(cfg: Config): Promise<{ ok: boolean; detail: string }> {
+async function validateManagementKey(
+	cfg: Config,
+): Promise<{ ok: boolean; detail: string }> {
 	const key = managementKey(cfg);
 	if (!key) return { ok: false, detail: "not set" };
 	try {
@@ -126,10 +175,14 @@ async function validateManagementKey(cfg: Config): Promise<{ ok: boolean; detail
 	}
 }
 
-export function loadConfig(): Config {
+export function loadConfig(configPath = CONFIG_PATH): Config {
 	try {
-		const user = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-		return { ...DEFAULTS, ...user, judge: { ...DEFAULTS.judge, ...(user.judge ?? {}) } };
+		const user = JSON.parse(fs.readFileSync(configPath, "utf8"));
+		return {
+			...DEFAULTS,
+			...user,
+			judge: { ...DEFAULTS.judge, ...(user.judge ?? {}) },
+		};
 	} catch {
 		return DEFAULTS;
 	}
@@ -149,7 +202,12 @@ const ARMS: Record<string, { cpa: string }> = {
 	"gpt-5-6-terra": { cpa: "gpt-5.6-terra" },
 	"gpt-5-6-sol": { cpa: "gpt-5.6-sol" },
 };
-const CLAUDE_ARMS = new Set(["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5", "claude-fable-5"]);
+const CLAUDE_ARMS = new Set([
+	"claude-haiku-4-5",
+	"claude-sonnet-5",
+	"claude-opus-5",
+	"claude-fable-5",
+]);
 // Post-verdict quota swap: fixed cross-harness tier pairs. The judge is
 // never menu-filtered; an out-of-quota pick swaps to its partner (both
 // dead -> caller falls back). luna's return pair is haiku (cheap tier).
@@ -177,13 +235,60 @@ export const SENTINEL_RE = /\[\[\s*llm-router\s*:\s*([^\]]+?)\s*\]\]/i;
 export function resolveArm(name: string): string | null {
 	const n = name.trim().toLowerCase().replace(/[\s.]/g, "-");
 	if (ARMS[n]) return n;
-	const hits = Object.keys(ARMS).filter((arm) => arm.includes(n) || n.includes(arm));
+	const hits = Object.keys(ARMS).filter(
+		(arm) => arm.includes(n) || n.includes(arm),
+	);
 	return hits.length === 1 ? hits[0] : null;
+}
+
+// @lat: [[configuration#Judge model overrides]]
+function judgeOverrides(cfg: Config): Map<string, string> {
+	const overrides = new Map<string, string>();
+	for (const [name, value] of Object.entries(cfg.judgeModelOverrides ?? {})) {
+		const arm = resolveArm(name);
+		const model = typeof value === "string" ? value.trim() : "";
+		if (arm && model && model !== ARMS[arm].cpa) overrides.set(arm, model);
+	}
+	return overrides;
+}
+
+/** CPA model executed when the judge selects a stable arm slot. */
+export function judgeCpaModel(cfg: Config, arm: string): string {
+	return judgeOverrides(cfg).get(arm) ?? ARMS[arm]?.cpa ?? arm;
+}
+
+/** Replace arm labels in judge instructions while retaining stable schema
+ * keys, so an arbitrary enabled CPA model inherits the original arm's
+ * calibrated use cases without changing the verdict protocol. */
+export function applyJudgeModelOverrides(
+	cfg: Config,
+	instructions: string,
+): string {
+	const overrides = judgeOverrides(cfg);
+	if (!overrides.size) return instructions;
+	const pattern = new RegExp(
+		[...overrides.keys()]
+			.sort((a, b) => b.length - a.length)
+			.map((arm) => arm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+			.join("|"),
+		"g",
+	);
+	const replaced = instructions.replace(
+		pattern,
+		(arm) => `${overrides.get(arm)} [selection key: ${arm}]`,
+	);
+	return (
+		"Model overrides are active. Each actual model below inherits the use cases " +
+		"of its selection key. Return the selection key in JSON.\n\n" +
+		replaced
+	);
 }
 
 /** Extract the sentinel (if any) and the text with the marker removed.
  * Pure — see smoke.ts. */
-export function parseSentinel(text: string): { name: string; stripped: string } | null {
+export function parseSentinel(
+	text: string,
+): { name: string; stripped: string } | null {
 	const m = SENTINEL_RE.exec(text);
 	if (!m) return null;
 	const before = text.slice(0, m.index);
@@ -191,6 +296,27 @@ export function parseSentinel(text: string): { name: string; stripped: string } 
 	// collapse the seam so "Task: [[…]] fix X" strips to "Task: fix X"
 	if (/\s$/.test(before)) after = after.replace(/^[ \t]+/, "");
 	return { name: m[1], stripped: (before + after).trim() };
+}
+
+// ------------------------------------------------------- command pins
+/** Fixed arm for a slash command, when configured — the judge is skipped
+ * entirely (the pick is deterministic, so there is nothing to judge).
+ * Config keys match with or without the leading "/", case-insensitively;
+ * an unresolvable model name falls through to the judge. Pure — see
+ * smoke.ts. */
+export function commandPin(
+	cfg: Config,
+	text: string,
+): { arm: string; effort: ThinkingLevel | null } | null {
+	const m = /^\/([^\s]+)/.exec(text.trim());
+	if (!m) return null;
+	const want = m[1].toLowerCase();
+	const hit = Object.entries(cfg.commandPins ?? {}).find(
+		([k]) => k.replace(/^\//, "").toLowerCase() === want,
+	);
+	if (!hit) return null;
+	const arm = resolveArm(hit[1].model);
+	return arm ? { arm, effort: hit[1].effort ?? null } : null;
 }
 
 // Routing rubric (source of truth — calibrated against the measured
@@ -273,7 +399,13 @@ export class ExemplarIndex {
 	constructor(jsonl: string) {
 		for (const line of jsonl.split("\n")) {
 			if (!line.trim()) continue;
-			this.rows.push(JSON.parse(line) as Exemplar);
+			try {
+				this.rows.push(JSON.parse(line) as Exemplar);
+			} catch (e) {
+				if (e instanceof SyntaxError)
+					throw new SyntaxError(`invalid exemplar JSONL: ${e.message}`);
+				throw e;
+			}
 		}
 		for (const r of this.rows) {
 			const tf = termFreq(r.prompt);
@@ -305,7 +437,10 @@ export class ExemplarIndex {
 		});
 		scored.sort((a, b) => b.cos - a.cos);
 		// skip near-identical (answer key) and unrelated (misleading neighbors)
-		return scored.filter((s) => s.cos >= 0.05 && s.cos <= 0.95).slice(0, k).map((s) => s.row);
+		return scored
+			.filter((s) => s.cos >= 0.05 && s.cos <= 0.95)
+			.slice(0, k)
+			.map((s) => s.row);
 	}
 }
 
@@ -315,7 +450,9 @@ export function exemplarNote(cfg: Config, task: string): string {
 	if (process.env.JUDGE_EXEMPLARS === "0") return "";
 	if (exemplarIndex === undefined) {
 		try {
-			exemplarIndex = new ExemplarIndex(fs.readFileSync(cfg.exemplarsPath, "utf8"));
+			exemplarIndex = new ExemplarIndex(
+				fs.readFileSync(cfg.exemplarsPath, "utf8"),
+			);
 		} catch {
 			exemplarIndex = null; // corpus absent: route without few-shot
 		}
@@ -330,7 +467,10 @@ export function exemplarNote(cfg: Config, task: string): string {
 		return `- similar past task (${head}...): ${outcome}`;
 	});
 	if (!lines.length) return "";
-	return "\nMeasured verifier outcomes on similar past tasks (PASS = reliable, weigh heavily):\n" + lines.join("\n");
+	return (
+		"\nMeasured verifier outcomes on similar past tasks (PASS = reliable, weigh heavily):\n" +
+		lines.join("\n")
+	);
 }
 
 // --------------------------------------------------------------- quota
@@ -389,17 +529,30 @@ function apiCallBody(resp: any): any {
 	const code = Number(resp?.status_code ?? 0);
 	if (code < 200 || code >= 300) throw new Error(`api-call upstream ${code}`);
 	const body = resp?.body;
-	return typeof body === "string" ? JSON.parse(body) : body;
+	if (typeof body !== "string") return body;
+	try {
+		return JSON.parse(body);
+	} catch (e) {
+		if (e instanceof SyntaxError)
+			throw new SyntaxError(`invalid api-call JSON body: ${e.message}`);
+		throw e;
+	}
 }
 
 async function accountUsages(cfg: Config): Promise<AccountUsage[] | null> {
 	const key = managementKey(cfg);
 	if (!key) return null;
 	const mgmt = `${cfg.cpaBase}/v0/management`;
-	const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+	const headers = {
+		Authorization: `Bearer ${key}`,
+		"Content-Type": "application/json",
+	};
 	const files = (await fetchJson(`${mgmt}/auth-files`, { headers })).files ?? [];
 	const active = files.filter(
-		(f: any) => !f.disabled && !f.unavailable && (f.provider === "claude" || f.provider === "codex"),
+		(f: any) =>
+			!f.disabled &&
+			!f.unavailable &&
+			(f.provider === "claude" || f.provider === "codex"),
 	);
 	const usages = await Promise.all(
 		active.map(async (f: any): Promise<AccountUsage | null> => {
@@ -411,13 +564,19 @@ async function accountUsages(cfg: Config): Promise<AccountUsage[] | null> {
 						auth_index: f.auth_index,
 						method: "GET",
 						url,
-						header: { Authorization: "Bearer $TOKEN$", "Content-Type": "application/json", ...extra },
+						header: {
+							Authorization: "Bearer $TOKEN$",
+							"Content-Type": "application/json",
+							...extra,
+						},
 					}),
 				});
 			try {
 				if (f.provider === "claude") {
 					const body = apiCallBody(
-						await call("https://api.anthropic.com/api/oauth/usage", { "anthropic-beta": "oauth-2025-04-20" }),
+						await call("https://api.anthropic.com/api/oauth/usage", {
+							"anthropic-beta": "oauth-2025-04-20",
+						}),
 					);
 					let general = 0;
 					const models: Record<string, number> = {};
@@ -426,24 +585,30 @@ async function accountUsages(cfg: Config): Promise<AccountUsage[] | null> {
 						if (typeof u !== "number") continue;
 						const arm = CLAUDE_WINDOW_ARMS[k];
 						if (arm) models[arm] = Math.max(models[arm] ?? 0, u);
-						else if (k === "five_hour" || k === "seven_day") general = Math.max(general, u);
+						else if (k === "five_hour" || k === "seven_day")
+							general = Math.max(general, u);
 					}
 					// limits[]: authoritative per-model weekly percentages;
 					// unscoped entries (session, weekly_all) feed general
 					for (const lim of Array.isArray(body?.limits) ? body.limits : []) {
 						const pct = lim?.percent;
 						if (typeof pct !== "number") continue;
-						const arm = CLAUDE_MODEL_ARMS[(lim?.scope?.model?.display_name ?? "").toLowerCase()];
+						const arm =
+							CLAUDE_MODEL_ARMS[(lim?.scope?.model?.display_name ?? "").toLowerCase()];
 						if (arm) models[arm] = Math.max(models[arm] ?? 0, pct);
 						else if (!lim?.scope) general = Math.max(general, pct);
 					}
 					return { type: "claude", general, models };
 				}
-				const body = apiCallBody(await call("https://chatgpt.com/backend-api/wham/usage"));
+				const body = apiCallBody(
+					await call("https://chatgpt.com/backend-api/wham/usage"),
+				);
 				// live shape: rate_limit.{primary,secondary}_window.used_percent
 				// (rate_limits kept as a fallback for other CPA versions)
 				let general = 0;
-				for (const w of Object.values(body?.rate_limit ?? body?.rate_limits ?? {})) {
+				for (const w of Object.values(
+					body?.rate_limit ?? body?.rate_limits ?? {},
+				)) {
 					const u = (w as any)?.used_percent ?? (w as any)?.usedPercent;
 					if (typeof u === "number") general = Math.max(general, u);
 				}
@@ -461,7 +626,9 @@ async function accountUsages(cfg: Config): Promise<AccountUsage[] | null> {
 let quotaCache: { at: number; usages: AccountUsage[] | null } | undefined;
 const QUOTA_CACHE_MS = 60_000;
 
-async function cachedAccountUsages(cfg: Config): Promise<AccountUsage[] | null> {
+async function cachedAccountUsages(
+	cfg: Config,
+): Promise<AccountUsage[] | null> {
 	if (!quotaCache || Date.now() - quotaCache.at > QUOTA_CACHE_MS) {
 		let usages: AccountUsage[] | null = null;
 		try {
@@ -478,14 +645,18 @@ async function cachedAccountUsages(cfg: Config): Promise<AccountUsage[] | null> 
  * (two keys at 100 and 80 -> 90). An account's effective % for an arm
  * is the worse of its account-wide and arm-specific windows. Pure —
  * see smoke.ts. */
-export function quotaBlockedArms(usages: AccountUsage[], maxPct: number): Set<string> {
+export function quotaBlockedArms(
+	usages: AccountUsage[],
+	maxPct: number,
+): Set<string> {
 	const blocked = new Set<string>();
 	for (const arm of Object.keys(ARMS)) {
 		const type = CLAUDE_ARMS.has(arm) ? "claude" : "codex";
 		const accounts = usages.filter((u) => u.type === type);
 		if (!accounts.length) continue; // no data for this lane: don't block
 		const avg =
-			accounts.reduce((s, u) => s + Math.max(u.general, u.models[arm] ?? 0), 0) / accounts.length;
+			accounts.reduce((s, u) => s + Math.max(u.general, u.models[arm] ?? 0), 0) /
+			accounts.length;
 		if (avg >= maxPct) blocked.add(arm);
 	}
 	return blocked;
@@ -496,22 +667,32 @@ export interface ArmStatus {
 	auths: number | null;
 }
 
-export async function armAvailability(cfg: Config): Promise<Record<string, ArmStatus>> {
+export async function armAvailability(
+	cfg: Config,
+	modelIds: Record<string, string> = {},
+): Promise<Record<string, ArmStatus>> {
 	const key = process.env[cfg.cpaKeyEnv] ?? "";
 	const models = await fetchJson(`${cfg.cpaBase}/v1/models`, {
 		headers: { Authorization: `Bearer ${key}` },
 	});
-	const listed = new Set<string>((models.data ?? []).map((m: { id: string }) => m.id));
+	const listed = new Set<string>(
+		(models.data ?? []).map((m: { id: string }) => m.id),
+	);
 
 	let authCounts: Map<string, number> | null = null;
 	const mgmtKey = managementKey(cfg);
 	if (mgmtKey) {
 		try {
-			const perAuth = await fetchJson(`${cfg.cpaBase}/v0/management/auth-files/models`, {
-				headers: { Authorization: `Bearer ${mgmtKey}` },
-			});
+			const perAuth = await fetchJson(
+				`${cfg.cpaBase}/v0/management/auth-files/models`,
+				{
+					headers: { Authorization: `Bearer ${mgmtKey}` },
+				},
+			);
 			authCounts = new Map();
-			for (const entry of Array.isArray(perAuth) ? perAuth : (perAuth.data ?? [])) {
+			for (const entry of Array.isArray(perAuth)
+				? perAuth
+				: (perAuth.data ?? [])) {
 				for (const mid of entry.models ?? []) {
 					const id = typeof mid === "object" ? mid.id : mid;
 					authCounts.set(id, (authCounts.get(id) ?? 0) + 1);
@@ -531,14 +712,19 @@ export async function armAvailability(cfg: Config): Promise<Record<string, ArmSt
 	}
 
 	const simulated = new Set(
-		(process.env.CPA_SIMULATE_UNAVAILABLE ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+		(process.env.CPA_SIMULATE_UNAVAILABLE ?? "")
+			.split(",")
+			.map((s) => s.trim())
+			.filter(Boolean),
 	);
 	const out: Record<string, ArmStatus> = {};
 	for (const [arm, spec] of Object.entries(ARMS)) {
-		const auths = authCounts?.get(spec.cpa) ?? (authCounts ? 0 : null);
-		let ok = listed.has(spec.cpa);
+		const model = modelIds[arm] ?? spec.cpa;
+		const auths = authCounts?.get(model) ?? (authCounts ? 0 : null);
+		let ok = listed.has(model);
 		if (auths !== null) ok = ok && auths >= 1;
-		if (overQuota.has(arm) || simulated.has(arm)) ok = false;
+		const quotaArm = resolveArm(model);
+		if ((quotaArm && overQuota.has(quotaArm)) || simulated.has(arm)) ok = false;
 		out[arm] = { available: ok, auths };
 	}
 	return out;
@@ -564,6 +750,7 @@ export interface Verdict {
 	cpa_model: string;
 	latency_s: number;
 	swapped_from?: string;
+	overridden_from?: string;
 	arms_out_of_quota?: string[];
 	quota_gate_skipped?: boolean; // threshold set but no usage data (bad key?)
 }
@@ -619,19 +806,31 @@ async function judgeCall(
 			last = `transport: ${e}`;
 		}
 	}
-	throw new Error(`judge ${cfg.judge.model} returned no verdict twice (last: ${last})`);
+	throw new Error(
+		`judge ${cfg.judge.model} returned no verdict twice (last: ${last})`,
+	);
 }
 
-/** Routing verdict for one task. The judge always sees the FULL menu;
- * quota (CPA listing + threshold gate) is checked after the verdict and
- * an out-of-quota pick swaps to its fixed partner. */
-export async function route(cfg: Config, task: string, signal?: AbortSignal): Promise<Verdict> {
-	const instructions = RUBRIC + exemplarNote(cfg, task);
+/** Routing verdict for one task. The judge always sees seven stable slots;
+ * configured targets replace their prompt labels and execution CPA IDs.
+ * Quota is checked after the verdict and can swap to a partner slot. */
+export async function route(
+	cfg: Config,
+	task: string,
+	signal?: AbortSignal,
+): Promise<Verdict> {
+	const instructions = applyJudgeModelOverrides(
+		cfg,
+		RUBRIC + exemplarNote(cfg, task),
+	);
+	const modelIds = Object.fromEntries(
+		Object.keys(ARMS).map((arm) => [arm, judgeCpaModel(cfg, arm)]),
+	);
 	const t0 = Date.now();
 	// availability probes run while the judge thinks
 	const [verdict, avail] = await Promise.all([
 		judgeCall(cfg, instructions, task, Object.keys(ARMS), signal),
-		armAvailability(cfg),
+		armAvailability(cfg, modelIds),
 	]);
 	verdict.latency_s = Math.round((Date.now() - t0) / 100) / 10;
 
@@ -641,8 +840,18 @@ export async function route(cfg: Config, task: string, signal?: AbortSignal): Pr
 		verdict.model = final;
 		verdict.harness = CLAUDE_ARMS.has(final) ? "claude" : "codex";
 	}
-	verdict.cpa_model = ARMS[final].cpa;
-	const down = Object.keys(avail).filter((a) => !avail[a].available).sort();
+	const cpaModel = modelIds[final];
+	if (cpaModel !== ARMS[final].cpa) {
+		verdict.overridden_from = final;
+		verdict.model = cpaModel;
+		const targetArm = resolveArm(cpaModel);
+		if (targetArm)
+			verdict.harness = CLAUDE_ARMS.has(targetArm) ? "claude" : "codex";
+	}
+	verdict.cpa_model = cpaModel;
+	const down = Object.keys(avail)
+		.filter((a) => !avail[a].available)
+		.sort();
 	if (down.length) verdict.arms_out_of_quota = down;
 	// cached: free second call — flags a configured-but-inactive gate
 	if (cfg.quotaMaxPct != null && !(await cachedAccountUsages(cfg))) {
@@ -659,6 +868,29 @@ const green = (s: string) => fgc(32, s);
 const yellow = (s: string) => fgc(33, s);
 const cyan = (s: string) => fgc(36, s);
 const dim = (s: string) => `\x1b[2m${s}\x1b[22m`;
+
+/** Apply the quota gate to an already-decided arm (sentinel or command
+ * pin): swap to the partner when it is out of quota, and — probe down or
+ * both sides dead — keep the pick with a visible notice rather than
+ * blocking the prompt. Returns the arm plus a notice suffix. */
+async function quotaFinal(
+	cfg: Config,
+	arm: string,
+): Promise<{ final: string; extra: string }> {
+	try {
+		const r = resolveVerdictModel(arm, await armAvailability(cfg));
+		return {
+			final: r.final,
+			extra: r.swapped ? yellow(` (swapped from ${arm}: no quota)`) : "",
+		};
+	} catch (e) {
+		const msg = e instanceof Error ? e.message : String(e);
+		return {
+			final: arm,
+			extra: yellow(` [quota check skipped: ${msg.slice(0, 60)}]`),
+		};
+	}
+}
 
 export default function (pi: ExtensionAPI) {
 	let routed = false;
@@ -705,7 +937,11 @@ export default function (pi: ExtensionAPI) {
 		"algorithmic work — gpt-5.6-luna, gpt-5.6-terra, gpt-5.6-sol.";
 	pi.on("before_agent_start", (event) => {
 		if (process.env.LLM_ROUTER_OFF === "1") return;
-		if (process.env.PI_SUBAGENT_CHILD === "1" && process.env.PI_SUBAGENT_FANOUT_CHILD !== "1") return;
+		if (
+			process.env.PI_SUBAGENT_CHILD === "1" &&
+			process.env.PI_SUBAGENT_FANOUT_CHILD !== "1"
+		)
+			return;
 		return { systemPrompt: `${event.systemPrompt}\n\n${SENTINEL_HELP}` };
 	});
 
@@ -715,20 +951,50 @@ export default function (pi: ExtensionAPI) {
 	// children inherit it. llm-router/auto must never serve a request.
 	pi.on("input", async (event, ctx) => {
 		if (ctx.model?.provider !== PROVIDER || routed) return { action: "continue" };
-		if (event.source === "extension" || !event.text.trim()) return { action: "continue" };
+		if (event.source === "extension" || !event.text.trim())
+			return { action: "continue" };
 
 		// our own commands (/llm-router, /llm-router-config) are pure UI —
 		// never route or switch on them
 		if (/^\/llm-router\b/.test(event.text)) return { action: "continue" };
 
 		const cfg = loadConfig();
+		// pinned slash command (/file, /implement-ready, …): the model is
+		// configured, so skip the judge entirely — but keep the quota swap
+		// so a dead arm still degrades to its partner
+		const pin = commandPin(cfg, event.text);
+		if (pin) {
+			const { final, extra } = await quotaFinal(cfg, pin.arm);
+			const model = findCpaModel(ctx, ARMS[final].cpa);
+			if (model && (await pi.setModel(model))) {
+				routed = true;
+				// after setModel: pi clamps the level to the new model
+				// (older pi has no setThinkingLevel — pin the model anyway)
+				if (pin.effort && typeof pi.setThinkingLevel === "function")
+					pi.setThinkingLevel(pin.effort);
+				const eff = pin.effort ? dim(` @${pin.effort}`) : "";
+				ctx.ui.notify(
+					`llm-router: ${cyan(final)}${eff} ${dim("(pinned command)")}${extra}`,
+					"info",
+				);
+				return { action: "continue" };
+			}
+			ctx.ui.notify(
+				`llm-router: pinned model ${ARMS[final].cpa} not switchable — routing normally`,
+				"error",
+			);
+		}
+
 		// bare slash command: no task text to judge — switch to the fallback
 		// so nothing ever reaches the llm-router/auto placeholder endpoint
 		if (/^\/\S+\s*$/.test(event.text)) {
 			const fb = findCpaModel(ctx, cfg.fallbackModel);
 			if (fb && (await pi.setModel(fb))) {
 				routed = true;
-				ctx.ui.notify(`llm-router: bare command, no task to judge — using ${cfg.fallbackModel}`, "info");
+				ctx.ui.notify(
+					`llm-router: bare command, no task to judge — using ${cfg.fallbackModel}`,
+					"info",
+				);
 			}
 			return { action: "continue" };
 		}
@@ -743,27 +1009,27 @@ export default function (pi: ExtensionAPI) {
 			const arm = resolveArm(sentinel.name);
 			if (!arm) {
 				ctx.ui.notify(
-					yellow(`llm-router: unknown forced model "${sentinel.name}" — asking the judge instead`),
+					yellow(
+						`llm-router: unknown forced model "${sentinel.name}" — asking the judge instead`,
+					),
 					"warning",
 				);
 			} else {
-				let final = arm;
-				let extra = "";
-				try {
-					const r = resolveVerdictModel(arm, await armAvailability(cfg));
-					final = r.final;
-					if (r.swapped) extra = yellow(` (swapped from ${arm}: no quota)`);
-				} catch (e) {
-					// probe down or both sides dead: forced means forced — go
-					// ungated with a visible notice rather than blocking
-					const msg = e instanceof Error ? e.message : String(e);
-					extra = yellow(` [quota check skipped: ${msg.slice(0, 60)}]`);
-				}
+				// forced means forced: a down probe degrades to an ungated
+				// switch with a notice, never to a blocked prompt
+				const { final, extra } = await quotaFinal(cfg, arm);
 				const forced = findCpaModel(ctx, ARMS[final].cpa);
 				if (forced && (await pi.setModel(forced))) {
 					routed = true;
-					ctx.ui.notify(`llm-router: ${cyan(final)} ${dim("(forced)")}${extra}`, "info");
-					return { action: "transform", text: sentinel.stripped, images: event.images };
+					ctx.ui.notify(
+						`llm-router: ${cyan(final)} ${dim("(forced)")}${extra}`,
+						"info",
+					);
+					return {
+						action: "transform",
+						text: sentinel.stripped,
+						images: event.images,
+					};
 				}
 				ctx.ui.notify(
 					`llm-router: forced model ${ARMS[final].cpa} not switchable — asking the judge instead`,
@@ -772,7 +1038,10 @@ export default function (pi: ExtensionAPI) {
 			}
 		}
 		const taskText = sentinel ? sentinel.stripped : event.text;
-		ctx.ui.notify(green(`llm-router: asking ${cfg.judge.model} which model fits this task…`), "info");
+		ctx.ui.notify(
+			green(`llm-router: asking ${cfg.judge.model} which model fits this task…`),
+			"info",
+		);
 		// Esc while the judge is consulted aborts the request and swallows
 		// the prompt entirely — session stays unrouted, next prompt re-routes
 		const cancel = new AbortController();
@@ -793,24 +1062,40 @@ export default function (pi: ExtensionAPI) {
 			// clean pick: neutral, model in cyan; swap: model + clause in
 			// amber — a subtle warning, not an error. Rationale is capped
 			// instead of slicing the composed string (ANSI-safe).
-			const rat = v.rationale.length > 150 ? `${v.rationale.slice(0, 149)}…` : v.rationale;
+			const rat =
+				v.rationale.length > 150 ? `${v.rationale.slice(0, 149)}…` : v.rationale;
 			const picked = v.swapped_from ? yellow(v.model) : cyan(v.model);
-			const swap = v.swapped_from ? yellow(` (swapped from ${v.swapped_from}: no quota)`) : "";
-			const gate = v.quota_gate_skipped ? yellow(" [quota gate SKIPPED — check management key]") : "";
-			note = `llm-router: ${picked}${swap}${gate} ${dim(`(${v.latency_s}s)`)} — ${rat}`;
+			const swap = v.swapped_from
+				? yellow(` (swapped from ${v.swapped_from}: no quota)`)
+				: "";
+			const override = v.overridden_from
+				? dim(` (override for ${v.overridden_from})`)
+				: "";
+			const gate = v.quota_gate_skipped
+				? yellow(" [quota gate SKIPPED — check management key]")
+				: "";
+			note = `llm-router: ${picked}${swap}${override}${gate} ${dim(`(${v.latency_s}s)`)} — ${rat}`;
 		} catch (e) {
 			if (cancel.signal.aborted) {
 				// finally still unsubscribes before this returns
-				ctx.ui.notify(yellow("llm-router: judge cancelled — prompt discarded"), "info");
+				ctx.ui.notify(
+					yellow("llm-router: judge cancelled — prompt discarded"),
+					"info",
+				);
 				return { action: "handled" };
 			}
 			failed = true;
-			note = `llm-router failed (${e instanceof Error ? e.message : e}); falling back to ${cfg.fallbackModel}`.slice(0, 220);
+			note =
+				`llm-router failed (${e instanceof Error ? e.message : e}); falling back to ${cfg.fallbackModel}`.slice(
+					0,
+					220,
+				);
 		} finally {
 			offEsc?.();
 		}
 
-		const model = findCpaModel(ctx, targetId) ?? findCpaModel(ctx, cfg.fallbackModel);
+		const model =
+			findCpaModel(ctx, targetId) ?? findCpaModel(ctx, cfg.fallbackModel);
 		if (model && (await pi.setModel(model))) {
 			routed = true;
 			ctx.ui.notify(note, failed ? "error" : "info");
@@ -826,13 +1111,17 @@ export default function (pi: ExtensionAPI) {
 	// foreground so the select row's own styling survives (pi-tui renders
 	// ANSI in item strings — same pattern piolium uses)
 	const CHECK = " \x1b[32m✓\x1b[39m";
-	const stripCheck = (s: string) => (s.endsWith(CHECK) ? s.slice(0, -CHECK.length) : s);
+	const stripCheck = (s: string) =>
+		s.endsWith(CHECK) ? s.slice(0, -CHECK.length) : s;
 
 	// Masked single-line prompt for secrets (ctx.ui.custom component:
 	// render(width) + handleInput(data), done(value) closes). Renders
 	// bullets only; supports typing, backspace, bracketed paste.
 	// Resolves undefined on esc/ctrl-c.
-	function maskedInput(ctx: ExtensionContext, title: string): Promise<string | undefined> {
+	function maskedInput(
+		ctx: ExtensionContext,
+		title: string,
+	): Promise<string | undefined> {
 		if (typeof ctx.ui.custom !== "function") {
 			return ctx.ui.editor(title, ""); // older pi: visible fallback
 		}
@@ -840,6 +1129,7 @@ export default function (pi: ExtensionAPI) {
 			(tui: any, theme: any, _kb: any, done: (v: string | undefined) => void) => {
 				let value = "";
 				return {
+					invalidate() {},
 					// pi-tui aborts if a rendered line exceeds the terminal —
 					// clip every line to the width we're given (content is
 					// clipped BEFORE styling, so no ANSI-aware measuring needed)
@@ -860,8 +1150,13 @@ export default function (pi: ExtensionAPI) {
 						if (data === "\x1b" || data === "\x03") return done(undefined);
 						if (data === "\x7f" || data === "\b") value = value.slice(0, -1);
 						else if (data.startsWith("\x1b[200~"))
-							value += data.slice(6).split("\x1b[201~").join("").replace(/[\x00-\x1f\x7f]/g, "");
-						else if (!data.startsWith("\x1b")) value += data.replace(/[\x00-\x1f\x7f]/g, "");
+							value += data
+								.slice(6)
+								.split("\x1b[201~")
+								.join("")
+								.replace(/[\x00-\x1f\x7f]/g, "");
+						else if (!data.startsWith("\x1b"))
+							value += data.replace(/[\x00-\x1f\x7f]/g, "");
 						// other \x1b… sequences (arrows etc.): ignored
 						tui.requestRender();
 					},
@@ -874,14 +1169,18 @@ export default function (pi: ExtensionAPI) {
 	// prompt gets routed again (model_select re-arms, but set routed
 	// directly too in case setModel doesn't echo an event).
 	pi.registerCommand("llm-router", {
-		description: "Switch this session to llm-router/auto (next prompt gets routed)",
+		description:
+			"Switch this session to llm-router/auto (next prompt gets routed)",
 		handler: async (_args: string, ctx: ExtensionContext) => {
 			const auto = ctx.modelRegistry.find(PROVIDER, "auto");
 			if (auto && (await pi.setModel(auto))) {
 				routed = false;
 				ctx.ui.notify("llm-router: active — next prompt picks the model", "info");
 			} else {
-				ctx.ui.notify("llm-router: llm-router/auto not found in model registry", "error");
+				ctx.ui.notify(
+					"llm-router: llm-router/auto not found in model registry",
+					"error",
+				);
 			}
 		},
 	});
@@ -890,7 +1189,8 @@ export default function (pi: ExtensionAPI) {
 	// CONFIG_PATH; routing re-reads the file per prompt, so changes apply
 	// immediately.
 	pi.registerCommand("llm-router-config", {
-		description: "Configure llm-router: judge provider/model/effort, fallback; test the judge",
+		description:
+			"Configure llm-router: judge provider/model/effort, fallback; test the judge",
 		handler: async (_args: string, ctx: ExtensionContext) => {
 			if (!ctx.hasUI) return;
 			// key validity: the select title is static once shown, so give
@@ -903,13 +1203,21 @@ export default function (pi: ExtensionAPI) {
 			const refreshKeyStatus = () => {
 				keyNote = "checking…";
 				return validateManagementKey(loadConfig()).then((r) => {
-					keyNote = r.ok ? "\x1b[32m✓ valid\x1b[39m" : `\x1b[31m✗ ${r.detail}\x1b[39m`;
+					keyNote = r.ok
+						? "\x1b[32m✓ valid\x1b[39m"
+						: `\x1b[31m✗ ${r.detail}\x1b[39m`;
 					if (menuOpen) {
-						ctx.ui.notify(`llm-router: management key ${r.detail}`, r.ok ? "info" : "error");
+						ctx.ui.notify(
+							`llm-router: management key ${r.detail}`,
+							r.ok ? "info" : "error",
+						);
 					}
 				});
 			};
-			await Promise.race([refreshKeyStatus(), new Promise((r) => setTimeout(r, 400))]);
+			await Promise.race([
+				refreshKeyStatus(),
+				new Promise((r) => setTimeout(r, 400)),
+			]);
 			menuOpen = true;
 			for (;;) {
 				const cfg = loadConfig();
@@ -917,10 +1225,12 @@ export default function (pi: ExtensionAPI) {
 					`judge: ${cfg.judge.model}@${cfg.judge.effort ?? "no-effort"} via ${cfg.judge.baseUrl}\n` +
 					`fallback: ${cfg.fallbackModel}` +
 					` | quota gate: ${cfg.quotaMaxPct == null ? "off" : `${cfg.quotaMaxPct}%`}` +
-					` | key: ${keyNote}`;
-				const action = await ctx.ui.select(`llm-router config\n${summary}`, [
-					"Judge model",
-					"Judge effort",
+					` | key: ${keyNote}` +
+					` | overrides: ${judgeOverrides(cfg).size}` +
+					` | pinned commands: ${Object.keys(cfg.commandPins ?? {}).length}`;
+				let action = await ctx.ui.select(`llm-router config\n${summary}`, [
+					"Judge",
+					"Pinned commands",
 					"Quota threshold",
 					"CPA management key",
 					"Edit full config (JSON)",
@@ -928,14 +1238,26 @@ export default function (pi: ExtensionAPI) {
 					"Done",
 				]);
 				if (!action || action === "Done") return;
+				if (action === "Judge") {
+					const judgeAction = await ctx.ui.select("Judge settings", [
+						"Model",
+						"Effort",
+						"Overrides",
+					]);
+					if (!judgeAction) continue;
+					action = `Judge ${judgeAction.toLowerCase()}`;
+				}
 
 				if (action === "Judge model") {
 					let ids: string[] = [];
 					try {
 						const key = process.env[cfg.judge.apiKeyEnv] ?? "";
-						const models = await fetchJson(`${cfg.judge.baseUrl.replace(/\/+$/, "")}/models`, {
-							headers: key ? { Authorization: `Bearer ${key}` } : {},
-						});
+						const models = await fetchJson(
+							`${cfg.judge.baseUrl.replace(/\/+$/, "")}/models`,
+							{
+								headers: key ? { Authorization: `Bearer ${key}` } : {},
+							},
+						);
 						ids = (models.data ?? []).map((m: { id: string }) => m.id).sort();
 					} catch {
 						// provider unreachable: fall through to manual entry
@@ -959,7 +1281,10 @@ export default function (pi: ExtensionAPI) {
 					}
 					const items = ids
 						.slice(0, 40)
-						.map((id) => `${id} [${providerOf.get(id) ?? host}]${id === cfg.judge.model ? CHECK : ""}`);
+						.map(
+							(id) =>
+								`${id} [${providerOf.get(id) ?? host}]${id === cfg.judge.model ? CHECK : ""}`,
+						);
 					const pick = await ctx.ui.select(
 						`Judge model (current: ${cfg.judge.model})`,
 						[...items, "(enter manually)"],
@@ -971,7 +1296,14 @@ export default function (pi: ExtensionAPI) {
 							: stripCheck(pick).replace(/ \[[^\]]*\]$/, "");
 					if (model) saveConfig({ ...cfg, judge: { ...cfg.judge, model } });
 				} else if (action === "Judge effort") {
-					const efforts = ["minimal", "low", "medium", "high", "xhigh", "none (non-reasoning judge)"];
+					const efforts = [
+						"minimal",
+						"low",
+						"medium",
+						"high",
+						"xhigh",
+						"none (non-reasoning judge)",
+					];
 					const current = cfg.judge.effort ?? "none (non-reasoning judge)";
 					const pick = await ctx.ui.select(
 						`Judge reasoning effort (current: ${cfg.judge.effort ?? "none"})`,
@@ -982,6 +1314,104 @@ export default function (pi: ExtensionAPI) {
 					saveConfig({
 						...cfg,
 						judge: { ...cfg.judge, effort: clean.startsWith("none") ? null : clean },
+					});
+				} else if (action === "Judge overrides") {
+					const arms = Object.keys(ARMS);
+					const rows = arms.map((arm) => `${arm} → ${judgeCpaModel(cfg, arm)}`);
+					const row = await ctx.ui.select("Judge model slot to override", rows);
+					if (!row) continue;
+					const arm = arms[rows.indexOf(row)];
+					let ids: string[];
+					try {
+						const key = process.env[cfg.cpaKeyEnv] ?? "";
+						const models = await fetchJson(`${cfg.cpaBase}/v1/models`, {
+							headers: key ? { Authorization: `Bearer ${key}` } : {},
+						});
+						ids = [
+							...new Set<string>(
+								(models.data ?? [])
+									.map((model: { id?: string }) => model.id)
+									.filter((id: unknown): id is string => typeof id === "string"),
+							),
+						].sort((a, b) => a.localeCompare(b));
+					} catch (e) {
+						ctx.ui.notify(`llm-router: model list failed (${e})`, "error");
+						continue;
+					}
+					if (!ids.length) {
+						ctx.ui.notify("llm-router: CPA reported no enabled models", "error");
+						continue;
+					}
+					const current = judgeCpaModel(cfg, arm);
+					const reset = `(use default: ${ARMS[arm].cpa})`;
+					const pick = await ctx.ui.select(
+						`Enabled CPA model for ${arm} (current: ${current})`,
+						[...ids.map((id) => (id === current ? id + CHECK : id)), reset],
+					);
+					if (!pick) continue;
+					const target = pick === reset ? ARMS[arm].cpa : stripCheck(pick);
+					const overrides = Object.fromEntries(
+						Object.entries(cfg.judgeModelOverrides ?? {}).filter(
+							([name]) => resolveArm(name) !== arm,
+						),
+					);
+					if (target !== ARMS[arm].cpa) overrides[arm] = target;
+					saveConfig({ ...cfg, judgeModelOverrides: overrides });
+				} else if (action === "Pinned commands") {
+					// slash commands that bypass the judge: pick one (or add
+					// one), then its arm and thinking effort
+					const pins = Object.entries(cfg.commandPins ?? {});
+					const rows = pins.map(
+						([name, p]) =>
+							`/${name.replace(/^\//, "")} → ${p.model}${p.effort ? ` @ ${p.effort}` : ""}`,
+					);
+					const ADD = "(pin another command)";
+					const row = await ctx.ui.select(
+						"Slash commands pinned to a model (judge skipped; quota swap still applies)",
+						[...rows, ADD],
+					);
+					if (!row) continue;
+					const name =
+						row === ADD
+							? (await ctx.ui.editor("Command name (without the /)", ""))
+									?.trim()
+									.replace(/^\//, "")
+							: pins[rows.indexOf(row)][0];
+					if (!name) continue;
+					const current = cfg.commandPins?.[name];
+					const REMOVE = "(remove pin)";
+					const modelPick = await ctx.ui.select(
+						`Model for /${name.replace(/^\//, "")}`,
+						[
+							...Object.keys(ARMS).map((a) => (a === current?.model ? a + CHECK : a)),
+							...(current ? [REMOVE] : []),
+						],
+					);
+					if (!modelPick) continue;
+					if (modelPick === REMOVE) {
+						const rest = { ...cfg.commandPins };
+						delete rest[name];
+						saveConfig({ ...cfg, commandPins: rest });
+						continue;
+					}
+					const SESSION = "(leave session default)";
+					const effortPick = await ctx.ui.select(
+						`Thinking effort for /${name.replace(/^\//, "")}`,
+						[...THINKING_LEVELS, SESSION].map((e) =>
+							e === (current?.effort ?? SESSION) ? e + CHECK : e,
+						),
+					);
+					if (!effortPick) continue;
+					const effort = stripCheck(effortPick);
+					saveConfig({
+						...cfg,
+						commandPins: {
+							...cfg.commandPins,
+							[name]: {
+								model: stripCheck(modelPick),
+								effort: effort === SESSION ? null : (effort as ThinkingLevel),
+							},
+						},
 					});
 				} else if (action === "Quota threshold") {
 					const cur = cfg.quotaMaxPct == null ? "off" : `${cfg.quotaMaxPct}%`;
@@ -997,7 +1427,10 @@ export default function (pi: ExtensionAPI) {
 					);
 					if (!pick) continue;
 					const clean = stripCheck(pick);
-					saveConfig({ ...cfg, quotaMaxPct: clean === "off" ? null : Number.parseInt(clean, 10) });
+					saveConfig({
+						...cfg,
+						quotaMaxPct: clean === "off" ? null : Number.parseInt(clean, 10),
+					});
 				} else if (action === "CPA management key") {
 					const state = cfg.cpaManagementKey
 						? "set in config"
@@ -1011,30 +1444,51 @@ export default function (pi: ExtensionAPI) {
 					if (edited === undefined) continue;
 					saveConfig({ ...cfg, cpaManagementKey: edited.trim() });
 					ctx.ui.notify(
-						edited.trim() ? "llm-router: management key saved" : "llm-router: management key cleared",
+						edited.trim()
+							? "llm-router: management key saved"
+							: "llm-router: management key cleared",
 						"info",
 					);
 					void refreshKeyStatus();
 				} else if (action === "Edit full config (JSON)") {
-					const edited = await ctx.ui.editor("llm-router config", JSON.stringify(cfg, null, 2));
+					const edited = await ctx.ui.editor(
+						"llm-router config",
+						JSON.stringify(cfg, null, 2),
+					);
 					if (edited === undefined) continue;
 					try {
 						const parsed = JSON.parse(edited);
-						saveConfig({ ...DEFAULTS, ...parsed, judge: { ...DEFAULTS.judge, ...(parsed.judge ?? {}) } });
+						saveConfig({
+							...DEFAULTS,
+							...parsed,
+							judge: { ...DEFAULTS.judge, ...(parsed.judge ?? {}) },
+						});
 						ctx.ui.notify("llm-router: config saved", "info");
 					} catch (e) {
-						ctx.ui.notify(`llm-router: invalid JSON, config unchanged (${e})`, "error");
+						ctx.ui.notify(
+							`llm-router: invalid JSON, config unchanged (${e})`,
+							"error",
+						);
 					}
 				} else if (action === "Test judge") {
 					ctx.ui.notify(`llm-router: testing ${cfg.judge.model}…`, "info");
 					try {
 						const v = await route(cfg, "fix typo in README.md: 'teh' -> 'the'");
 						ctx.ui.notify(
-							`llm-router: judge OK (${v.latency_s}s) — picked ${v.model}: ${v.rationale}`.slice(0, 220),
+							`llm-router: judge OK (${v.latency_s}s) — picked ${v.model}: ${v.rationale}`.slice(
+								0,
+								220,
+							),
 							"info",
 						);
 					} catch (e) {
-						ctx.ui.notify(`llm-router: judge FAILED — ${e instanceof Error ? e.message : e}`.slice(0, 220), "error");
+						ctx.ui.notify(
+							`llm-router: judge FAILED — ${e instanceof Error ? e.message : e}`.slice(
+								0,
+								220,
+							),
+							"error",
+						);
 					}
 				}
 			}

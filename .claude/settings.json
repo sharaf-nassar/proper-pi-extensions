@@ -10,6 +10,26 @@
         ],
         "matcher": ""
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "lat hook claude UserPromptSubmit",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "lat hook claude Stop",
+            "type": "command"
+          }
+        ]
+      }
     ]
   }
 }

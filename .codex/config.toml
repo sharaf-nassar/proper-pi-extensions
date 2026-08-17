@@ -1,2 +1,6 @@
 [features]
 hooks = true
+
+[mcp_servers.lat]
+command = "lat"
+args = ["mcp"]

@@ -1,0 +1,22 @@
+{
+  "name": "proper-llm-router",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Route each pi session's first task to an appropriate model",
+  "keywords": [
+    "pi-package"
+  ],
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./llm-router.ts"
+    ]
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types smoke.ts"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@types/node": "25.9.5"
+  }
+}
