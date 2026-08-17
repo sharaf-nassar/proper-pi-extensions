@@ -11,9 +11,13 @@ The root is not an installable pi package and has no npm workspace manifest. Pac
 Current packages:
 
 - [proper-llm-router](../proper-llm-router/) — routes each session's first task to an appropriate model.
+- [proper-customs](../proper-customs/) — hosts cross-session history, autocomplete details, fullscreen scrolling compatibility, and footer styling.
+- [proper-flow](../proper-flow/) — packages triage, bug investigation, specification, and implementation workflow prompts.
 
 <!-- lat-index
 - [[proper-llm-router]] — repository index entry
+- [[proper-customs]] — repository index entry
+- [[proper-flow]] — repository index entry
 -->
 
 ## Installation model

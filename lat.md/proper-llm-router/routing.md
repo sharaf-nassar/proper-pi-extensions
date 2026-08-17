@@ -12,9 +12,9 @@ Resumed sessions are never forcibly moved to `llm-router/auto`. Routing only int
 
 ## Eligible input
 
-The input handler routes the first non-empty, non-extension input received while the current model belongs to provider `llm-router`. `auto` is the configured model, but the eligibility check is provider-wide rather than ID-specific.
+The input handler routes the first non-empty input received while the current model belongs to provider `llm-router`. `auto` is the configured model, but the eligibility check is provider-wide rather than ID-specific.
 
-Inputs emitted by another extension and inputs with no text continue unchanged. Image attachments do not affect the verdict; when text is transformed, the handler preserves the images.
+Extension-origin inputs are eligible because `sendUserMessage()` aliases can start an agent turn and must leave the placeholder before inference. Inputs with no text continue unchanged. Image attachments do not affect the verdict; transformed input preserves them.
 
 The router's own `/llm-router` and `/llm-router-config` commands bypass routing so their UI work never changes the selected arm. The matcher reserves any command token beginning with `/llm-router` at a word boundary, so similarly prefixed unknown commands also bypass routing.
 

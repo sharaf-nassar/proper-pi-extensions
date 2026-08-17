@@ -81,7 +81,7 @@ Pin edits affect the next armed routing decision. They do not repin a session th
 
 The menu has one `Judge` entry that opens model, effort, and override pickers. It can also add, repoint, or remove command pins, set a quota threshold from `off`, `50%`, `75%`, `80%`, `90%`, or `95%`, enter a masked management key, edit the full JSON object, and run a live route test.
 
-The menu summary reports current override and pin counts. The pin editor offers canonical arm keys and every session thinking level, plus a choice that leaves the session default unchanged.
+The menu summary reports current override and pin counts. The pin editor offers canonical arm keys and every session thinking level supported by the selected model, plus a choice that leaves the session default unchanged. `ultra` appears only when that model's `thinkingLevelMap.ultra` is a non-empty string.
 
 The judge model picker reads `<judge.baseUrl>/models`. If that catalog contains router arm IDs, the picker shows only those arms; otherwise it shows up to 40 provider models. Manual entry remains available.
 
@@ -93,9 +93,9 @@ There is no dedicated fallback-model picker. Change `fallbackModel`, endpoint fi
 
 Judge effort and session thinking use related but different controls.
 
-Pinned commands can select `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`, plus a choice that leaves the session default unchanged. The judge-effort picker offers `minimal` through `xhigh` plus `none`; it omits `off` and `max`.
+Pinned commands can select `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`, plus a choice that leaves the session default unchanged. They can also select `ultra` when the chosen model explicitly maps that level. The judge-effort picker remains `minimal` through `xhigh` plus `none`; it omits `off`, `max`, and `ultra`.
 
-A non-null judge effort is sent as `reasoning_effort`, while a pin effort is passed to pi after the final model switch.
+A non-null judge effort is sent as `reasoning_effort`, while a pin effort is passed to pi after the final model switch. Pi clamps a saved `ultra` pin to the final model's highest available level if quota swapping or later catalog changes select a model without `ultra` support.
 
 ## Management key handling
 

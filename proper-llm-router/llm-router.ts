@@ -68,7 +68,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type {
 	ExtensionAPI,
 	ExtensionContext,
@@ -85,8 +85,9 @@ export interface JudgeConfig {
 	model: string;
 	effort: string | null;
 }
-// pi's own thinking levels (@earendil-works/pi-agent-core ThinkingLevel;
-// not re-exported from the coding-agent entrypoint, so redeclared here)
+// Pi 0.84.2 stops at max, while CLIProxyAPI already advertises ultra for
+// supported GPT models. The compatibility patch below extends Pi's runtime
+// list until core gains the same level natively.
 export type ThinkingLevel =
 	| "off"
 	| "minimal"
@@ -94,7 +95,8 @@ export type ThinkingLevel =
 	| "medium"
 	| "high"
 	| "xhigh"
-	| "max";
+	| "max"
+	| "ultra";
 export const THINKING_LEVELS: ThinkingLevel[] = [
 	"off",
 	"minimal",
@@ -103,7 +105,126 @@ export const THINKING_LEVELS: ThinkingLevel[] = [
 	"high",
 	"xhigh",
 	"max",
+	"ultra",
 ];
+
+const ULTRA_SESSION_PATCH = Symbol.for("proper-llm-router.ultra-session-patch");
+const ULTRA_THEME_PATCH = Symbol.for("proper-llm-router.ultra-theme-patch");
+
+type UltraModel = {
+	thinkingLevelMap?: Record<string, string | null | undefined>;
+};
+type UltraSession = {
+	model?: UltraModel;
+	getAvailableThinkingLevels(): string[];
+	_clampThinkingLevel(level: string, available: string[]): string;
+	[ULTRA_SESSION_PATCH]?: boolean;
+};
+type UltraTheme = {
+	fg(color: string, text: string): string;
+	getThinkingBorderColor(level: string): (text: string) => string;
+	[ULTRA_THEME_PATCH]?: boolean;
+};
+type Constructor<T> = { prototype: T };
+
+export function supportsUltraThinking(model: UltraModel | undefined): boolean {
+	const mapped = model?.thinkingLevelMap?.ultra;
+	return typeof mapped === "string" && mapped.trim().length > 0;
+}
+
+export function thinkingLevelsForModel(
+	model: UltraModel | undefined,
+): ThinkingLevel[] {
+	return supportsUltraThinking(model)
+		? THINKING_LEVELS
+		: THINKING_LEVELS.filter((level) => level !== "ultra");
+}
+
+export function installUltraThinkingPrototype(
+	Session: Constructor<UltraSession>,
+): boolean {
+	const prototype = Session.prototype;
+	if (
+		prototype[ULTRA_SESSION_PATCH] ||
+		typeof prototype.getAvailableThinkingLevels !== "function" ||
+		typeof prototype._clampThinkingLevel !== "function"
+	) {
+		return false;
+	}
+
+	const getAvailable = prototype.getAvailableThinkingLevels;
+	const clamp = prototype._clampThinkingLevel;
+	prototype.getAvailableThinkingLevels = function () {
+		const levels = getAvailable.call(this);
+		return supportsUltraThinking(this.model) && !levels.includes("ultra")
+			? [...levels, "ultra"]
+			: levels;
+	};
+	prototype._clampThinkingLevel = function (level, available) {
+		if (level === "ultra" && !available.includes("ultra")) {
+			return available.at(-1) ?? "off";
+		}
+		return clamp.call(this, level, available);
+	};
+	prototype[ULTRA_SESSION_PATCH] = true;
+	return true;
+}
+
+export function installUltraThemePrototype(
+	Theme: Constructor<UltraTheme>,
+): boolean {
+	const prototype = Theme.prototype;
+	if (
+		prototype[ULTRA_THEME_PATCH] ||
+		typeof prototype.getThinkingBorderColor !== "function"
+	) {
+		return false;
+	}
+
+	const getBorderColor = prototype.getThinkingBorderColor;
+	prototype.getThinkingBorderColor = function (level) {
+		return level === "ultra"
+			? (text) => this.fg("thinkingMax", text)
+			: getBorderColor.call(this, level);
+	};
+	prototype[ULTRA_THEME_PATCH] = true;
+	return true;
+}
+
+function hostPiDistDir(entry = process.argv[1]): string | undefined {
+	if (!entry) return undefined;
+	try {
+		const dist = path.dirname(fs.realpathSync(entry));
+		return fs.existsSync(path.join(dist, "core/agent-session.js"))
+			? dist
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+async function installUltraThinkingShim(): Promise<boolean> {
+	const dist = hostPiDistDir();
+	if (!dist) return false;
+	try {
+		const [sessionModule, themeModule] = await Promise.all([
+			import(pathToFileURL(path.join(dist, "core/agent-session.js")).href),
+			import(
+				pathToFileURL(path.join(dist, "modes/interactive/theme/theme.js")).href
+			),
+		]);
+		installUltraThinkingPrototype(sessionModule.AgentSession);
+		installUltraThemePrototype(themeModule.Theme);
+		return Boolean(
+			sessionModule.AgentSession?.prototype?.[ULTRA_SESSION_PATCH] &&
+				themeModule.Theme?.prototype?.[ULTRA_THEME_PATCH],
+		);
+	} catch {
+		return false;
+	}
+}
+
+export const ULTRA_THINKING_SHIM_INSTALLED = await installUltraThinkingShim();
 export interface CommandPin {
 	model: string; // arm key, CPA id, or unique fragment (resolveArm)
 	effort: ThinkingLevel | null; // null = leave the session's thinking level
@@ -525,8 +646,11 @@ export interface AccountUsage {
 	models: Record<string, number>; // arm -> % used in its model window
 }
 
+class UpstreamRateLimitError extends Error {}
+
 function apiCallBody(resp: any): any {
 	const code = Number(resp?.status_code ?? 0);
+	if (code === 429) throw new UpstreamRateLimitError("api-call upstream 429");
 	if (code < 200 || code >= 300) throw new Error(`api-call upstream ${code}`);
 	const body = resp?.body;
 	if (typeof body !== "string") return body;
@@ -613,8 +737,10 @@ async function accountUsages(cfg: Config): Promise<AccountUsage[] | null> {
 					if (typeof u === "number") general = Math.max(general, u);
 				}
 				return { type: "codex", general, models: {} };
-			} catch {
-				return null; // one dead account never blocks routing
+			} catch (e) {
+				if (e instanceof UpstreamRateLimitError)
+					return { type: f.provider, general: 100, models: {} };
+				return null; // one unknown account failure never blocks routing
 			}
 		}),
 	);
@@ -951,8 +1077,7 @@ export default function (pi: ExtensionAPI) {
 	// children inherit it. llm-router/auto must never serve a request.
 	pi.on("input", async (event, ctx) => {
 		if (ctx.model?.provider !== PROVIDER || routed) return { action: "continue" };
-		if (event.source === "extension" || !event.text.trim())
-			return { action: "continue" };
+		if (!event.text.trim()) return { action: "continue" };
 
 		// our own commands (/llm-router, /llm-router-config) are pure UI —
 		// never route or switch on them
@@ -971,7 +1096,7 @@ export default function (pi: ExtensionAPI) {
 				// after setModel: pi clamps the level to the new model
 				// (older pi has no setThinkingLevel — pin the model anyway)
 				if (pin.effort && typeof pi.setThinkingLevel === "function")
-					pi.setThinkingLevel(pin.effort);
+					(pi.setThinkingLevel as unknown as (level: string) => void)(pin.effort);
 				const eff = pin.effort ? dim(` @${pin.effort}`) : "";
 				ctx.ui.notify(
 					`llm-router: ${cyan(final)}${eff} ${dim("(pinned command)")}${extra}`,
@@ -1395,9 +1520,16 @@ export default function (pi: ExtensionAPI) {
 						continue;
 					}
 					const SESSION = "(leave session default)";
+					const selectedArm = resolveArm(stripCheck(modelPick));
+					const selectedModel = selectedArm
+						? findCpaModel(ctx, ARMS[selectedArm].cpa)
+						: undefined;
+					const efforts = thinkingLevelsForModel(
+						selectedModel as unknown as UltraModel,
+					);
 					const effortPick = await ctx.ui.select(
 						`Thinking effort for /${name.replace(/^\//, "")}`,
-						[...THINKING_LEVELS, SESSION].map((e) =>
+						[...efforts, SESSION].map((e) =>
 							e === (current?.effort ?? SESSION) ? e + CHECK : e,
 						),
 					);

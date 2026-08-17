@@ -1,0 +1,48 @@
+{
+  "name": "pi-proper-customs",
+  "version": "0.2.0",
+  "description": "Custom pi behavior for history, autocomplete details, fullscreen scrolling, and footer styling",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "pi-coding-agent",
+    "customization",
+    "history",
+    "prompt-history",
+    "autocomplete",
+    "fullscreen",
+    "scrolling",
+    "footer",
+    "theme"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "index.ts",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@types/node": "25.9.5"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "dependencies": {
+    "@earendil-works/pi-tui": "^0.84.2"
+  }
+}

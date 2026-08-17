@@ -34,5 +34,6 @@ See README.md for the full design.
 - User-facing config lives in `~/.pi/agent/llm-router.json`, re-read per
   routed prompt — never require a pi restart for a config change.
 - Pure logic (swap resolution, quota aggregation, judge overrides) stays
-  in exported functions with fixtures in `smoke.ts`; probe failures degrade to
-  ungated routing with a visible notice, never a blocked session.
+  exported and covered by fixtures. Upstream usage 429 responses count as
+  exhausted accounts; unknown probe failures degrade to ungated routing with a
+  visible notice, never a blocked session.

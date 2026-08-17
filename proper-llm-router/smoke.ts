@@ -117,7 +117,7 @@ assert.strictEqual(resolveArm("claude-haiku-4-5-20251001"), "claude-haiku-4-5");
 assert.strictEqual(resolveArm("claude"), null); // ambiguous
 assert.strictEqual(resolveArm("gpt-9"), null); // unknown
 
-// @lat: [[tests#Judge override fixtures]]
+// @lat: [[lat.md/proper-llm-router/tests#Judge override fixtures]]
 // pure-logic check: judge model overrides replace prompt labels without
 // cascading, while verdicts keep stable arm selection keys
 assert.strictEqual(typeof applyJudgeModelOverrides, "function");
@@ -168,7 +168,43 @@ assert.strictEqual(commandPin(pinCfg, "/bogus x"), null); // unknown model -> ju
 assert.strictEqual(commandPin(pinCfg, "/filet x"), null); // no prefix matching
 assert.strictEqual(commandPin(pinCfg, "fix /file"), null); // not a command
 
-// @lat: [[tests#Config menu fixture]]
+// @lat: [[lat.md/proper-llm-router/tests#Extension-origin input fixture]]
+// Extension command aliases use sendUserMessage(), which produces an
+// extension-origin input that must still leave the placeholder model.
+let aliasInputHandler:
+	| ((event: any, ctx: any) => Promise<{ action: string }>)
+	| undefined;
+let aliasSwitches = 0;
+llmRouter({
+	on(name: string, handler: typeof aliasInputHandler) {
+		if (name === "input") aliasInputHandler = handler;
+	},
+	registerCommand() {},
+	async setModel() {
+		aliasSwitches += 1;
+		return true;
+	},
+} as any);
+assert.ok(aliasInputHandler);
+await aliasInputHandler!(
+	{
+		text: "/skill:ponytail-audit",
+		images: [],
+		source: "extension",
+	},
+	{
+		model: { provider: "llm-router", id: "auto" },
+		modelRegistry: {
+			find: (provider: string, id: string) =>
+				provider === "cliproxyapi" ? { provider, id } : undefined,
+			getAll: () => [],
+		},
+		ui: { notify() {} },
+	} as any,
+);
+assert.strictEqual(aliasSwitches, 1);
+
+// @lat: [[lat.md/proper-llm-router/tests#Config menu fixture]]
 // UI check: judge model, effort, and overrides share one top-level entry
 let configHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
 llmRouter({

@@ -22,7 +22,7 @@ For Claude, the router calls `api.anthropic.com/api/oauth/usage`. It records the
 
 For Codex, the router calls `chatgpt.com/backend-api/wham/usage`. It records the maximum `used_percent` or `usedPercent` across `rate_limit`, with `rate_limits` accepted as a compatibility fallback. All Codex arms share that account-wide value.
 
-A failed credential probe is dropped. A successful 2xx response with no recognized usage fields still becomes a zero-valued account, which can lower the lane average and prevents the gate from being marked skipped. If no credential returns any parsed account object, the threshold gate has no data and must not block an arm.
+An upstream 429 is definitive exhaustion, so that credential contributes 100% account-wide usage instead of being dropped. Other failed credential probes are dropped. A successful 2xx response with no recognized usage fields still becomes a zero-valued account, which can lower the lane average and prevents the gate from being marked skipped. If no credential returns any parsed account object, the threshold gate has no data and must not block an arm.
 
 ## Threshold aggregation
 
@@ -59,7 +59,8 @@ A judged route swaps semantic slots first, then applies the override configured 
 Quota probing should reduce avoidable failures, not create a new outage mode.
 
 - Failure of the per-credential model-count endpoint falls back to `/v1/models`.
-- Failure of one account usage call drops that account.
+- An account usage call returning upstream 429 counts as 100% usage because the account cannot currently serve work.
+- Other failures of one account usage call drop that account.
 - Failure of all usage calls skips only the threshold gate.
 - Failure of `/v1/models` rejects a judged route, which then uses `fallbackModel`.
 - Failure of the same probe on a direct route keeps the direct arm and reports that the quota check was skipped.

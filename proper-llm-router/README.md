@@ -52,11 +52,22 @@ router switches directly, with no judge call and no latency:
 The quota gate still applies — a pinned arm that is out of quota swaps to its
 partner (fable→sol, sol→fable, …) and the notice says so. Effort is applied
 after the model switch, so pi clamps it to what the final arm supports;
+`ultra` is offered only when the selected model explicitly advertises it, and
 `null` leaves the session's thinking level alone. Edit pins in
 `/llm-router-config` → *Pinned commands* (add, repoint, change effort,
 remove), or directly in the config JSON. Keys match with or without the
 leading `/`, case-insensitively; a pin naming an unknown model falls through
 to the judge.
+
+## Ultra effort compatibility
+
+CLIProxyAPI already publishes `thinkingLevelMap.ultra` for supported GPT
+models, but Pi 0.84.2 stops its native effort controls at `max`. On load, this
+extension applies a reload-safe compatibility patch to the running Pi host.
+Shift+Tab and Pi's native thinking selector gain a distinct `ultra` choice only
+for models whose map contains a non-empty `ultra` value. Unsupported model
+switches clamp it to their highest available effort, and the prompt border
+reuses Pi's maximum-effort color. No installed Pi files are modified.
 
 ## Subagents and the sentinel override
 
@@ -110,7 +121,7 @@ Re-read on every routed prompt; no restart needed.
 | `cpaManagementKey` | `""` | CPA management key (plaintext); enables the quota gate |
 | `cpaManagementKeyEnv` | `CPA_MANAGEMENT_KEY` | env fallback for the management key |
 | `judgeModelOverrides` | `{}` | arm slot to enabled CPA model ID; judged routes only |
-| `commandPins` | `/file`,`/triage`,`/spec` → fable @xhigh; `/implement-ready` → sol @xhigh | slash commands routed without the judge: `{ "<cmd>": { "model": "<arm>", "effort": "xhigh"\|null } }` |
+| `commandPins` | `/file`,`/triage`,`/spec` → fable @xhigh; `/implement-ready` → sol @xhigh | slash commands routed without the judge: `{ "<cmd>": { "model": "<arm>", "effort": "xhigh"\|"ultra"\|null } }`; ultra requires model support |
 
 ## Commands
 
@@ -139,8 +150,9 @@ in the notice rather than blocking routing.
 npm test -- ["task text"]
 ```
 
-Runs the pure-logic fixtures (swaps, quota averaging, model overrides, command
-pins, and config menus) plus one live routing verdict.
+Runs offline `node:test` compatibility fixtures, the pure routing fixtures
+(swaps, quota averaging, model overrides, command pins, and config menus), then
+one live routing verdict.
 
 ## Escape hatches
 

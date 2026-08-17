@@ -1,0 +1,197 @@
+import {
+	type Component,
+	type OverlayHandle,
+	type OverlayMargin,
+	type OverlayOptions,
+	type TUI,
+	truncateToWidth,
+	visibleWidth,
+	wrapTextWithAnsi,
+} from "@earendil-works/pi-tui";
+
+const INSTALLED = Symbol.for("pi-proper-customs.autocomplete-details");
+const ACTIVE_OVERLAY = Symbol.for("pi-proper-customs.autocomplete-overlay");
+
+type AutocompleteEditor = Component & {
+	autocompleteList?: {
+		getSelectedItem(): { description?: string } | null;
+	};
+	[INSTALLED]?: boolean;
+};
+
+type DetailTheme = {
+	borderColor(text: string): string;
+	selectList: { description(text: string): string };
+};
+
+type OverlayTui = TUI & { [ACTIVE_OVERLAY]?: OverlayHandle };
+type ComponentWithChildren = Component & { children?: Component[] };
+
+function createAutocompleteDetailBox(theme: DetailTheme) {
+	let description: string | undefined;
+	let maxRows = 0;
+	const isVisible = () => description !== undefined && maxRows >= 3;
+
+	return {
+		isVisible,
+		setDescription(next: string | undefined, availableRows: number): void {
+			description = next?.replace(/[\r\n]+/g, " ").trim() || undefined;
+			maxRows = availableRows;
+		},
+		component: {
+			render(width: number): string[] {
+				if (!description || !isVisible() || width < 6) return [];
+
+				const textWidth = width - 4;
+				const contentRows = maxRows - 2;
+				let lines = wrapTextWithAnsi(description, textWidth);
+				if (lines.length > contentRows) {
+					lines = lines.slice(0, contentRows);
+					const last = lines.at(-1);
+					if (last !== undefined) {
+						const lastIndex = lines.length - 1;
+						lines[lastIndex] = `${truncateToWidth(last, textWidth - 1, "")}…`;
+					}
+				}
+
+				const border = (text: string) => theme.borderColor(text);
+				return [
+					border(`┌${"─".repeat(width - 2)}┐`),
+					...lines.map(
+						(line) =>
+							`${border("│")} ${theme.selectList.description(line)}${" ".repeat(
+								Math.max(0, textWidth - visibleWidth(line)),
+							)} ${border("│")}`,
+					),
+					border(`└${"─".repeat(width - 2)}┘`),
+				];
+			},
+			invalidate(): void {},
+		} satisfies Component,
+	};
+}
+
+export function installAutocompleteDetails(
+	editor: Component,
+	tui: TUI,
+	theme: DetailTheme,
+): void {
+	const target = editor as AutocompleteEditor;
+	if (target[INSTALLED]) return;
+
+	const host = tui as OverlayTui;
+	host[ACTIVE_OVERLAY]?.hide();
+
+	const detail = createAutocompleteDetailBox(theme);
+	const margin: OverlayMargin = { bottom: 0 };
+	let overlay: OverlayHandle | undefined;
+	const releaseOverlay = () => {
+		const active = overlay;
+		if (!active) return;
+		active.hide();
+		overlay = undefined;
+		if (host[ACTIVE_OVERLAY] === active) host[ACTIVE_OVERLAY] = undefined;
+	};
+	const scheduleReleaseOverlay = () => {
+		const inactive = overlay;
+		if (!inactive) return;
+		queueMicrotask(() => {
+			if (
+				overlay === inactive &&
+				(!detail.isVisible() || !isMounted(tui, target))
+			) {
+				releaseOverlay();
+			}
+		});
+	};
+	const options: OverlayOptions = {
+		anchor: "bottom-left",
+		margin,
+		nonCapturing: true,
+		width: "100%",
+		visible: () => {
+			const visible = detail.isVisible() && isMounted(tui, target);
+			if (!visible) scheduleReleaseOverlay();
+			return visible;
+		},
+	};
+	const ensureOverlay = () => {
+		const active = host[ACTIVE_OVERLAY];
+		if (overlay !== undefined && active === overlay) return;
+		active?.hide();
+		overlay = tui.showOverlay(detail.component, options);
+		host[ACTIVE_OVERLAY] = overlay;
+	};
+
+	const render = target.render.bind(target);
+	target.render = (width: number) => {
+		const lines = render(width);
+		margin.bottom = lines.length + rowsBelow(tui, target, width);
+		detail.setDescription(
+			target.autocompleteList?.getSelectedItem()?.description,
+			Math.max(0, tui.terminal.rows - margin.bottom),
+		);
+		if (detail.isVisible() && isMounted(tui, target)) ensureOverlay();
+		else releaseOverlay();
+		return lines;
+	};
+	target[INSTALLED] = true;
+}
+
+function isMounted(tui: TUI, target: Component): boolean {
+	return roots(tui).some((root) => contains(root, target));
+}
+
+function contains(root: Component, target: Component): boolean {
+	if (root === target) return true;
+	return childrenOf(root).some((child) => contains(child, target));
+}
+
+function rowsBelow(tui: TUI, target: Component, width: number): number {
+	const mountedRoots = roots(tui);
+	for (let index = 0; index < mountedRoots.length; index++) {
+		const root = mountedRoots[index];
+		if (!root) continue;
+		const rows = rowsAfter(root, target, width);
+		if (rows === undefined) continue;
+		return (
+			rows +
+			mountedRoots
+				.slice(index + 1)
+				.reduce((total, root) => total + root.render(width).length, 0)
+		);
+	}
+	return 0;
+}
+
+function rowsAfter(
+	root: Component,
+	target: Component,
+	width: number,
+): number | undefined {
+	if (root === target) return 0;
+
+	const children = childrenOf(root);
+	for (let index = 0; index < children.length; index++) {
+		const child = children[index];
+		if (!child) continue;
+		const rows = rowsAfter(child, target, width);
+		if (rows === undefined) continue;
+		return (
+			rows +
+			children
+				.slice(index + 1)
+				.reduce((total, child) => total + child.render(width).length, 0)
+		);
+	}
+	return undefined;
+}
+
+function roots(tui: TUI): Component[] {
+	const layoutRoot = (tui as TUI & { layoutRoot?: Component }).layoutRoot;
+	return layoutRoot ? [layoutRoot] : tui.children;
+}
+
+function childrenOf(component: Component): Component[] {
+	return (component as ComponentWithChildren).children ?? [];
+}

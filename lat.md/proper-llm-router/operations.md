@@ -26,6 +26,8 @@ Both `.mcp.json` and `.codex/config.toml` expose `lat mcp`; the Codex configurat
 
 The runtime requires global `fetch`, `AbortController`, and `AbortSignal.any`; the smoke command also requires Node's experimental TypeScript type stripping.
 
+Pi 0.84.2 does not define `ultra` in its built-in thinking-level list. During module load, proper-llm-router resolves the running pi CLI entrypoint and patches that host process's `AgentSession` and `Theme` prototypes. The patch appends `ultra` only when the active model has a non-empty `thinkingLevelMap.ultra`, uses the existing maximum border color, clamps `ultra` to the next model's highest available level when unsupported, and uses global symbols so `/reload` cannot stack wrappers. This gives Shift+Tab and pi's native thinking selector the extra level without modifying the installed pi package. If the host modules cannot be resolved, routing still works but `ultra` is not added to native controls.
+
 Three pi APIs degrade by feature detection. Without `onTerminalInput`, Esc cannot cancel judging. Without `ui.custom`, management-key input uses a visible editor. Without `setThinkingLevel`, command pins still switch models but leave thinking effort unchanged. Custom TUI components implement the required `invalidate()` method for the installed pi API.
 
 ## Network endpoints
@@ -68,7 +70,7 @@ Environment variables provide credentials and test controls.
 
 `llm-router/auto` must never handle an inference request in a healthy setup.
 
-The extension switches before the agent loop on a pinned, forced, judged, or fallback path. Missing CPA registry entries can break this guarantee, so installation validation must confirm at least the configured fallback is switchable.
+The extension switches before the agent loop on a pinned, forced, judged, or fallback path. Extension-origin messages from `sendUserMessage()` follow the same routing path, so command aliases cannot reach the placeholder. Missing CPA registry entries can still break this guarantee.
 
 The judged path reports an error when neither the verdict's effective target nor the fallback resolves. An unpinned bare command returns silently instead, so a missing fallback entry leaves that prompt on the placeholder. The registry-lookup section in `routing.md` covers the dated-ID tolerance applied before declaring a model absent.
 
@@ -96,7 +98,7 @@ Run the package harness from `proper-llm-router/` with an optional task string.
 
 ```bash
 npm test -- ["task text"]
-# equivalent: node --experimental-strip-types smoke.ts ["task text"]
+# live harness only: node --experimental-strip-types smoke.ts ["task text"]
 ```
 
-The command needs the configured judge and CPA services for its final live check. Deterministic assertions run first in the same process.
+The command first runs offline `node:test` fixtures, including the host compatibility helpers, then starts the existing smoke harness. It needs the configured judge and CPA services for the final live check.
