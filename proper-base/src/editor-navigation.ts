@@ -17,6 +17,17 @@ type NavigableEditor = Component & {
 		cursorCol: number;
 	};
 	setCursorCol?(column: number): void;
+	lastWidth?: number;
+	buildVisualLineMap?(width: number): Array<{
+		logicalLine: number;
+		startCol: number;
+		length: number;
+	}>;
+	findCurrentVisualLine?(visualLines: Array<{
+		logicalLine: number;
+		startCol: number;
+		length: number;
+	}>): number;
 	[INSTALLED]?: boolean;
 };
 
@@ -36,16 +47,44 @@ export function installEditorNavigation(
 
 	const handleInput = target.handleInput.bind(target);
 	target.handleInput = (data: string) => {
-		if (
-			!keybindings.matches(data, "tui.editor.cursorLineEnd") ||
-			target.isShowingAutocomplete?.()
-		) {
+		const home = keybindings.matches(data, "tui.editor.cursorLineStart");
+		const end = keybindings.matches(data, "tui.editor.cursorLineEnd");
+		if ((!home && !end) || target.isShowingAutocomplete?.()) {
 			handleInput(data);
 			return;
 		}
 
 		const lines = target.getLines?.() ?? [];
 		const cursor = target.getCursor?.();
+		const state = target.state;
+		if (home) {
+			const visualLines = target.buildVisualLineMap?.(target.lastWidth ?? 80);
+			const visualIndex = visualLines
+				? target.findCurrentVisualLine?.(visualLines)
+				: undefined;
+			const visualLine =
+				visualIndex === undefined || visualIndex < 0
+					? undefined
+					: visualLines?.[visualIndex];
+			if (!cursor || !state || !visualLine) {
+				handleInput(data);
+				return;
+			}
+			if (cursor.col > visualLine.startCol) {
+				if (target.setCursorCol) target.setCursorCol(visualLine.startCol);
+				else state.cursorCol = visualLine.startCol;
+				return;
+			}
+			if (cursor.line > 0 || cursor.col > 0) {
+				state.cursorLine = 0;
+				if (target.setCursorCol) target.setCursorCol(0);
+				else state.cursorCol = 0;
+				return;
+			}
+			handleInput(data);
+			return;
+		}
+
 		const currentLine = cursor ? lines[cursor.line] : undefined;
 		if (!cursor || currentLine === undefined || cursor.col < currentLine.length) {
 			handleInput(data);
@@ -58,7 +97,6 @@ export function installEditorNavigation(
 			return;
 		}
 
-		const state = target.state;
 		if (state && Array.isArray(state.lines)) {
 			state.cursorLine = lastLine;
 			const column = lines[lastLine]?.length ?? 0;

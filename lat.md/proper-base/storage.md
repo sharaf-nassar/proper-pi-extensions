@@ -12,7 +12,7 @@ The store directory is created with mode `0700`, and a new JSONL file is created
 
 Each line is JSON containing prompt text `t` and millisecond timestamp `ts`.
 
-Prompts are trimmed before append. Blank prompts and prompts over 4096 characters are skipped. Long prompts are not truncated because a recalled partial command could look safe to submit. Multiline text remains one escaped JSON line.
+Prompts are trimmed before append. Blank prompts, prompts over 4096 characters, and submissions rejected by `Recallable submissions` in `lifecycle.md` are skipped. Long prompts are not truncated because a recalled partial command could look safe to submit. Multiline text remains one escaped JSON line.
 
 Concurrent sessions append one small line at a time. Append failures return false and never interrupt editor submission.
 

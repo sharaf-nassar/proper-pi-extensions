@@ -4,21 +4,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import {
 	getCapabilities,
 	setCapabilities,
 } from "@earendil-works/pi-tui";
 import properBase from "../index.ts";
+import { readPrompts, storePath } from "../src/store.ts";
 
 const PNG_1X1 = Buffer.from(
 	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=",
 	"base64",
 );
 
-test("clipboard image paths render as previews and expand on submit", async () => {
+test("clipboard image markers show paths and expand before submission", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "proper-base-image-preview-"));
 	const imagePath = join(tmpdir(), "pi-clipboard-12345678-1234-1234-1234-123456789abc.png");
+	const historyPath = storePath(getAgentDir(), cwd);
 	await writeFile(imagePath, PNG_1X1);
 	let onSessionStart: ((event: unknown, ctx: any) => Promise<void>) | undefined;
 	let installedFactory: ((tui: any, theme: any, keybindings: any) => any) | undefined;
@@ -35,8 +38,9 @@ test("clipboard image paths render as previews and expand on submit", async () =
 		on(event: string, handler: typeof onSessionStart) {
 			if (event === "session_start") onSessionStart = handler;
 		},
+		getCommands: () => [],
 	} as any);
-	assert.equal(getCapabilities().images, "kitty");
+	assert.equal(getCapabilities().images, null);
 
 	const editor = {
 		onSubmit: undefined as ((text: string) => void) | undefined,
@@ -101,29 +105,31 @@ test("clipboard image paths render as previews and expand on submit", async () =
 		};
 		wrapped.onChange = () => {};
 
-		wrapped.insertTextAtCursor(imagePath);
+		wrapped.insertTextAtCursor(`inspect ${imagePath}`);
 		wrapped.render(40);
-		assert.equal(wrapped.getText(), "[image 1]");
+		assert.equal(wrapped.getText(), "inspect [image 1]");
 		assert.ok(overlayComponent);
 		assert.equal(overlayOptions.anchor, "bottom-left");
 		assert.equal(overlayOptions.nonCapturing, true);
-		assert.equal(overlayOptions.margin.bottom, 1);
-		assert.equal(tui.imageProtocol, "kitty");
-		assert.ok(overlayComponent.render(40).join("\n").includes("\x1b_G"));
+		assert.equal(tui.imageProtocol, null);
+		const overlayText = overlayComponent.render(200).join("\n");
+		assert.ok(overlayText.includes(`[image 1] ${imagePath}`));
+		assert.ok(!overlayText.includes("\x1b_G"));
 
-		wrapped.setText("[image 1");
-		assert.equal(wrapped.getText(), "");
-
-		wrapped.setText(imagePath);
-		assert.equal(wrapped.getText(), "[image 2]");
+		wrapped.setText("inspect [image 1");
+		assert.equal(wrapped.getText(), "inspect ");
+		wrapped.setText(`inspect ${imagePath}`);
+		assert.equal(wrapped.getText(), "inspect [image 2]");
 
 		wrapped.onSubmit(wrapped.getText());
-		assert.equal(submitted, imagePath);
+		assert.equal(submitted, `inspect ${imagePath}`);
+		assert.equal(readPrompts(historyPath).at(-1)?.text, `inspect ${imagePath}`);
 	} finally {
 		if (previousTermProgram === undefined) delete process.env.TERM_PROGRAM;
 		else process.env.TERM_PROGRAM = previousTermProgram;
 		setCapabilities(previousCapabilities);
 		await rm(cwd, { recursive: true, force: true });
+		await rm(historyPath, { force: true });
 		await rm(imagePath, { force: true });
 	}
 });

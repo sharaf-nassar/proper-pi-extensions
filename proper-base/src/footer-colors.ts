@@ -9,7 +9,20 @@ import {
 } from "@earendil-works/pi-tui";
 
 const INSTALLED = Symbol.for("pi-proper-base.footer-colors");
-const PURPLE = [192, 132, 252] as const;
+const FIELD_COLORS = {
+	path: [137, 152, 163],
+	branch: [134, 165, 128],
+	input: [111, 159, 190],
+	output: [126, 174, 132],
+	cacheRead: [153, 143, 196],
+	cacheWrite: [194, 143, 114],
+	cacheHit: [115, 176, 160],
+	cost: [202, 165, 103],
+	context: [181, 143, 168],
+	contextWarning: [213, 160, 84],
+	contextDanger: [218, 122, 122],
+	model: [192, 132, 252],
+} as const;
 const RAINBOW = [
 	[255, 95, 175],
 	[255, 215, 95],
@@ -21,6 +34,9 @@ const ANIMATION_INTERVAL_MS = 120;
 const HIGHLIGHT_CYCLE_MS = 4000;
 const USAGE_THROUGH_COST =
 	/^((?:(?:↑|↓|R|W|CH)\S+\s+)*\$\S+(?:\s+\(sub\))?)(?:\s+|$)/;
+const USAGE_FIELD =
+	/(?:^|\s)(CH\S+|↑\S+|↓\S+|R\S+|W\S+|\$\S+(?:\s+\(sub\))?)(?=\s|$)/g;
+const CONTEXT_FIELD = /(?:\d+(?:\.\d+)?%|\?)\/\S+(?:\s+\(auto\))?/;
 
 type FooterTheme = ExtensionContext["ui"]["theme"];
 type FooterState = {
@@ -124,8 +140,9 @@ function layoutFooter(
 	const usage = match?.[1];
 	if (!match || !usage) return lines;
 
+	const contentWidth = width - 1;
 	const usageWidth = visibleWidth(usage);
-	const availablePathWidth = width - usageWidth - 1;
+	const availablePathWidth = contentWidth - usageWidth - 1;
 	if (availablePathWidth < 8) return lines;
 
 	const result = [...lines];
@@ -135,7 +152,7 @@ function layoutFooter(
 		theme.fg("dim", "..."),
 	);
 	const topPadding = " ".repeat(
-		Math.max(1, width - visibleWidth(path) - usageWidth),
+		Math.max(1, contentWidth - visibleWidth(path) - usageWidth),
 	);
 	result[0] = `${path}${topPadding}${theme.fg("dim", usage)}`;
 
@@ -146,7 +163,7 @@ function layoutFooter(
 		Math.max(0, visibleWidth(statsLine) - consumed),
 		true,
 	);
-	result[1] = realignFooterRemainder(remainder, width, theme);
+	result[1] = realignFooterRemainder(remainder, contentWidth, theme);
 	return result;
 }
 
@@ -184,15 +201,18 @@ function colorFooter(
 	lines: string[],
 	{ level, model, now, theme }: FooterColorState,
 ): string[] {
-	if (!model) return lines;
-	const index = lines.findIndex((line) =>
+	const result = [...lines];
+	if (result[0]) result[0] = colorPathAndUsage(result[0], theme);
+	if (result[1]) result[1] = colorUsageAndContext(result[1], theme);
+
+	if (!model) return result;
+	const index = result.findIndex((line) =>
 		stripTerminalSequences(line).includes(model),
 	);
-	if (index < 0) return lines;
+	if (index < 0) return result;
 
-	const result = [...lines];
 	let line = result[index] ?? "";
-	line = line.replace(model, emphasize(rgb(PURPLE, model), theme));
+	line = line.replace(model, paintField(model, FIELD_COLORS.model, theme));
 	if (level) {
 		const label = level === "off" ? "thinking off" : level;
 		const styled =
@@ -203,6 +223,70 @@ function colorFooter(
 	}
 	result[index] = line;
 	return result;
+}
+
+function colorPathAndUsage(line: string, theme: FooterTheme): string {
+	const plain = stripTerminalSequences(line);
+	const usageStart = usageFields(plain)[0]?.index ?? -1;
+	const pathArea = (usageStart < 0 ? plain : plain.slice(0, usageStart)).trimEnd();
+	const pathMatch = pathArea.match(/^(.*?)(?:\s+(\([^()]+\)))?(?:\s+•\s+.*)?$/);
+	let colored = line;
+	const path = pathMatch?.[1]?.trimEnd();
+	const branch = pathMatch?.[2];
+	if (path) colored = colored.replace(path, paintField(path, FIELD_COLORS.path, theme));
+	if (branch) {
+		colored = colored.replace(branch, paintField(branch, FIELD_COLORS.branch, theme));
+	}
+	return colorUsage(colored, theme);
+}
+
+function colorUsageAndContext(line: string, theme: FooterTheme): string {
+	let colored = colorUsage(line, theme);
+	const context = stripTerminalSequences(colored).match(CONTEXT_FIELD)?.[0];
+	if (context) {
+		colored = colored.replace(context, paintField(context, contextColor(context), theme));
+	}
+	return colored;
+}
+
+function colorUsage(line: string, theme: FooterTheme): string {
+	let colored = line;
+	for (const { value } of usageFields(stripTerminalSequences(line))) {
+		colored = colored.replace(value, paintField(value, usageColor(value), theme));
+	}
+	return colored;
+}
+
+function usageFields(line: string): Array<{ value: string; index: number }> {
+	return [...line.matchAll(USAGE_FIELD)].flatMap((match) => {
+		const value = match[1];
+		if (!value) return [];
+		return [{ value, index: (match.index ?? 0) + match[0].length - value.length }];
+	});
+}
+
+function usageColor(field: string): readonly [number, number, number] {
+	if (field.startsWith("↑")) return FIELD_COLORS.input;
+	if (field.startsWith("↓")) return FIELD_COLORS.output;
+	if (field.startsWith("CH")) return FIELD_COLORS.cacheHit;
+	if (field.startsWith("R")) return FIELD_COLORS.cacheRead;
+	if (field.startsWith("W")) return FIELD_COLORS.cacheWrite;
+	return FIELD_COLORS.cost;
+}
+
+function contextColor(context: string): readonly [number, number, number] {
+	const percent = Number.parseFloat(context);
+	if (percent > 90) return FIELD_COLORS.contextDanger;
+	if (percent > 70) return FIELD_COLORS.contextWarning;
+	return FIELD_COLORS.context;
+}
+
+function paintField(
+	text: string,
+	color: readonly [number, number, number],
+	theme: FooterTheme,
+): string {
+	return emphasize(rgb(color, text), theme);
 }
 
 function thinkingColor(

@@ -62,6 +62,27 @@ export function resolveBase<F extends object>(
 	return current;
 }
 
+/**
+ * True when a submission is worth recalling from history.
+ *
+ * A leading `/` is either a prompt template (`/file fix the bug`), which is a
+ * real prompt, or a UI command (`/model …`, `/new`, `/reload`,
+ * `/llm-router-config`), which is not. Recalling a UI command is noise, and
+ * re-submitting a recalled `/model …` silently changes the session model.
+ * pi's `getCommands()` lists prompt templates and skills but not built-ins or
+ * extension commands, so membership there is the whole test.
+ */
+export function isRecallable(
+	text: string,
+	commands: readonly { name: string; source: string }[],
+): boolean {
+	const command = /^\/(\S+)/.exec(text.trimStart());
+	if (!command) return true;
+	return commands.some(
+		(c) => c.source !== "extension" && c.name === command[1],
+	);
+}
+
 /** Matches pi's skill wrapper: the typed prompt, when present, trails the block. */
 const SKILL_BLOCK =
 	/^<skill name="[^"]*" location="[^"]*">\n[\s\S]*?\n<\/skill>(?:\n\n([\s\S]+))?$/;

@@ -1,16 +1,14 @@
-import { readFileSync } from "node:fs";
-import { basename, extname, isAbsolute } from "node:path";
+import { accessSync, constants } from "node:fs";
+import { basename, isAbsolute } from "node:path";
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
-	getCapabilities,
-	Image,
 	type OverlayHandle,
 	type OverlayMargin,
 	type OverlayOptions,
-	setCapabilities,
 	type TUI,
+	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 
 import { isMounted, rowsBelow } from "./autocomplete-details.ts";
@@ -20,16 +18,6 @@ const ACTIVE_OVERLAY = Symbol.for("pi-proper-base.image-preview-overlay");
 const CLIPBOARD_IMAGE = /^pi-clipboard-[0-9a-f-]+\.(?:gif|jpe?g|png|webp)$/i;
 const CLIPBOARD_IMAGE_PATH =
 	/(?:[A-Za-z]:[\\/]|\/)[^\s]*?pi-clipboard-[0-9a-f-]+\.(?:gif|jpe?g|png|webp)/gi;
-const PREVIEW_WIDTH = 24;
-const PREVIEW_HEIGHT = 6;
-
-const MIME_TYPES: Record<string, string> = {
-	".gif": "image/gif",
-	".jpeg": "image/jpeg",
-	".jpg": "image/jpeg",
-	".png": "image/png",
-	".webp": "image/webp",
-};
 
 type PreviewEditor = Component & {
 	getText?(): string;
@@ -43,8 +31,6 @@ type PreviewEditor = Component & {
 type Preview = {
 	marker: string;
 	path: string;
-	base64: string;
-	mimeType: string;
 };
 
 export type ImagePreviewController = {
@@ -58,14 +44,6 @@ type InstalledEditor = PreviewEditor & {
 	[INSTALLED]?: ImagePreviewController;
 };
 type OverlayTui = TUI & { [ACTIVE_OVERLAY]?: OverlayHandle };
-
-export function enableScribeImageCapability(): void {
-	if (process.env.TERM_PROGRAM?.toLowerCase() !== "scribe") return;
-	const capabilities = getCapabilities();
-	if (capabilities.images !== "kitty") {
-		setCapabilities({ ...capabilities, images: "kitty" });
-	}
-}
 
 function singleDeletionIndex(before: string, after: string): number | undefined {
 	if (before.length !== after.length + 1) return undefined;
@@ -89,12 +67,11 @@ export function installImagePreview(
 	}
 	if (!target.getText || !target.setText) return undefined;
 
-	let ctx = _ctx;
 	let counter = 0;
 	let changingText = false;
 	let previousText = target.getText();
 	let visibleMarkers = "";
-	let activeImages: Image[] = [];
+	let activePreviews: Preview[] = [];
 	let handler = target.onChange;
 	const previews = new Map<string, Preview>();
 	const markersByPath = new Map<string, string>();
@@ -112,7 +89,7 @@ export function installImagePreview(
 	};
 	const hasDescription = () =>
 		Boolean(target.autocompleteList?.getSelectedItem()?.description);
-	const isVisible = () => activeImages.length > 0 && !hasDescription();
+	const isVisible = () => activePreviews.length > 0 && !hasDescription();
 	const scheduleReleaseOverlay = () => {
 		const inactive = overlay;
 		if (!inactive) return;
@@ -127,19 +104,17 @@ export function installImagePreview(
 	};
 	const component: Component = {
 		render(width: number) {
-			return activeImages.flatMap((image) =>
-				image.render(Math.min(width, PREVIEW_WIDTH + 2)),
+			return activePreviews.flatMap((preview) =>
+				wrapTextWithAnsi(`${preview.marker} ${preview.path}`, width),
 			);
 		},
-		invalidate() {
-			for (const image of activeImages) image.invalidate();
-		},
+		invalidate() {},
 	};
 	const options: OverlayOptions = {
 		anchor: "bottom-left",
 		margin,
 		nonCapturing: true,
-		width: PREVIEW_WIDTH + 2,
+		width: "100%",
 		visible: () => {
 			const visible = isVisible() && isMounted(tui, target);
 			if (!visible) scheduleReleaseOverlay();
@@ -161,19 +136,7 @@ export function installImagePreview(
 		const signature = active.map((preview) => preview.marker).join("\0");
 		if (signature !== visibleMarkers) {
 			visibleMarkers = signature;
-			activeImages = active.map(
-				(preview) =>
-					new Image(
-						preview.base64,
-						preview.mimeType,
-						{ fallbackColor: (value) => ctx.ui.theme.fg("dim", value) },
-						{
-							filename: preview.marker.slice(1, -1),
-							maxWidthCells: PREVIEW_WIDTH,
-							maxHeightCells: PREVIEW_HEIGHT,
-						},
-					),
-			);
+			activePreviews = active;
 		}
 		if (isVisible() && isMounted(tui, target)) ensureOverlay();
 		else releaseOverlay();
@@ -183,21 +146,15 @@ export function installImagePreview(
 		const known = markersByPath.get(path);
 		if (known) return known;
 		if (!isAbsolute(path) || !CLIPBOARD_IMAGE.test(basename(path))) return;
-		const mimeType = MIME_TYPES[extname(path).toLowerCase()];
-		if (!mimeType) return;
 		try {
-			const marker = `[image ${++counter}]`;
-			previews.set(marker, {
-				marker,
-				path,
-				base64: readFileSync(path).toString("base64"),
-				mimeType,
-			});
-			markersByPath.set(path, marker);
-			return marker;
+			accessSync(path, constants.R_OK);
 		} catch {
 			return;
 		}
+		const marker = `[image ${++counter}]`;
+		previews.set(marker, { marker, path });
+		markersByPath.set(path, marker);
+		return marker;
 	};
 	const ingest = (text: string) =>
 		text.replace(CLIPBOARD_IMAGE_PATH, (path) => markerForPath(path) ?? path);
@@ -251,7 +208,7 @@ export function installImagePreview(
 				prepared = prepared.replaceAll(preview.marker, preview.path);
 			}
 			visibleMarkers = "";
-			activeImages = [];
+			activePreviews = [];
 			releaseOverlay();
 			return prepared;
 		},
@@ -259,7 +216,7 @@ export function installImagePreview(
 			previews.clear();
 			markersByPath.clear();
 			visibleMarkers = "";
-			activeImages = [];
+			activePreviews = [];
 			releaseOverlay();
 		},
 		dispose() {
@@ -270,8 +227,7 @@ export function installImagePreview(
 			target.onChange = handler;
 			delete target[INSTALLED];
 		},
-		update(next) {
-			ctx = next;
+		update(_next) {
 			visibleMarkers = "";
 			sync(target.getText?.() ?? "");
 		},

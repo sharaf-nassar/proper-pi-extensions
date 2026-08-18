@@ -21,6 +21,7 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 		| ((tui: any, theme: any, keybindings: any) => any)
 		| undefined;
 	let effort = "low";
+	let contextPercent = 55.5;
 	let stale = false;
 
 	properBase({
@@ -28,6 +29,7 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 			if (event === "session_start") onSessionStart = handler;
 			if (event === "session_shutdown") onSessionShutdown = handler;
 		},
+		getCommands: () => [],
 	} as any);
 
 	class FooterComponent {
@@ -35,7 +37,7 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 			const label = effort === "off" ? "thinking off" : effort;
 			return [
 				"~/work/scribe (main)",
-				`↑10M ↓261K R114M CH99.5% $115.997 55.5%/1.0M (auto)  gpt-5.6-sol • ${label}`,
+				`↑10M ↓261K R114M W2M CH99.5% $115.997 ${contextPercent.toFixed(1)}%/1.0M (auto)  gpt-5.6-sol • ${label}`,
 			];
 		}
 		invalidate() {}
@@ -113,15 +115,39 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 		const lowLines = footer.render(100).map(stripTerminalSequences);
 		assert.ok(lowLines[0]?.startsWith("~/work/scribe (main)"));
 		assert.ok(
-			lowLines[0]?.endsWith("↑10M ↓261K R114M CH99.5% $115.997"),
+			lowLines[0]?.endsWith("↑10M ↓261K R114M W2M CH99.5% $115.997"),
 		);
-		assert.equal(lowLines[0]?.length, 100);
+		assert.equal(lowLines[0]?.length, 99);
 		assert.ok(lowLines[1]?.startsWith("55.5%/1.0M (auto)"));
 		assert.ok(lowLines[1]?.endsWith("gpt-5.6-sol • low"));
-		assert.equal(lowLines[1]?.length, 100);
+		assert.equal(lowLines[1]?.length, 99);
 		assert.equal(lowLines[1]?.includes("$115.997"), false);
 
-		const low = footer.render(100)[1]!;
+		const colored = footer.render(100);
+		const usage = colored[0] ?? "";
+		const low = colored[1] ?? "";
+		assert.ok(usage.includes(color(137, 152, 163, "~/work/scribe")));
+		assert.ok(usage.includes(color(134, 165, 128, "(main)")));
+		for (const [rgb, value] of [
+			[[111, 159, 190], "↑10M"],
+			[[126, 174, 132], "↓261K"],
+			[[153, 143, 196], "R114M"],
+			[[194, 143, 114], "W2M"],
+			[[115, 176, 160], "CH99.5%"],
+			[[202, 165, 103], "$115.997"],
+		] as const) {
+			assert.ok(usage.includes(color(rgb[0], rgb[1], rgb[2], value)));
+		}
+		assert.ok(low.includes(color(181, 143, 168, "55.5%/1.0M (auto)")));
+		contextPercent = 75;
+		assert.ok(
+			footer.render(100)[1]?.includes(color(213, 160, 84, "75.0%/1.0M (auto)")),
+		);
+		contextPercent = 95;
+		assert.ok(
+			footer.render(100)[1]?.includes(color(218, 122, 122, "95.0%/1.0M (auto)")),
+		);
+		contextPercent = 55.5;
 		assert.ok(low.includes("\x1b[38;2;192;132;252mgpt-5.6-sol\x1b[39m"));
 		assert.ok(low.includes("\x1b[38;2;95;135;175mlow\x1b[39m"));
 
@@ -138,7 +164,13 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 			assert.ok(rgb);
 			const line = footer.render(100)[1];
 			assert.ok(line?.includes(color(...rgb, label)));
+			assert.equal(stripTerminalSequences(line ?? "").length, 99);
 		}
+
+		effort = "xhigh";
+		const narrow = stripTerminalSequences(footer.render(76)[1] ?? "");
+		assert.ok(narrow.endsWith("gpt-5.6-sol • xhigh"));
+		assert.equal(narrow.length, 75);
 
 		effort = "max";
 		const firstMax = footer.render(100)[1];

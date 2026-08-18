@@ -9,6 +9,7 @@ function toolResultHandler() {
 		on(event: string, fn: typeof handler) {
 			if (event === "tool_result") handler = fn;
 		},
+		getCommands: () => [],
 	} as any);
 	assert.ok(handler, "tool_result handler was not registered");
 	return handler;

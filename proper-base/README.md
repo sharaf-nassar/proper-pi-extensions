@@ -1,6 +1,6 @@
 # proper-base
 
-Baseline behavior for [pi](https://pi.dev): cross-session prompt history, richer autocomplete, editable cancellation, fullscreen navigation, clipboard previews, and a compact color-coded footer.
+Baseline behavior for [pi](https://pi.dev): cross-session prompt history, richer autocomplete, editable cancellation, fullscreen navigation, clipboard markers, and a compact color-coded footer.
 
 pi's Up/Down history covers the current session only. Start a new session in a project you have worked in for weeks and the editor history is empty. This extension seeds it with the prompts you typed in the other sessions recorded for the same working directory.
 
@@ -16,9 +16,11 @@ This package was renamed from the local `proper-customs` directory and the unpub
 
 ## Behaviour
 
-### Prompt navigation
+### Prompt editing
 
-End uses two-stage navigation in multiline prompts. The first press moves to the end of the current logical line; pressing End again from there moves to the end of the entire prompt. End at the final prompt position is a no-op.
+Shift+Enter and Alt+Enter both insert a new line in the prompt; Ctrl+J remains available too. proper-base removes Alt+Enter from Pi's follow-up queue action so the editor receives it.
+
+Home uses two-stage navigation in multiline or soft-wrapped prompts: the first press moves to the beginning of the current visible row, and the second moves to the beginning of the entire prompt. End first reaches the current logical line end, then the full prompt end. Either key at its full-prompt boundary is a no-op.
 
 ### Pinned scrolling
 
@@ -32,9 +34,11 @@ In fullscreen mode, Home, End, PageUp, and PageDown move within the prompt edito
 
 The built-in footer moves cumulative input/output/cache statistics through the dollar cost onto the right side of the top path row. Context usage stays left on the second row, with provider, model, and thinking level kept right-aligned.
 
-The active model is purple. Thinking effort uses pi's semantic color ramp: muted for off and minimal, blue through cyan for low and medium, then lavender and bright purple for high and xhigh. `max` and the router-provided `ultra` level become rainbow text with a slow four-second highlight sweep.
+A restrained semantic spectrum makes dense metrics scannable: input is steel blue, output sage, cache read lavender, cache write clay, cache hit teal, cost ochre, and normal context usage dusty rose. Context shifts to amber above 70% and muted red above 90%. The path stays slate, the branch is sage, and the active model remains purple.
 
-The animation requests a lightweight redraw every 120 ms only while `max` or `ultra` is visible, and stops when effort changes or the footer is unmounted. Footer text, spacing, token statistics, provider labels, and truncation remain pi's own. Custom replacement footers are left unchanged.
+Thinking effort uses pi's semantic color ramp: muted for off and minimal, blue through cyan for low and medium, then lavender and bright purple for high and xhigh. `max` and the router-provided `ultra` level become rainbow text with a slow four-second highlight sweep.
+
+The animation requests a lightweight redraw every 120 ms only while `max` or `ultra` is visible, and stops when effort changes or the footer is unmounted. Rearranged rows keep a trailing safety column for edge legibility. Native labels and layout remain intact, so color supplements the symbols and positions rather than replacing them. Custom replacement footers are left unchanged.
 
 ### Early prompt cancellation
 
@@ -50,15 +54,17 @@ Questionnaires that fail before you see them — no UI, an RPC host that cannot 
 
 ### Autocomplete descriptions
 
-When editor autocomplete is open, the selected item's description appears in a bordered, non-capturing overlay immediately above the prompt. The box expands upward over terminal history, so changing selections never moves the prompt, autocomplete list, or footer. Text wraps to the terminal width and uses all rows available above the prompt before adding an ellipsis.
+When editor autocomplete is open, the selected item's description appears in a bordered, non-capturing overlay immediately above the prompt. Its text uses the same teal accent as the selected autocomplete item for stronger readability and visual continuity. The box expands upward over terminal history, so changing selections never moves the prompt, autocomplete list, or footer. Text wraps to the terminal width and uses all rows available above the prompt before adding an ellipsis.
 
-This covers skills, slash commands, and other editor autocomplete providers that supply descriptions. `/model ` results always sort displayed model IDs descending with numeric-aware comparison. Typed queries first retain only names matching every case-insensitive search term, then sort that filtered subset descending. If strict matching finds nothing, Pi's fuzzy candidates remain available but are still descending. Pressing Enter or Tab on a highlighted model accepts it and switches immediately. Built-in modal selectors such as model and session pickers are outside the editor extension API and remain unchanged.
+This covers skills, slash commands, and other editor autocomplete providers that supply descriptions. Slash-command completion opens at the start of the prompt, after whitespace anywhere on a line, and at the start of later prompt lines. Filtering and argument completion run against that active slash segment; accepting a command replaces only the segment and leaves surrounding text intact. Slashes inside paths and URLs do not trigger it.
 
-### Clipboard image previews
+`/model ` results always sort displayed model IDs descending with numeric-aware comparison. Typed queries first retain only names matching every case-insensitive search term, then sort that filtered subset descending. If strict matching finds nothing, Pi's fuzzy candidates remain available but are still descending. Pressing Enter or Tab on a highlighted model accepts it and switches immediately. Built-in modal selectors such as model and session pickers are outside the editor extension API and remain unchanged.
 
-Pasting a clipboard image inserts a short `[image N]` marker instead of its `/tmp/pi-clipboard-…` path and shows a small non-capturing overlay above the prompt. Multiple pasted images stack vertically. The overlay yields to autocomplete descriptions and returns when autocomplete closes. Scribe is explicitly enabled for Kitty graphics because pi-tui's conservative terminal detection otherwise falls back to text.
+### Clipboard images
 
-Deleting any single character inside an `[image N]` marker removes the entire marker and preview. On submit, intact markers expand back to real paths, so Pi's attachment handling and prompt history keep their existing behavior. Other unsupported terminals show Pi's compact image fallback label.
+Ctrl+V and Ctrl+Shift+V both invoke Pi's image-or-text clipboard paste action when the terminal forwards the chord. Pasting an image inserts a short `[image N]` marker and shows its source path in a full-width, non-capturing overlay above the prompt. Multiple paths stack vertically, and the overlay yields to autocomplete descriptions.
+
+Kitty image rendering is intentionally disabled, including under Scribe, so proper-base never changes terminal image capabilities. On submit, every intact marker expands back to its source path before Pi's handler and prompt-history recorder receive it; agents therefore see the usable image path rather than the display-only marker.
 
 ### Prompt history
 

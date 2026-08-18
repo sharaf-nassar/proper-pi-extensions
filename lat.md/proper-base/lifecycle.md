@@ -22,6 +22,14 @@ Only user messages produce history entries.
 
 String content is used directly. Text parts are concatenated the same way pi builds live editor history, while non-text parts are ignored. Whitespace-only prompts are dropped. Skill-wrapper messages are reduced to the trailing text the user typed; a wrapper without trailing text is omitted.
 
+## Recallable submissions
+
+UI commands are excluded from history so recalling a prompt cannot re-run one.
+
+A submission whose first token is a slash command is kept only when that name appears in pi's `getCommands()` with a source other than `extension`. Prompt templates such as `/file <task>` and skill commands are therefore recalled, while built-ins such as `/model`, `/new`, and `/reload` and extension commands such as `/llm-router-config` are not. Text that does not start with `/` is always kept.
+
+The filter runs on append and again on the seeded result, so stores written before it existed stop surfacing their recorded commands. This matters beyond noise: re-submitting a recalled `/model <provider>/<id>` silently leaves `llm-router/auto`, which disarms the routing decision described under `Eligible input` in `../proper-llm-router/routing.md` and makes later pinned commands run unrouted.
+
 ## Merge contract
 
 Sources merge by prompt text and timestamp rather than by source order.
@@ -32,39 +40,47 @@ A duplicate collapses onto its newest timestamp. Same-timestamp entries retain e
 
 Recording wraps the editor instance's `onSubmit` property rather than relying on pi's input event.
 
-The property descriptor wraps both an existing handler and handlers assigned later by pi. An optional preparation step expands display-only image markers before recording and delegation, so history and Pi receive real paths. Recording occurs before delegating so a downstream failure cannot lose the prompt. A symbol marker prevents recorder stacking when installation repeats.
+The property descriptor wraps both an existing handler and handlers assigned later by pi. A preparation step expands display-only image markers before recording and delegation, so history and Pi receive usable paths. Recording occurs before delegating so a downstream failure cannot lose the prompt, and the `Recallable submissions` filter decides whether the prepared text reaches the store. A symbol marker prevents recorder stacking when installation repeats.
 
-## Clipboard image previews
+The early-cancellation capture keeps its own narrower rule: any leading `/` or `!` disqualifies a submission from restore, regardless of whether history would recall it.
 
-Clipboard image paths render as compact prompt thumbnails instead of raw temporary paths.
+## Clipboard images
 
-The editor's `onChange` property is wrapped so every insertion route, including bracketed paste and Pi's clipboard helper, detects absolute `pi-clipboard-*` GIF, JPEG, PNG, or WebP paths. Each image is read once and replaced by a short `[image N]` marker.
+Clipboard image paths use compact editor markers while their source paths remain visible and available to agents.
 
-Active markers render in a 26-column non-capturing overlay anchored above the editor, with each image capped at 24 columns by 6 rows. Multiple images stack vertically, and an autocomplete description temporarily hides the image overlay to avoid overlap. Overlay entries are removed when inactive so renderer switching remains available.
+proper-base binds Pi's `app.clipboard.pasteImage` action to Ctrl+V and Ctrl+Shift+V; either chord invokes Pi's native image-or-text clipboard handler when the terminal forwards it. Every insertion route detects readable absolute `pi-clipboard-*` GIF, JPEG, PNG, or WebP paths and replaces each with `[image N]`. Active markers render as full-width text rows containing the marker and source path in a non-capturing overlay above the editor. Multiple paths stack, while an autocomplete description temporarily hides the image overlay to avoid overlap.
 
-pi-tui treats unknown terminals as text-only. During extension factory loading, before interactive TUI construction, proper-base upgrades `TERM_PROGRAM=Scribe` capability to Kitty. The fullscreen renderer therefore captures Kitty support during its normal startup and owns image placement/cache state without private post-start mutation. Other unsupported terminals retain pi-tui's fallback.
+proper-base does not enable Kitty rendering or change terminal image capabilities, including under `TERM_PROGRAM=Scribe`. The overlay contains plain text only.
 
-A one-character deletion is compared with the prior editor text. If the deletion lands anywhere inside an intact marker, the remaining fragment and its preview are removed atomically. Submission preparation expands intact markers back to source paths before recorder storage and Pi dispatch.
-
-Preview data remains available across an unprocessed early cancellation so the restored marker redraws its thumbnail, then clears once assistant processing begins or a normal turn settles. Reload and shutdown restore editor methods, hide the overlay, and release buffered image data.
+A one-character deletion inside an intact marker removes the whole marker and its path entry. Submission preparation expands every intact marker back to its source path before recorder storage and Pi dispatch, so agent input never receives the display-only tag. Preview state survives an unprocessed early cancellation, then clears once assistant processing begins or a normal turn settles.
 
 ## Autocomplete description pane
 
 The installed editor's `render()` is wrapped once per instance. Selected autocomplete descriptions render in a non-capturing pi-tui overlay immediately above the editor instead of adding lines to the editor itself.
 
-The overlay is full-width, square-bordered, and anchored above the editor plus any widgets and footer rows beneath it. It expands upward over transcript content, so descriptions of different lengths never move the prompt, autocomplete list, or footer. Newlines are normalized and text wraps inside the box; descriptions exceeding the terminal area above the prompt end with an ellipsis.
+The overlay is full-width, square-bordered, and anchored above the editor plus any widgets and footer rows beneath it. Description text uses the same theme-selected accent as the active autocomplete item, while the border retains its normal theme color. It expands upward over transcript content, so descriptions of different lengths never move the prompt, autocomplete list, or footer. Newlines are normalized and text wraps inside the box; descriptions exceeding the terminal area above the prompt end with an ellipsis.
 
 Cursor movement updates the selected item before the next render. The overlay exists only while its editor remains mounted and a selected description exists. Losing either condition calls the overlay handle's `hide()` method, removing the entry rather than merely making it invisible. Unmount detection queues removal after the current overlay-visibility pass so the stack is not mutated while pi iterates it.
 
 This lifecycle matters when pi changes renderers: its regular/fullscreen switch refuses to run while any overlay entry exists, including invisible non-capturing entries. Releasing the detail overlay keeps that switch available, and the next editor render recreates the box against the active renderer. Editors without pi's autocomplete-list state render exactly as before.
 
-This scope covers editor autocomplete, including skills and slash commands. A provider wrapper sorts every `/model ` result by displayed model ID descending using case-insensitive, numeric-aware comparison. For a non-empty query, whitespace-delimited terms must each occur in the candidate's label, value, or description; when strict matches exist, unrelated fuzzy candidates are removed before sorting. If strict matching finds nothing, Pi's fuzzy candidate set remains available but is still sorted descending. Non-model suggestions retain provider order. When Enter or Tab accepts a model completion, the editor wrapper verifies that Pi produced the exact selected `provider/model` command and immediately invokes Pi's submission path. Enter reuses its confirm key; Tab calls the editor's native submit routine, with an Enter fallback for compatible custom editors. Tab remains completion-only outside `/model ` arguments, and editors without Pi's autocomplete internals are untouched. Built-in modal selectors do not pass through the editor factory and are outside the extension API.
+This scope covers editor autocomplete, including skills and slash commands. proper-base triggers command completion for a slash segment at the beginning of the first line, after whitespace anywhere in a line, or at the beginning of later prompt lines. The provider evaluates only the active slash segment, including command arguments, and completion splices the result back into that segment without changing surrounding prompt text. Slashes embedded in paths or URLs are not command boundaries. Custom editors without Pi's autocomplete state and trigger method remain untouched.
+
+The same provider wrapper sorts every `/model ` result by displayed model ID descending using case-insensitive, numeric-aware comparison. For a non-empty query, whitespace-delimited terms must each occur in the candidate's label, value, or description; when strict matches exist, unrelated fuzzy candidates are removed before sorting. If strict matching finds nothing, Pi's fuzzy candidate set remains available but is still sorted descending. Non-model suggestions retain provider order. When Enter or Tab accepts a model completion, the editor wrapper verifies that Pi produced the exact selected `provider/model` command and immediately invokes Pi's submission path. Enter reuses its confirm key; Tab calls the editor's native submit routine, with an Enter fallback for compatible custom editors. Tab remains completion-only outside `/model ` arguments, and editors without Pi's autocomplete internals are untouched. Built-in modal selectors do not pass through the editor factory and are outside the extension API.
+
+## Prompt newline keys
+
+Shift+Enter and Alt+Enter insert new lines in the prompt.
+
+proper-base ensures both chords belong to `tui.input.newLine` while preserving other newline aliases such as Ctrl+J. Alt+Enter is removed from `app.message.followUp`, whose application-level handling would otherwise consume the chord before the editor can insert a line. The bindings are reapplied after native keybinding reloads.
 
 ## Prompt cursor navigation
 
-End moves through multiline prompts in two stages.
+Home and End move through visible prompt rows and full-prompt boundaries in two stages.
 
-The editor wrapper intercepts the configured `tui.editor.cursorLineEnd` action. If the cursor is before the current logical line end, native Pi handling performs the first move. If the cursor is already at that boundary and later prompt lines exist, proper-base moves pi-tui's cursor state to the final column of the final line. End at the full prompt end delegates to native no-op behavior. Autocomplete keeps native handling, custom editors without Pi's state object use a bounded Down-key fallback, and Ctrl+Shift+End remains the fullscreen transcript action.
+For Home, proper-base reuses Pi's current visual-line map and render width. The first press moves to the start column of the current soft-wrapped row; a second press from that boundary moves to line 0, column 0. The same two-stage rule applies across hard-newline paragraphs, and Home at the full prompt start is a no-op.
+
+End retains its existing behavior: native Pi handling reaches the current logical line end, then a second press moves to the final column of the final line. Autocomplete keeps native handling, custom editors without Pi's visual-line state keep their own behavior, and Ctrl+Shift+Home/End remain fullscreen transcript actions.
 
 ## Pinned transcript scrolling
 
@@ -80,11 +96,11 @@ Pi reloads `keybindings.json` after extension `session_start` handlers, so prope
 
 The editor factory locates pi's mounted built-in `FooterComponent` and decorates its `render()` output in place.
 
-When the stats row contains a dollar cost, cumulative input, output, cache, cache-hit, and cost fields move to the right side of the top path row. The path truncates to make room. Context usage remains left on the second row, while the existing provider/model/thinking segment is re-padded to the right edge. Narrow layouts that cannot retain a useful path keep Pi's native arrangement.
+When the stats row contains a dollar cost, cumulative input, output, cache, cache-hit, and cost fields move to the right side of the top path row. The path truncates to make room. Context usage remains left on the second row, while the existing provider/model/thinking segment is re-padded with one trailing column reserved. Narrow layouts that cannot retain a useful path keep Pi's native arrangement.
 
 `max` and the router-provided `ultra` level render each character with a different rainbow color. A bright highlight crosses the word on a four-second cycle; a 120 ms unref'd timer requests redraws only while either level is active and the footer remains mounted. Changing to another effort stops the timer, and footer disposal clears it.
 
-After layout, the active model receives fixed purple truecolor. Off through xhigh use pi's semantic thinking-level colors; maximum effort uses the animation above. Footer text, provider labels, extension statuses, and line count remain native, and components other than the built-in footer are not modified.
+After layout, stable low-chroma truecolors identify each metric without changing its label: slate path, sage branch, steel-blue input, sage output, lavender cache read, clay cache write, teal cache hit, ochre cost, and dusty-rose context. Context becomes amber above 70% and muted red above 90%. The active model stays purple; off through xhigh use pi's semantic thinking-level colors, and maximum effort uses the animation above. Extension statuses and components other than the built-in footer are not modified.
 
 `session_shutdown` restores the built-in footer methods and stops the animation before pi invalidates the outgoing extension context. The replacement session can therefore render its native footer during rebinding without touching a stale captured context, then install fresh decoration from its new `session_start`.
 

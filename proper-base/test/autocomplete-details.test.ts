@@ -4,9 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import properBase from "../index.ts";
-import { installAutocompleteDetails } from "../src/autocomplete-details.ts";
+import {
+	installAutocompleteDetails,
+	sortModelAutocompleteDescending,
+} from "../src/autocomplete-details.ts";
 
 test("hidden autocomplete details release their TUI overlay", async () => {
 	let description: string | undefined = "details";
@@ -59,6 +63,186 @@ test("hidden autocomplete details release their TUI overlay", async () => {
 	assert.equal(activeOverlays, 0);
 });
 
+test("inline slash autocomplete targets only the active command", async () => {
+	const requests: Array<{ line: string; cursorCol: number; force?: boolean }> = [];
+	const provider = sortModelAutocompleteDescending({
+		async getSuggestions(lines, cursorLine, cursorCol, options) {
+			requests.push({
+				line: lines[cursorLine] ?? "",
+				cursorCol,
+				force: options.force,
+			});
+			if ((lines[cursorLine] ?? "") === "/rev") {
+				return {
+					prefix: "/rev",
+					items: [{ value: "review", label: "review" }],
+				};
+			}
+			if ((lines[cursorLine] ?? "") === "/model op") {
+				return {
+					prefix: "op",
+					items: [{ value: "opus", label: "opus" }],
+				};
+			}
+			return null;
+		},
+		applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
+			const current = lines[cursorLine] ?? "";
+			const replacement = prefix.startsWith("/")
+				? `/${item.value} `
+				: item.value;
+			const next = [...lines];
+			next[cursorLine] =
+				current.slice(0, cursorCol - prefix.length) +
+				replacement +
+				current.slice(cursorCol);
+			return {
+				lines: next,
+				cursorLine,
+				cursorCol: cursorCol - prefix.length + replacement.length,
+			};
+		},
+	});
+	const options = { signal: new AbortController().signal };
+
+	const suggestions = await provider.getSuggestions(
+		["please /rev"],
+		0,
+		11,
+		options,
+	);
+	assert.equal(requests[0]?.line, "/rev");
+	assert.equal(requests[0]?.cursorCol, 4);
+	assert.equal(requests[0]?.force, false);
+	assert.equal(suggestions?.prefix, "/rev");
+	assert.deepEqual(
+		provider.applyCompletion(
+			["please /rev later"],
+			0,
+			11,
+			{ value: "review", label: "review" },
+			"/rev",
+		),
+		{
+			lines: ["please /review  later"],
+			cursorLine: 0,
+			cursorCol: 15,
+		},
+	);
+	assert.deepEqual(
+		provider.applyCompletion(
+			["first line", "then /rev now"],
+			1,
+			9,
+			{ value: "review", label: "review" },
+			"/rev",
+		),
+		{
+			lines: ["first line", "then /review  now"],
+			cursorLine: 1,
+			cursorCol: 13,
+		},
+	);
+
+	const argumentSuggestions = await provider.getSuggestions(
+		["use /model op"],
+		0,
+		13,
+		{ ...options, force: true },
+	);
+	assert.equal(requests.at(-1)?.line, "/model op");
+	assert.equal(requests.at(-1)?.cursorCol, 9);
+	assert.equal(requests.at(-1)?.force, false);
+	assert.equal(argumentSuggestions?.prefix, "op");
+	assert.deepEqual(
+		provider.applyCompletion(
+			["use /model op"],
+			0,
+			13,
+			{ value: "opus", label: "opus" },
+			"op",
+		),
+		{
+			lines: ["use /model opus"],
+			cursorLine: 0,
+			cursorCol: 15,
+		},
+	);
+
+	await provider.getSuggestions(["see https://pi.dev"], 0, 18, options);
+	assert.equal(requests.at(-1)?.line, "see https://pi.dev");
+
+	let onSessionStart: ((event: unknown, ctx: any) => Promise<void>) | undefined;
+	let installedFactory: ((tui: any, theme: any, keybindings: any) => any) | undefined;
+	let triggered = 0;
+	const editor = {
+		state: { lines: ["please "], cursorLine: 0, cursorCol: 7 },
+		onSubmit: undefined,
+		addToHistory() {},
+		handleInput(data: string) {
+			const line = this.state.lines[this.state.cursorLine] ?? "";
+			this.state.lines[this.state.cursorLine] =
+				line.slice(0, this.state.cursorCol) +
+				data +
+				line.slice(this.state.cursorCol);
+			this.state.cursorCol += data.length;
+		},
+		isShowingAutocomplete: () => false,
+		tryTriggerAutocomplete() {
+			triggered++;
+		},
+		render: () => ["editor"],
+	};
+	properBase({
+		on(event: string, handler: typeof onSessionStart) {
+			if (event === "session_start") onSessionStart = handler;
+		},
+		getCommands: () => [],
+	} as any);
+	const cwd = await mkdtemp(join(tmpdir(), "proper-base-inline-slash-"));
+	try {
+		await onSessionStart?.(
+			{},
+			{
+				cwd,
+				sessionManager: {
+					getBranch: () => [],
+					getSessionFile: () => undefined,
+				},
+				ui: {
+					addAutocompleteProvider() {},
+					getEditorComponent: () => () => editor,
+					setEditorComponent(factory: typeof installedFactory) {
+						installedFactory = factory;
+					},
+				},
+			},
+		);
+		const wrapped = installedFactory?.(
+			{ children: [editor], terminal: { rows: 24 } },
+			{
+				borderColor: (text: string) => text,
+				selectList: { description: (text: string) => text },
+			},
+			new KeybindingsManager(),
+		);
+		wrapped.handleInput("/");
+		assert.equal(triggered, 1);
+		wrapped.handleInput("r");
+		assert.equal(triggered, 2);
+
+		editor.state = { lines: ["path src"], cursorLine: 0, cursorCol: 8 };
+		wrapped.handleInput("/");
+		assert.equal(triggered, 2);
+
+		editor.state = { lines: ["first", ""], cursorLine: 1, cursorCol: 0 };
+		wrapped.handleInput("/");
+		assert.equal(triggered, 3);
+	} finally {
+		await rm(cwd, { recursive: true, force: true });
+	}
+});
+
 test("model autocomplete sorts names descending and submits immediately", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "proper-base-model-autocomplete-"));
 	let onSessionStart: ((event: unknown, ctx: any) => Promise<void>) | undefined;
@@ -97,6 +281,7 @@ test("model autocomplete sorts names descending and submits immediately", async 
 		on(event: string, handler: typeof onSessionStart) {
 			if (event === "session_start") onSessionStart = handler;
 		},
+		getCommands: () => [],
 	} as any);
 
 	try {
@@ -216,6 +401,7 @@ test("autocomplete descriptions overlay above the prompt without changing its he
 		on(event: string, handler: typeof onSessionStart) {
 			if (event === "session_start") onSessionStart = handler;
 		},
+		getCommands: () => [],
 	} as any);
 
 	let description: string | undefined = "full description text";
@@ -261,7 +447,10 @@ test("autocomplete descriptions overlay above the prompt without changing its he
 			tui,
 			{
 				borderColor: (text: string) => text,
-				selectList: { description: (text: string) => text },
+				selectList: {
+					selectedText: (text: string) => `\x1b[36m${text}\x1b[39m`,
+					description: (text: string) => `\x1b[2m${text}\x1b[22m`,
+				},
 			},
 			new KeybindingsManager(),
 		);
@@ -278,11 +467,13 @@ test("autocomplete descriptions overlay above the prompt without changing its he
 		assert.equal(
 			box
 				.slice(1, -1)
-				.map((line) => line.slice(1, -1).trim())
+				.map((line) => stripTerminalSequences(line).slice(1, -1).trim())
 				.join(" "),
 			"full description text",
 		);
-		assert.ok(box.every((line) => line.length <= 20));
+		assert.ok(box.join("\n").includes("\x1b[36mfull description\x1b[39m"));
+		assert.equal(box.join("\n").includes("\x1b[2m"), false);
+		assert.ok(box.every((line) => stripTerminalSequences(line).length <= 20));
 
 		description = undefined;
 		assert.deepEqual(wrapped.render(20), ["editor", "→ item…"]);

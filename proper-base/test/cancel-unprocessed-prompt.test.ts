@@ -30,6 +30,7 @@ test("cancelling an unprocessed prompt restores it and leaves its session branch
 		sendUserMessage(text: string) {
 			sentCommand = text;
 		},
+		getCommands: () => [],
 		appendEntry(customType: string) {
 			const entry = {
 				type: "custom",

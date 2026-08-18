@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { WRAPPED, extractPrompts, livePromptTexts, mergePrompts, resolveBase, selectSessions } from "../src/history.ts";
+import { WRAPPED, extractPrompts, isRecallable, livePromptTexts, mergePrompts, resolveBase, selectSessions } from "../src/history.ts";
 
 test("extractPrompts reads string content", () => {
 	const entries = [{ type: "message", message: { role: "user", content: "hello" } }];
@@ -191,4 +191,19 @@ test("resolveBase survives repeated wrapping cycles", () => {
 		current = Object.assign(() => "wrapped", { [WRAPPED]: resolved ?? null });
 	}
 	assert.equal(resolveBase(current), base);
+});
+
+test("UI commands are not recallable, prompt templates are", () => {
+	const commands = [
+		{ name: "file", source: "prompt" },
+		{ name: "llm-router-config", source: "extension" },
+		{ name: "skill:unslop", source: "skill" },
+	];
+	assert.equal(isRecallable("fix the login bug", commands), true);
+	assert.equal(isRecallable("/file fix the login bug", commands), true);
+	assert.equal(isRecallable("/skill:unslop", commands), true);
+	assert.equal(isRecallable("/model cliproxyapi/claude-opus-5", commands), false);
+	assert.equal(isRecallable("/new", commands), false);
+	assert.equal(isRecallable("/reload", commands), false);
+	assert.equal(isRecallable("/llm-router-config", commands), false);
 });

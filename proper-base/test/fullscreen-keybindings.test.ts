@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import properBase from "../index.ts";
 
-test("fullscreen navigation keeps plain keys in the prompt and uses ctrl-shift for transcript scrolling", async () => {
+test("base keybindings add image paste, prompt newlines, and transcript shortcuts", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "proper-base-fullscreen-"));
 	let onSessionStart: ((event: unknown, ctx: any) => Promise<void>) | undefined;
 	let installedFactory:
@@ -18,6 +18,7 @@ test("fullscreen navigation keeps plain keys in the prompt and uses ctrl-shift f
 		on(event: string, handler: typeof onSessionStart) {
 			if (event === "session_start") onSessionStart = handler;
 		},
+		getCommands: () => [],
 	} as any);
 
 	const editorState = {
@@ -35,15 +36,37 @@ test("fullscreen navigation keeps plain keys in the prompt and uses ctrl-shift f
 			col: editorState.cursorCol,
 		}),
 		handleInput(data: string) {
+			if (data === "\x1b[H") editorState.cursorCol = 0;
 			if (data === "\x1b[F") {
 				editorState.cursorCol =
 					editorState.lines[editorState.cursorLine]?.length ?? 0;
 			}
 		},
+		buildVisualLineMap() {
+			return editorState.lines.flatMap((line, logicalLine) =>
+				line.length > 6
+					? [
+							{ logicalLine, startCol: 0, length: 6 },
+							{ logicalLine, startCol: 6, length: line.length - 6 },
+						]
+					: [{ logicalLine, startCol: 0, length: line.length }],
+			);
+		},
+		findCurrentVisualLine(visualLines: any[]) {
+			return visualLines.findIndex((line, index) => {
+				if (line.logicalLine !== editorState.cursorLine) return false;
+				const offset = editorState.cursorCol - line.startCol;
+				const last = visualLines[index + 1]?.logicalLine !== line.logicalLine;
+				return offset >= 0 && (offset < line.length || (last && offset === line.length));
+			});
+		},
 		render: () => ["editor"],
 	};
 	const keybindings = new KeybindingsManager({
 		"app.model.select": "alt+l",
+		"app.clipboard.pasteImage": "alt+v",
+		"tui.input.newLine": "ctrl+n",
+		"app.message.followUp": ["alt+enter", "ctrl+alt+enter"],
 	});
 	const staleReload = keybindings.reload.bind(keybindings);
 	keybindings.reload = () => {
@@ -111,6 +134,33 @@ test("fullscreen navigation keeps plain keys in the prompt and uses ctrl-shift f
 		assert.deepEqual(keybindings.getKeys("tui.altScreen.bottom"), [
 			"ctrl+shift+end",
 		]);
+		assert.deepEqual(keybindings.getKeys("app.clipboard.pasteImage"), [
+			"alt+v",
+			"ctrl+v",
+			"ctrl+shift+v",
+		]);
+		assert.equal(
+			keybindings.matches("\x16", "app.clipboard.pasteImage"),
+			true,
+		);
+		assert.equal(
+			keybindings.matches("\x1b[118;6u", "app.clipboard.pasteImage"),
+			true,
+		);
+		assert.deepEqual(keybindings.getKeys("tui.input.newLine"), [
+			"ctrl+n",
+			"shift+enter",
+			"alt+enter",
+		]);
+		assert.deepEqual(keybindings.getKeys("app.message.followUp"), [
+			"ctrl+alt+enter",
+		]);
+		assert.equal(keybindings.matches("\x1b[13;2u", "tui.input.newLine"), true);
+		assert.equal(keybindings.matches("\x1b[13;3u", "tui.input.newLine"), true);
+		assert.equal(
+			keybindings.matches("\x1b[13;3u", "app.message.followUp"),
+			false,
+		);
 		assert.equal(keybindings.matches("\x1b[5~", "tui.altScreen.pageUp"), false);
 		assert.equal(keybindings.matches("\x1b[5$", "tui.altScreen.pageUp"), false);
 		assert.equal(keybindings.matches("\x1b[5;6~", "tui.altScreen.pageUp"), true);
@@ -135,11 +185,35 @@ test("fullscreen navigation keeps plain keys in the prompt and uses ctrl-shift f
 		editor.handleInput("\x1b[F");
 		assert.deepEqual(editor.getCursor(), { line: 2, col: 5 });
 
+		editorState.lines = ["abcdefghij", "second"];
+		editorState.cursorLine = 0;
+		editorState.cursorCol = 8;
+		editor.handleInput("\x1b[H");
+		assert.deepEqual(editor.getCursor(), { line: 0, col: 6 });
+		editor.handleInput("\x1b[H");
+		assert.deepEqual(editor.getCursor(), { line: 0, col: 0 });
+		editorState.cursorLine = 1;
+		editorState.cursorCol = 3;
+		editor.handleInput("\x1b[H");
+		assert.deepEqual(editor.getCursor(), { line: 1, col: 0 });
+		editor.handleInput("\x1b[H");
+		assert.deepEqual(editor.getCursor(), { line: 0, col: 0 });
+
 		keybindings.setUserBindings({ "app.model.select": "ctrl+l" });
 		keybindings.reload();
 		assert.deepEqual(keybindings.getKeys("tui.altScreen.pageUp"), [
 			"ctrl+shift+pageUp",
 		]);
+		assert.deepEqual(keybindings.getKeys("app.clipboard.pasteImage"), [
+			"ctrl+v",
+			"ctrl+shift+v",
+		]);
+		assert.deepEqual(keybindings.getKeys("tui.input.newLine"), [
+			"shift+enter",
+			"ctrl+j",
+			"alt+enter",
+		]);
+		assert.deepEqual(keybindings.getKeys("app.message.followUp"), []);
 		assert.deepEqual(keybindings.getKeys("app.model.select"), ["ctrl+l"]);
 
 		const firstInstall = keybindings.getUserBindings();

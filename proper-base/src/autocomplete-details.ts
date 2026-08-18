@@ -15,12 +15,27 @@ const MODEL_SUBMIT_INSTALLED = Symbol.for(
 	"pi-proper-base.model-autocomplete-submit",
 );
 const ACTIVE_OVERLAY = Symbol.for("pi-proper-base.autocomplete-overlay");
+const INLINE_SLASH_INSTALLED = Symbol.for(
+	"pi-proper-base.inline-slash-autocomplete",
+);
 
 type AutocompleteEditor = Component & {
 	autocompleteList?: {
 		getSelectedItem(): { description?: string } | null;
 	};
 	[INSTALLED]?: boolean;
+};
+
+type InlineSlashEditor = Component & {
+	state?: {
+		lines: string[];
+		cursorLine: number;
+		cursorCol: number;
+	};
+	handleInput?(data: string): void;
+	isShowingAutocomplete?(): boolean;
+	tryTriggerAutocomplete?(): void;
+	[INLINE_SLASH_INSTALLED]?: boolean;
 };
 
 type ModelAutocompleteEditor = Component & {
@@ -39,11 +54,60 @@ type EditorKeybindings = {
 
 type DetailTheme = {
 	borderColor(text: string): string;
-	selectList: { description(text: string): string };
+	selectList: {
+		selectedText?(text: string): string;
+		description(text: string): string;
+	};
 };
 
 type OverlayTui = TUI & { [ACTIVE_OVERLAY]?: OverlayHandle };
 type ComponentWithChildren = Component & { children?: Component[] };
+
+type InlineSlashContext = {
+	prefix: string;
+	start: number;
+};
+
+function inlineSlashContext(
+	lines: string[],
+	cursorLine: number,
+	cursorCol: number,
+): InlineSlashContext | undefined {
+	const beforeCursor = (lines[cursorLine] ?? "").slice(0, cursorCol);
+	const match = [...beforeCursor.matchAll(/(?:^|\s)\//g)].at(-1);
+	if (!match) return undefined;
+	const start = (match.index ?? 0) + match[0].length - 1;
+	if (start === 0 && cursorLine === 0) return undefined;
+	return { prefix: beforeCursor.slice(start), start };
+}
+
+export function installInlineSlashAutocomplete(editor: Component): void {
+	const target = editor as InlineSlashEditor;
+	if (
+		target[INLINE_SLASH_INSTALLED] ||
+		!target.handleInput ||
+		!target.state ||
+		!target.tryTriggerAutocomplete
+	) {
+		return;
+	}
+
+	const handleInput = target.handleInput.bind(target);
+	target.handleInput = (data: string) => {
+		handleInput(data);
+		if (
+			target.isShowingAutocomplete?.() ||
+			!/^[/a-zA-Z0-9._:-]$/.test(data)
+		) {
+			return;
+		}
+		const state = target.state;
+		if (inlineSlashContext(state.lines, state.cursorLine, state.cursorCol)) {
+			target.tryTriggerAutocomplete?.();
+		}
+	};
+	target[INLINE_SLASH_INSTALLED] = true;
+}
 
 function createAutocompleteDetailBox(theme: DetailTheme) {
 	let description: string | undefined;
@@ -77,7 +141,9 @@ function createAutocompleteDetailBox(theme: DetailTheme) {
 					border(`┌${"─".repeat(width - 2)}┐`),
 					...lines.map(
 						(line) =>
-							`${border("│")} ${theme.selectList.description(line)}${" ".repeat(
+							`${border("│")} ${(
+								theme.selectList.selectedText ?? theme.selectList.description
+							)(line)}${" ".repeat(
 								Math.max(0, textWidth - visibleWidth(line)),
 							)} ${border("│")}`,
 					),
@@ -95,14 +161,18 @@ export function sortModelAutocompleteDescending(
 	return {
 		triggerCharacters: current.triggerCharacters,
 		async getSuggestions(lines, cursorLine, cursorCol, options) {
+			const inline = inlineSlashContext(lines, cursorLine, cursorCol);
+			const requestLines = inline ? [...lines] : lines;
+			if (inline) requestLines[cursorLine] = inline.prefix;
 			const suggestions = await current.getSuggestions(
-				lines,
+				requestLines,
 				cursorLine,
-				cursorCol,
-				options,
+				inline ? inline.prefix.length : cursorCol,
+				inline ? { ...options, force: false } : options,
 			);
 			const line = lines[cursorLine] ?? "";
-			if (!suggestions || !line.slice(0, cursorCol).startsWith("/model ")) {
+			const activeLine = inline?.prefix ?? line.slice(0, cursorCol);
+			if (!suggestions || !activeLine.startsWith("/model ")) {
 				return suggestions;
 			}
 
@@ -131,13 +201,35 @@ export function sortModelAutocompleteDescending(
 			};
 		},
 		applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
-			return current.applyCompletion(
-				lines,
-				cursorLine,
-				cursorCol,
+			const inline = inlineSlashContext(lines, cursorLine, cursorCol);
+			if (!inline) {
+				return current.applyCompletion(
+					lines,
+					cursorLine,
+					cursorCol,
+					item,
+					prefix,
+				);
+			}
+			const completed = current.applyCompletion(
+				[inline.prefix],
+				0,
+				inline.prefix.length,
 				item,
 				prefix,
 			);
+			const replacement = completed.lines[0] ?? inline.prefix;
+			const next = [...lines];
+			const currentLine = lines[cursorLine] ?? "";
+			next[cursorLine] =
+				currentLine.slice(0, inline.start) +
+				replacement +
+				currentLine.slice(cursorCol);
+			return {
+				lines: next,
+				cursorLine,
+				cursorCol: inline.start + completed.cursorCol,
+			};
 		},
 		shouldTriggerFileCompletion(lines, cursorLine, cursorCol) {
 			return (

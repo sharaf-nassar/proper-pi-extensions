@@ -21,13 +21,13 @@ import {
 
 import {
 	installAutocompleteDetails,
+	installInlineSlashAutocomplete,
 	installModelAutocompleteSubmit,
 	sortModelAutocompleteDescending,
 } from "./src/autocomplete-details.ts";
 import { installEditorNavigation } from "./src/editor-navigation.ts";
 import { installFooterColors } from "./src/footer-colors.ts";
 import {
-	enableScribeImageCapability,
 	installImagePreview,
 	type ImagePreviewController,
 } from "./src/image-preview.ts";
@@ -35,6 +35,7 @@ import {
 	WRAPPED,
 	type Prompt,
 	extractPrompts,
+	isRecallable,
 	livePromptTexts,
 	mergePrompts,
 	resolveBase,
@@ -79,12 +80,32 @@ type PatchedKeybindings = EditorKeybindings & {
 	[LEGACY_FULLSCREEN_KEYBINDINGS]?: true | KeybindingController;
 };
 
-function installFullscreenKeybindings(keybindings: EditorKeybindings): void {
+function installKeybindings(keybindings: EditorKeybindings): void {
 	const patched = keybindings as PatchedKeybindings;
 	const apply = () => {
+		const imagePasteKeys = [
+			...new Set([
+				...keybindings.getKeys("app.clipboard.pasteImage"),
+				"ctrl+v" as const,
+				"ctrl+shift+v" as const,
+			]),
+		];
+		const newLineKeys = [
+			...new Set([
+				...keybindings.getKeys("tui.input.newLine"),
+				"shift+enter" as const,
+				"alt+enter" as const,
+			]),
+		];
+		const followUpKeys = keybindings
+			.getKeys("app.message.followUp")
+			.filter((key) => key !== "alt+enter");
 		keybindings.setUserBindings({
 			...keybindings.getUserBindings(),
 			...FULLSCREEN_KEYS,
+			"app.clipboard.pasteImage": imagePasteKeys,
+			"tui.input.newLine": newLineKeys,
+			"app.message.followUp": followUpKeys,
 		});
 	};
 	const existing =
@@ -129,8 +150,6 @@ type RestoreRequest = { entryId: string };
 type QuestionnaireDetails = { cancelled?: boolean; error?: string };
 
 export default function (pi: ExtensionAPI) {
-	enableScribeImageCapability();
-
 	let removeFooterColors: (() => void) | undefined;
 	let imagePreview: ImagePreviewController | undefined;
 	let removeTerminalInput: (() => void) | undefined;
@@ -298,9 +317,13 @@ export default function (pi: ExtensionAPI) {
 		const store = storePath(getAgentDir(), ctx.cwd);
 		compactIfNeeded(store);
 
-		const seeded = await loadHistory(ctx.cwd, store, ctx.sessionManager);
+		// Stores written before command filtering still hold UI commands.
+		const commands = pi.getCommands();
+		const seeded = (
+			await loadHistory(ctx.cwd, store, ctx.sessionManager)
+		).filter((text) => isRecallable(text, commands));
 		const record = (text: string, sourceText: string) => {
-			appendPrompt(store, text);
+			if (isRecallable(text, pi.getCommands())) appendPrompt(store, text);
 			if (
 				!sourceText.trimStart().startsWith("/") &&
 				!sourceText.trimStart().startsWith("!")
@@ -313,7 +336,7 @@ export default function (pi: ExtensionAPI) {
 		// with extensions that provide their own editor.
 		const base = resolveBase(ctx.ui.getEditorComponent());
 		const factory: TaggedFactory = (tui, theme, keybindings) => {
-			installFullscreenKeybindings(keybindings);
+			installKeybindings(keybindings);
 			const editor =
 				base?.(tui, theme, keybindings) ??
 				new CustomEditor(tui, theme, keybindings);
@@ -322,6 +345,7 @@ export default function (pi: ExtensionAPI) {
 			imagePreview?.dispose();
 			imagePreview = installImagePreview(editor, tui, ctx);
 			installEditorNavigation(editor, keybindings);
+			installInlineSlashAutocomplete(editor);
 			installRecorder(
 				editor,
 				record,
