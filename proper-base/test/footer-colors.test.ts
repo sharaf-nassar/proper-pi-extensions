@@ -7,10 +7,10 @@ import { test } from "node:test";
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
 
 import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
-import properCustoms from "../index.ts";
+import properBase from "../index.ts";
 
-test("footer colors preserve text and release the context on shutdown", async () => {
-	const cwd = await mkdtemp(join(tmpdir(), "proper-customs-footer-"));
+test("footer layout, colors, and shutdown restoration stay composed", async () => {
+	const cwd = await mkdtemp(join(tmpdir(), "proper-base-footer-"));
 	type SessionHandler = (
 		event: unknown,
 		ctx: any,
@@ -23,7 +23,7 @@ test("footer colors preserve text and release the context on shutdown", async ()
 	let effort = "low";
 	let stale = false;
 
-	properCustoms({
+	properBase({
 		on(event: string, handler: SessionHandler) {
 			if (event === "session_start") onSessionStart = handler;
 			if (event === "session_shutdown") onSessionShutdown = handler;
@@ -31,9 +31,12 @@ test("footer colors preserve text and release the context on shutdown", async ()
 	} as any);
 
 	class FooterComponent {
-		render() {
+		render(_width?: number) {
 			const label = effort === "off" ? "thinking off" : effort;
-			return ["cwd", `stats  gpt-5.6-sol • ${label}`];
+			return [
+				"~/work/scribe (main)",
+				`↑10M ↓261K R114M CH99.5% $115.997 55.5%/1.0M (auto)  gpt-5.6-sol • ${label}`,
+			];
 		}
 		invalidate() {}
 		dispose() {}
@@ -107,8 +110,18 @@ test("footer colors preserve text and release the context on shutdown", async ()
 			new KeybindingsManager(),
 		);
 
-		const low = footer.render()[1]!;
-		assert.equal(stripTerminalSequences(low), "stats  gpt-5.6-sol • low");
+		const lowLines = footer.render(100).map(stripTerminalSequences);
+		assert.ok(lowLines[0]?.startsWith("~/work/scribe (main)"));
+		assert.ok(
+			lowLines[0]?.endsWith("↑10M ↓261K R114M CH99.5% $115.997"),
+		);
+		assert.equal(lowLines[0]?.length, 100);
+		assert.ok(lowLines[1]?.startsWith("55.5%/1.0M (auto)"));
+		assert.ok(lowLines[1]?.endsWith("gpt-5.6-sol • low"));
+		assert.equal(lowLines[1]?.length, 100);
+		assert.equal(lowLines[1]?.includes("$115.997"), false);
+
+		const low = footer.render(100)[1]!;
 		assert.ok(low.includes("\x1b[38;2;192;132;252mgpt-5.6-sol\x1b[39m"));
 		assert.ok(low.includes("\x1b[38;2;95;135;175mlow\x1b[39m"));
 
@@ -123,24 +136,24 @@ test("footer colors preserve text and release the context on shutdown", async ()
 			const label = level === "off" ? "thinking off" : level;
 			const rgb = effortColors[token];
 			assert.ok(rgb);
-			const line = footer.render()[1];
+			const line = footer.render(100)[1];
 			assert.ok(line?.includes(color(...rgb, label)));
 		}
 
 		effort = "max";
-		const firstMax = footer.render()[1];
+		const firstMax = footer.render(100)[1];
 		assert.ok(firstMax);
 		await new Promise((resolve) => setTimeout(resolve, 180));
-		assert.equal(stripTerminalSequences(firstMax), "stats  gpt-5.6-sol • max");
+		assert.ok(stripTerminalSequences(firstMax).endsWith("gpt-5.6-sol • max"));
 		assert.ok(renderRequests > 0);
 		assert.ok((firstMax.match(/\x1b\[38;2;/g) ?? []).length >= 4);
 
 		effort = "ultra";
 		const requestsBeforeUltra = renderRequests;
-		const ultra = footer.render()[1];
+		const ultra = footer.render(100)[1];
 		assert.ok(ultra);
 		await new Promise((resolve) => setTimeout(resolve, 180));
-		assert.equal(stripTerminalSequences(ultra), "stats  gpt-5.6-sol • ultra");
+		assert.ok(stripTerminalSequences(ultra).endsWith("gpt-5.6-sol • ultra"));
 		assert.ok(renderRequests > requestsBeforeUltra);
 		assert.ok((ultra.match(/\x1b\[38;2;/g) ?? []).length >= 6);
 

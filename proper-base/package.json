@@ -1,12 +1,13 @@
 {
-  "name": "pi-proper-customs",
+  "name": "pi-proper-base",
   "version": "0.2.0",
-  "description": "Custom pi behavior for history, autocomplete details, fullscreen scrolling, and footer styling",
+  "description": "Baseline Pi behavior for history, prompt editing, fullscreen navigation, and footer styling",
   "keywords": [
     "pi-package",
     "pi",
     "pi-extension",
     "pi-coding-agent",
+    "base",
     "customization",
     "history",
     "prompt-history",

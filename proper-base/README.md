@@ -1,6 +1,6 @@
-# proper-customs
+# proper-base
 
-Custom behavior for [pi](https://pi.dev): cross-session prompt history, richer autocomplete descriptions, fullscreen-friendly scrolling, and a color-coded footer.
+Baseline behavior for [pi](https://pi.dev): cross-session prompt history, richer autocomplete, editable cancellation, fullscreen navigation, clipboard previews, and a compact color-coded footer.
 
 pi's Up/Down history covers the current session only. Start a new session in a project you have worked in for weeks and the editor history is empty. This extension seeds it with the prompts you typed in the other sessions recorded for the same working directory.
 
@@ -9,32 +9,56 @@ pi's Up/Down history covers the current session only. Start a new session in a p
 From this repository checkout:
 
 ```bash
-pi install /path/to/proper-pi-extensions/proper-customs
+pi install /path/to/proper-pi-extensions/proper-base
 ```
 
-The former history-only package remains available as `npm:pi-proper-history`. Existing recorded history remains compatible.
+This package was renamed from the local `proper-customs` directory and the unpublished `pi-proper-customs` package identity. Update existing local installs to the `proper-base` path and keep only one registration. The former history-only package remains available as `npm:pi-proper-history`; existing `proper-history` recorded data remains compatible.
 
 ## Behaviour
+
+### Prompt navigation
+
+End uses two-stage navigation in multiline prompts. The first press moves to the end of the current logical line; pressing End again from there moves to the end of the entire prompt. End at the final prompt position is a no-op.
 
 ### Pinned scrolling
 
 Pi's native `fullscreen` TUI keeps queued messages, status, widgets, the prompt, and the footer pinned to the bottom while the transcript scrolls above them. Enable **TUI mode → fullscreen** in `/settings`, or set `"tuiMode": "fullscreen"` in `~/.pi/agent/settings.json`.
 
-proper-customs does not duplicate Pi's transcript renderer. It removes inactive autocomplete detail overlays from Pi's overlay stack so switching between regular and fullscreen modes remains available.
+proper-base does not duplicate Pi's transcript renderer. It removes inactive autocomplete detail overlays from Pi's overlay stack so switching between regular and fullscreen modes remains available.
 
-In fullscreen mode, Home, End, PageUp, and PageDown move within the prompt editor. Hold Shift with those keys to move the transcript above it: Shift+Home/End jump to the top/bottom, and Shift+PageUp/PageDown scroll by a page. Unrelated custom keybindings are preserved.
+In fullscreen mode, Home, End, PageUp, and PageDown move within the prompt editor. Hold Ctrl+Shift with those keys to move the transcript above it: Ctrl+Shift+Home/End jump to the top/bottom, and Ctrl+Shift+PageUp/PageDown scroll by a page. Unrelated custom keybindings are preserved. Mouse selection, wheel scrolling, scrollbar dragging, and link clicks remain Pi's native behavior.
 
 ### Footer colors
 
-The built-in footer shows the active model in purple. Thinking effort uses pi's semantic color ramp: muted for off and minimal, blue through cyan for low and medium, then lavender and bright purple for high and xhigh. `max` and the router-provided `ultra` level become rainbow text with a slow four-second highlight sweep.
+The built-in footer moves cumulative input/output/cache statistics through the dollar cost onto the right side of the top path row. Context usage stays left on the second row, with provider, model, and thinking level kept right-aligned.
+
+The active model is purple. Thinking effort uses pi's semantic color ramp: muted for off and minimal, blue through cyan for low and medium, then lavender and bright purple for high and xhigh. `max` and the router-provided `ultra` level become rainbow text with a slow four-second highlight sweep.
 
 The animation requests a lightweight redraw every 120 ms only while `max` or `ultra` is visible, and stops when effort changes or the footer is unmounted. Footer text, spacing, token statistics, provider labels, and truncation remain pi's own. Custom replacement footers are left unchanged.
+
+### Early prompt cancellation
+
+Pressing Esc before an assistant response starts restores the submitted prompt to the editor immediately and removes that turn from the active session branch. The next prompt therefore does not inherit the cancelled text. Once assistant processing has started, normal Pi cancellation remains unchanged.
+
+Pi sessions are append-only trees, so the cancelled entries remain only as an abandoned branch in the JSONL file; they disappear from the active transcript and model context. Cancelling during the initial llm-router judge also restores the discarded prompt for editing.
+
+### Questionnaire cancellation
+
+Pressing Esc on an [`ask_user_question`](https://www.npmjs.com/package/@juicesharp/rpiv-ask-user-question) questionnaire normally returns "User declined to answer questions" to the model, which then spends a turn acknowledging it. proper-base aborts the run instead, exactly as Esc does during streaming, so you get the prompt back and can type.
+
+Questionnaires that fail before you see them — no UI, an RPC host that cannot render the dialog, rejected parameters — still reach the model, so it can fall back to asking in plain text. This does nothing if the tool is not installed.
 
 ### Autocomplete descriptions
 
 When editor autocomplete is open, the selected item's description appears in a bordered, non-capturing overlay immediately above the prompt. The box expands upward over terminal history, so changing selections never moves the prompt, autocomplete list, or footer. Text wraps to the terminal width and uses all rows available above the prompt before adding an ellipsis.
 
-This covers skills, slash commands, and other editor autocomplete providers that supply descriptions. Built-in modal selectors such as model and session pickers are outside the editor extension API and remain unchanged.
+This covers skills, slash commands, and other editor autocomplete providers that supply descriptions. `/model ` results always sort displayed model IDs descending with numeric-aware comparison. Typed queries first retain only names matching every case-insensitive search term, then sort that filtered subset descending. If strict matching finds nothing, Pi's fuzzy candidates remain available but are still descending. Pressing Enter or Tab on a highlighted model accepts it and switches immediately. Built-in modal selectors such as model and session pickers are outside the editor extension API and remain unchanged.
+
+### Clipboard image previews
+
+Pasting a clipboard image inserts a short `[image N]` marker instead of its `/tmp/pi-clipboard-…` path and shows a small non-capturing overlay above the prompt. Multiple pasted images stack vertically. The overlay yields to autocomplete descriptions and returns when autocomplete closes. Scribe is explicitly enabled for Kitty graphics because pi-tui's conservative terminal detection otherwise falls back to text.
+
+Deleting any single character inside an `[image N]` marker removes the entire marker and preview. On submit, intact markers expand back to real paths, so Pi's attachment handling and prompt history keep their existing behavior. Other unsupported terminals show Pi's compact image fallback label.
 
 ### Prompt history
 

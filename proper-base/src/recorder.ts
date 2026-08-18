@@ -26,14 +26,19 @@ const INSTALLED = Symbol.for("pi-proper-history.recorder");
  * already has a recorder, which keeps repeated `session_start` passes from
  * stacking them.
  */
-export function installRecorder(editor: SubmittableEditor, record: (text: string) => void): boolean {
+export function installRecorder(
+	editor: SubmittableEditor,
+	record: (text: string, sourceText: string) => void,
+	prepare: (text: string) => string = (text) => text,
+): boolean {
 	const marked = editor as SubmittableEditor & { [INSTALLED]?: boolean };
 	if (marked[INSTALLED]) return false;
 
 	let handler = editor.onSubmit;
 	const wrap = (next: ((text: string) => void) | undefined) => (text: string) => {
-		record(text);
-		next?.(text);
+		const prepared = prepare(text);
+		record(prepared, text);
+		next?.(prepared);
 	};
 	handler = handler ? wrap(handler) : undefined;
 

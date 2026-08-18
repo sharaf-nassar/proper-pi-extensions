@@ -1,11 +1,14 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
-	type TUI,
+	sliceByColumn,
 	stripTerminalSequences,
+	truncateToWidth,
+	type TUI,
+	visibleWidth,
 } from "@earendil-works/pi-tui";
 
-const INSTALLED = Symbol.for("pi-proper-customs.footer-colors");
+const INSTALLED = Symbol.for("pi-proper-base.footer-colors");
 const PURPLE = [192, 132, 252] as const;
 const RAINBOW = [
 	[255, 95, 175],
@@ -16,6 +19,8 @@ const RAINBOW = [
 ] as const;
 const ANIMATION_INTERVAL_MS = 120;
 const HIGHLIGHT_CYCLE_MS = 4000;
+const USAGE_THROUGH_COST =
+	/^((?:(?:↑|↓|R|W|CH)\S+\s+)*\$\S+(?:\s+\(sub\))?)(?:\s+|$)/;
 
 type FooterTheme = ExtensionContext["ui"]["theme"];
 type FooterState = {
@@ -90,11 +95,12 @@ export function installFooterColors(
 		const level = state.ctx.thinkingLevel as FooterThinkingLevel;
 		if (level === "max" || level === "ultra") startAnimation();
 		else stopAnimation();
-		return colorFooter(render.call(footer, width), {
+		const theme = state.ctx.ui.theme;
+		return colorFooter(layoutFooter(render.call(footer, width), width, theme), {
 			level,
 			model: state.ctx.model?.id,
 			now: Date.now(),
-			theme: state.ctx.ui.theme,
+			theme,
 		});
 	};
 	footer.dispose = () => {
@@ -103,6 +109,75 @@ export function installFooterColors(
 	};
 	footer[INSTALLED] = controller;
 	return controller.uninstall;
+}
+
+function layoutFooter(
+	lines: string[],
+	width: number,
+	theme: FooterTheme,
+): string[] {
+	if (lines.length < 2 || !Number.isFinite(width) || width < 20) return lines;
+
+	const statsLine = lines[1];
+	if (!statsLine) return lines;
+	const match = stripTerminalSequences(statsLine).match(USAGE_THROUGH_COST);
+	const usage = match?.[1];
+	if (!match || !usage) return lines;
+
+	const usageWidth = visibleWidth(usage);
+	const availablePathWidth = width - usageWidth - 1;
+	if (availablePathWidth < 8) return lines;
+
+	const result = [...lines];
+	const path = truncateToWidth(
+		result[0] ?? "",
+		availablePathWidth,
+		theme.fg("dim", "..."),
+	);
+	const topPadding = " ".repeat(
+		Math.max(1, width - visibleWidth(path) - usageWidth),
+	);
+	result[0] = `${path}${topPadding}${theme.fg("dim", usage)}`;
+
+	const consumed = visibleWidth(match[0]);
+	const remainder = sliceByColumn(
+		statsLine,
+		consumed,
+		Math.max(0, visibleWidth(statsLine) - consumed),
+		true,
+	);
+	result[1] = realignFooterRemainder(remainder, width, theme);
+	return result;
+}
+
+function realignFooterRemainder(
+	line: string,
+	width: number,
+	theme: FooterTheme,
+): string {
+	const plain = stripTerminalSequences(line);
+	const gaps = [...plain.matchAll(/ {2,}/g)];
+	const gap = gaps.at(-1);
+	if (!gap || gap.index === undefined) {
+		return truncateToWidth(line, width, theme.fg("dim", "..."));
+	}
+
+	const rightStart = gap.index + gap[0].length;
+	const left = sliceByColumn(line, 0, gap.index, true);
+	const right = sliceByColumn(
+		line,
+		rightStart,
+		Math.max(0, visibleWidth(line) - rightStart),
+		true,
+	);
+	const padding = " ".repeat(
+		Math.max(2, width - visibleWidth(left) - visibleWidth(right)),
+	);
+	return truncateToWidth(
+		`${left}${padding}${right}`,
+		width,
+		theme.fg("dim", "..."),
+	);
 }
 
 function colorFooter(

@@ -1,4 +1,5 @@
 import {
+	type AutocompleteProvider,
 	type Component,
 	type OverlayHandle,
 	type OverlayMargin,
@@ -9,14 +10,31 @@ import {
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 
-const INSTALLED = Symbol.for("pi-proper-customs.autocomplete-details");
-const ACTIVE_OVERLAY = Symbol.for("pi-proper-customs.autocomplete-overlay");
+const INSTALLED = Symbol.for("pi-proper-base.autocomplete-details");
+const MODEL_SUBMIT_INSTALLED = Symbol.for(
+	"pi-proper-base.model-autocomplete-submit",
+);
+const ACTIVE_OVERLAY = Symbol.for("pi-proper-base.autocomplete-overlay");
 
 type AutocompleteEditor = Component & {
 	autocompleteList?: {
 		getSelectedItem(): { description?: string } | null;
 	};
 	[INSTALLED]?: boolean;
+};
+
+type ModelAutocompleteEditor = Component & {
+	autocompleteList?: {
+		getSelectedItem(): { value?: string } | null;
+	};
+	getText?(): string;
+	handleInput?(data: string): void;
+	submitValue?(): void;
+	[MODEL_SUBMIT_INSTALLED]?: boolean;
+};
+
+type EditorKeybindings = {
+	matches(data: string, action: string): boolean;
 };
 
 type DetailTheme = {
@@ -69,6 +87,109 @@ function createAutocompleteDetailBox(theme: DetailTheme) {
 			invalidate(): void {},
 		} satisfies Component,
 	};
+}
+
+export function sortModelAutocompleteDescending(
+	current: AutocompleteProvider,
+): AutocompleteProvider {
+	return {
+		triggerCharacters: current.triggerCharacters,
+		async getSuggestions(lines, cursorLine, cursorCol, options) {
+			const suggestions = await current.getSuggestions(
+				lines,
+				cursorLine,
+				cursorCol,
+				options,
+			);
+			const line = lines[cursorLine] ?? "";
+			if (!suggestions || !line.slice(0, cursorCol).startsWith("/model ")) {
+				return suggestions;
+			}
+
+			const terms = suggestions.prefix
+				.toLowerCase()
+				.split(/\s+/)
+				.filter(Boolean);
+			const strictMatches = suggestions.items.filter((item) => {
+				const searchable = `${item.label} ${item.value} ${item.description ?? ""}`.toLowerCase();
+				return terms.every((term) => searchable.includes(term));
+			});
+			const items =
+				terms.length > 0 && strictMatches.length > 0
+					? strictMatches
+					: suggestions.items;
+
+			return {
+				...suggestions,
+				items: [...items].sort(
+					(a, b) =>
+						b.label.localeCompare(a.label, "en", {
+							numeric: true,
+							sensitivity: "base",
+						}) || b.value.localeCompare(a.value),
+				),
+			};
+		},
+		applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
+			return current.applyCompletion(
+				lines,
+				cursorLine,
+				cursorCol,
+				item,
+				prefix,
+			);
+		},
+		shouldTriggerFileCompletion(lines, cursorLine, cursorCol) {
+			return (
+				current.shouldTriggerFileCompletion?.(
+					lines,
+					cursorLine,
+					cursorCol,
+				) ?? true
+			);
+		},
+	};
+}
+
+export function installModelAutocompleteSubmit(
+	editor: Component,
+	keybindings: EditorKeybindings,
+): void {
+	const target = editor as ModelAutocompleteEditor;
+	if (
+		target[MODEL_SUBMIT_INSTALLED] ||
+		!target.handleInput ||
+		!target.getText
+	) {
+		return;
+	}
+
+	const handleInput = target.handleInput.bind(target);
+	target.handleInput = (data: string) => {
+		const selected = target.autocompleteList?.getSelectedItem();
+		const selectedValue = selected?.value;
+		const confirm = keybindings.matches(data, "tui.select.confirm");
+		const tab = keybindings.matches(data, "tui.input.tab");
+		const shouldSubmit =
+			(confirm || tab) &&
+			typeof selectedValue === "string" &&
+			/^\/model [^\n]*$/.test(target.getText?.() ?? "");
+
+		handleInput(data);
+		if (
+			shouldSubmit &&
+			target.autocompleteList === undefined &&
+			target.getText?.() === `/model ${selectedValue}`
+		) {
+			if (tab) {
+				if (target.submitValue) target.submitValue();
+				else handleInput("\r");
+			} else {
+				handleInput(data);
+			}
+		}
+	};
+	target[MODEL_SUBMIT_INSTALLED] = true;
 }
 
 export function installAutocompleteDetails(
@@ -138,7 +259,7 @@ export function installAutocompleteDetails(
 	target[INSTALLED] = true;
 }
 
-function isMounted(tui: TUI, target: Component): boolean {
+export function isMounted(tui: TUI, target: Component): boolean {
 	return roots(tui).some((root) => contains(root, target));
 }
 
@@ -147,7 +268,7 @@ function contains(root: Component, target: Component): boolean {
 	return childrenOf(root).some((child) => contains(child, target));
 }
 
-function rowsBelow(tui: TUI, target: Component, width: number): number {
+export function rowsBelow(tui: TUI, target: Component, width: number): number {
 	const mountedRoots = roots(tui);
 	for (let index = 0; index < mountedRoots.length; index++) {
 		const root = mountedRoots[index];
