@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-
-import { stream as streamOpenAIResponses } from "../node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js";
 import * as router from "../llm-router.ts";
+import { stream as streamOpenAIResponses } from "../node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js";
 
 const { THINKING_LEVELS } = router;
-const installUltraThemePrototype = (router as any)
-	.installUltraThemePrototype as (constructor: any) => boolean;
-const installUltraThinkingPrototype = (router as any)
-	.installUltraThinkingPrototype as (constructor: any) => boolean;
-const thinkingLevelsForModel = (router as any).thinkingLevelsForModel as (
-	model: any,
-) => string[];
+type RouterInternals = {
+	installUltraThemePrototype(type: object): boolean;
+	installUltraThinkingPrototype(type: object): boolean;
+	thinkingLevelsForModel(model: unknown): string[];
+};
+const internals = router as unknown as RouterInternals;
+const { installUltraThemePrototype, installUltraThinkingPrototype } = internals;
+const { thinkingLevelsForModel } = internals;
 
 class FakeSession {
 	model?: { thinkingLevelMap?: Record<string, string | null> };

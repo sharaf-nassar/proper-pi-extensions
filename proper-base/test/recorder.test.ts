@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 
 import { installRecorder } from "../src/recorder.ts";
 
@@ -110,7 +110,7 @@ test("clearing onSubmit does not resurrect a stale handler", () => {
 	const seen: string[] = [];
 	installRecorder(editor, (t) => seen.push(t));
 	editor.onSubmit = () => {};
-	editor.onSubmit = undefined;
+	delete editor.onSubmit;
 	editor.submit("dropped");
 	assert.deepEqual(seen, []);
 });

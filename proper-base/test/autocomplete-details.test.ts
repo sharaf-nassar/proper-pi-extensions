@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
-import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import properBase from "../index.ts";
+import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import {
 	installAutocompleteDetails,
 	sortModelAutocompleteDescending,
@@ -64,13 +64,14 @@ test("hidden autocomplete details release their TUI overlay", async () => {
 });
 
 test("inline slash autocomplete targets only the active command", async () => {
-	const requests: Array<{ line: string; cursorCol: number; force?: boolean }> = [];
+	const requests: Array<{ line: string; cursorCol: number; force?: boolean }> =
+		[];
 	const provider = sortModelAutocompleteDescending({
 		async getSuggestions(lines, cursorLine, cursorCol, options) {
 			requests.push({
 				line: lines[cursorLine] ?? "",
 				cursorCol,
-				force: options.force,
+				...(options.force === undefined ? {} : { force: options.force }),
 			});
 			if ((lines[cursorLine] ?? "") === "/rev") {
 				return {
@@ -173,7 +174,9 @@ test("inline slash autocomplete targets only the active command", async () => {
 	assert.equal(requests.at(-1)?.line, "see https://pi.dev");
 
 	let onSessionStart: ((event: unknown, ctx: any) => Promise<void>) | undefined;
-	let installedFactory: ((tui: any, theme: any, keybindings: any) => any) | undefined;
+	let installedFactory:
+		| ((tui: any, theme: any, keybindings: any) => any)
+		| undefined;
 	let triggered = 0;
 	const editor = {
 		state: { lines: ["please "], cursorLine: 0, cursorCol: 7 },

@@ -18,7 +18,8 @@ and dev dependencies provide pi and Node diagnostic types.
 
 ```bash
 npm test
-npx tsc
+npm run typecheck
+npm run test:coverage
 ```
 
 ## Architecture
@@ -31,6 +32,7 @@ live in `src/autocomplete-details.ts`, two-stage End handling in
 clipboard markers and path overlays in `src/image-preview.ts`, history merging
 in `src/history.ts`, submit interception in `src/recorder.ts`,
 and the private append-only JSONL store in `src/store.ts`.
+`install.mjs` is the npm `postinstall` hook and is not loaded by the extension.
 
 ## Conventions
 
@@ -62,4 +64,7 @@ and the private append-only JSONL store in `src/store.ts`.
   processing; processed turns keep Pi's normal cancellation behavior.
 - Abort the turn only for a questionnaire the user actually dismissed; let
   questionnaire failures reach the model.
+- Never write user settings from a running session. Install-time defaults
+  belong in `install.mjs`, only when the key is absent, and an unreadable
+  settings file is left alone.
 - Keep pure history and storage logic covered by `node:test` fixtures.

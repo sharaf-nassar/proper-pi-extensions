@@ -56,9 +56,9 @@ test("upstream usage 429 blocks that account's lane at the quota threshold", asy
 
 	try {
 		const availability = await armAvailability(cfg);
-		assert.equal(availability["claude-haiku-4-5"].available, false);
-		assert.equal(availability["claude-fable-5"].available, false);
-		assert.equal(availability["gpt-5-6-sol"].available, true);
+		assert.equal(availability["claude-haiku-4-5"]?.available, false);
+		assert.equal(availability["claude-fable-5"]?.available, false);
+		assert.equal(availability["gpt-5-6-sol"]?.available, true);
 	} finally {
 		globalThis.fetch = originalFetch;
 	}

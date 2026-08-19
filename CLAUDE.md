@@ -20,5 +20,9 @@ agent guidance. Read that directory's `CLAUDE.md` before changing it.
 
 ## Validation
 
-Run each package's checks from its directory. Pi loads installed local
-packages directly from their registered directory paths.
+Run `pre-commit run --all-files` before finishing. Run
+`pre-commit run --hook-stage pre-push --all-files` for the full networked gate.
+Pi loads installed local packages directly from their registered paths.
+
+Never set `ALLOW_POLICY_CHANGES=1`. Validation-policy changes require a human
+to review the staged diff and apply that override outside the agent.

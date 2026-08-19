@@ -35,11 +35,12 @@ export function installRecorder(
 	if (marked[INSTALLED]) return false;
 
 	let handler = editor.onSubmit;
-	const wrap = (next: ((text: string) => void) | undefined) => (text: string) => {
-		const prepared = prepare(text);
-		record(prepared, text);
-		next?.(prepared);
-	};
+	const wrap =
+		(next: ((text: string) => void) | undefined) => (text: string) => {
+			const prepared = prepare(text);
+			record(prepared, text);
+			next?.(prepared);
+		};
 	handler = handler ? wrap(handler) : undefined;
 
 	try {

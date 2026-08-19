@@ -3,16 +3,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-
-import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import properBase from "../index.ts";
+import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 
 test("cancelling an unprocessed prompt restores it and leaves its session branch", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "proper-base-cancel-prompt-"));
 	const handlers = new Map<string, (...args: any[]) => any>();
 	let commandHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
 	let terminalInput: ((data: string) => unknown) | undefined;
-	let installedFactory: ((tui: any, theme: any, keybindings: any) => any) | undefined;
+	let installedFactory:
+		| ((tui: any, theme: any, keybindings: any) => any)
+		| undefined;
 	let sentCommand: string | undefined;
 	let editorText = "";
 	let navigatedTo: string | undefined;
@@ -45,7 +46,7 @@ test("cancelling an unprocessed prompt restores it and leaves its session branch
 	properBase(pi);
 
 	const editor = {
-		onSubmit: undefined,
+		onSubmit: undefined as ((text: string) => void) | undefined,
 		addToHistory() {},
 		getText: () => editorText,
 		setText(text: string) {
@@ -142,7 +143,7 @@ test("cancelling an unprocessed prompt restores it and leaves its session branch
 		editorText = "";
 		idle = true;
 		editor.onSubmit = () => {};
-		editor.onSubmit("cancel during routing");
+		editor.onSubmit?.("cancel during routing");
 		terminalInput?.("\x1b");
 		assert.equal(editorText, "cancel during routing");
 
@@ -179,7 +180,7 @@ test("cancelling an unprocessed prompt restores it and leaves its session branch
 		await handlers.get("agent_settled")?.({}, ctx);
 		assert.equal(sentCommand, undefined);
 
-		editor.onSubmit("queued prompt");
+		editor.onSubmit?.("queued prompt");
 		await handlers.get("input")?.(
 			{
 				source: "interactive",

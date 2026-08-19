@@ -1,0 +1,7 @@
+[files]
+extend-exclude = ["proper-llm-router/exemplars.jsonl"]
+
+[default.extend-words]
+unparented = "unparented"
+unparseable = "unparseable"
+teh = "teh"

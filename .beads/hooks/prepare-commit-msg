@@ -31,3 +31,16 @@ if command -v bd >/dev/null 2>&1; then
   if [ $_bd_exit -ne 0 ]; then exit $_bd_exit; fi
 fi
 # --- END BEADS INTEGRATION v1.1.0 ---
+
+if ! command -v node >/dev/null 2>&1; then
+  echo >&2 "node is required to enforce repository policy"
+  exit 1
+fi
+
+# Execute the committed guard when available, so changing the staged guard
+# cannot approve its own policy changes.
+if git cat-file -e HEAD:scripts/policy-guard.mjs 2>/dev/null; then
+  git show HEAD:scripts/policy-guard.mjs | node --input-type=module - --staged || exit $?
+else
+  node scripts/policy-guard.mjs --staged || exit $?
+fi

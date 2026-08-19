@@ -3,9 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-
-import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import properBase from "../index.ts";
+import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 
 test("base keybindings add image paste, prompt newlines, and transcript shortcuts", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "proper-base-fullscreen-"));
@@ -57,7 +56,10 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 				if (line.logicalLine !== editorState.cursorLine) return false;
 				const offset = editorState.cursorCol - line.startCol;
 				const last = visualLines[index + 1]?.logicalLine !== line.logicalLine;
-				return offset >= 0 && (offset < line.length || (last && offset === line.length));
+				return (
+					offset >= 0 &&
+					(offset < line.length || (last && offset === line.length))
+				);
 			});
 		},
 		render: () => ["editor"],
@@ -139,10 +141,7 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 			"ctrl+v",
 			"ctrl+shift+v",
 		]);
-		assert.equal(
-			keybindings.matches("\x16", "app.clipboard.pasteImage"),
-			true,
-		);
+		assert.equal(keybindings.matches("\x16", "app.clipboard.pasteImage"), true);
 		assert.equal(
 			keybindings.matches("\x1b[118;6u", "app.clipboard.pasteImage"),
 			true,
@@ -163,19 +162,33 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 		);
 		assert.equal(keybindings.matches("\x1b[5~", "tui.altScreen.pageUp"), false);
 		assert.equal(keybindings.matches("\x1b[5$", "tui.altScreen.pageUp"), false);
-		assert.equal(keybindings.matches("\x1b[5;6~", "tui.altScreen.pageUp"), true);
-		assert.equal(keybindings.matches("\x1b[6;6~", "tui.altScreen.pageDown"), true);
+		assert.equal(
+			keybindings.matches("\x1b[5;6~", "tui.altScreen.pageUp"),
+			true,
+		);
+		assert.equal(
+			keybindings.matches("\x1b[6;6~", "tui.altScreen.pageDown"),
+			true,
+		);
 		assert.equal(keybindings.matches("\x1b[7~", "tui.altScreen.top"), false);
 		assert.equal(keybindings.matches("\x1b[7$", "tui.altScreen.top"), false);
 		assert.equal(keybindings.matches("\x1b[1;6H", "tui.altScreen.top"), true);
-		assert.equal(keybindings.matches("\x1b[1;6F", "tui.altScreen.bottom"), true);
+		assert.equal(
+			keybindings.matches("\x1b[1;6F", "tui.altScreen.bottom"),
+			true,
+		);
 
 		assert.ok(keybindings.getKeys("tui.editor.pageUp").includes("pageUp"));
 		assert.ok(keybindings.getKeys("tui.editor.pageDown").includes("pageDown"));
-		assert.ok(keybindings.getKeys("tui.editor.cursorLineStart").includes("home"));
+		assert.ok(
+			keybindings.getKeys("tui.editor.cursorLineStart").includes("home"),
+		);
 		assert.ok(keybindings.getKeys("tui.editor.cursorLineEnd").includes("end"));
 		assert.equal(keybindings.matches("\x1b[5~", "tui.editor.pageUp"), true);
-		assert.equal(keybindings.matches("\x1b[7~", "tui.editor.cursorLineStart"), true);
+		assert.equal(
+			keybindings.matches("\x1b[7~", "tui.editor.cursorLineStart"),
+			true,
+		);
 		assert.deepEqual(keybindings.getKeys("app.model.select"), ["alt+l"]);
 
 		editor.handleInput("\x1b[F");

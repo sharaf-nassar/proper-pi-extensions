@@ -10,7 +10,7 @@ Install the package directory with `pi install /path/to/proper-pi-extensions/pro
 
 The CPA models named in the arm catalog in `models.md`, the configured fallback, and every active judge override target must also exist in pi's model registry under provider `cliproxyapi`.
 
-There is no build step. Pi loads the TypeScript source directly, while Node uses experimental type stripping for the smoke harness. `package.json` and `package-lock.json` provide local Node and pi declarations for diagnostics plus the `npm test` shortcut; they do not produce runtime artifacts.
+There is no build step. Pi loads the TypeScript source directly, while Node uses experimental type stripping for tests. `package.json` and `package-lock.json` pin TypeScript, Node, and pi declarations for strict no-emit diagnostics; they do not produce runtime artifacts.
 
 ## Repository agent tooling
 
@@ -97,8 +97,10 @@ The judge receives the first 4,000 characters of task text. Exemplar retrieval i
 Run the package harness from `proper-llm-router/` with an optional task string.
 
 ```bash
-npm test -- ["task text"]
-# live harness only: node --experimental-strip-types smoke.ts ["task text"]
+npm run typecheck
+npm run test:unit
+npm run test:smoke -- ["task text"]
+npm run test:coverage
 ```
 
-The command first runs offline `node:test` fixtures, including the host compatibility helpers, then starts the existing smoke harness. It needs the configured judge and CPA services for the final live check.
+Unit fixtures and strict diagnostics are offline. The smoke command runs deterministic assertions before one live route and needs the configured judge and CPA services. Coverage applies repository floors to the unit-test process.

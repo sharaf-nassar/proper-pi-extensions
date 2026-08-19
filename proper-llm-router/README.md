@@ -100,7 +100,7 @@ same marker works in a typed prompt to bypass the judge manually.
   `~/.pi/agent/models.json` + a dummy key in `auth.json` — sessions start
   on `llm-router/auto` and are switched before any request reaches it.
 - Provide `ANTHROPIC_AUTH_TOKEN` (CPA key) in pi's environment.
-- Run `npm install` here for local type diagnostics and the `npm test` shortcut.
+- Run `npm install` here for strict type diagnostics and test commands.
 
 ## Router configuration
 
@@ -147,7 +147,10 @@ in the notice rather than blocking routing.
 ## Smoke test
 
 ```bash
-npm test -- ["task text"]
+npm run typecheck
+npm run test:unit
+npm run test:smoke -- ["task text"]
+npm run test:coverage
 ```
 
 Runs offline `node:test` compatibility fixtures, the pure routing fixtures

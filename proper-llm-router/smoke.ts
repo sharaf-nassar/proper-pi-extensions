@@ -185,8 +185,9 @@ llmRouter({
 		return true;
 	},
 } as any);
-assert.ok(aliasInputHandler);
-await aliasInputHandler!(
+const handleAliasInput = aliasInputHandler;
+assert.ok(handleAliasInput);
+await handleAliasInput(
 	{
 		text: "/skill:ponytail-audit",
 		images: [],
@@ -213,13 +214,14 @@ llmRouter({
 		if (name === "llm-router-config") configHandler = command.handler;
 	},
 } as any);
-assert.ok(configHandler);
+const handleConfig = configHandler;
+assert.ok(handleConfig);
 const menus: string[][] = [];
 const replies: Array<string | undefined> = ["Judge", undefined, "Done"];
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => new Response("{}", { status: 200 });
 try {
-	await configHandler!("", {
+	await handleConfig("", {
 		hasUI: true,
 		modelRegistry: { getAll: () => [] },
 		ui: {
@@ -234,10 +236,10 @@ try {
 	globalThis.fetch = originalFetch;
 }
 assert.deepStrictEqual(
-	menus[0].filter((item) => item.startsWith("Judge")),
+	(menus[0] ?? []).filter((item) => item.startsWith("Judge")),
 	["Judge"],
 );
-assert.deepStrictEqual(menus[1], ["Model", "Effort", "Overrides"]);
+assert.deepStrictEqual(menus[1] ?? [], ["Model", "Effort", "Overrides"]);
 
 // live check: full route() against the configured judge + CPA quota probe
 const task =

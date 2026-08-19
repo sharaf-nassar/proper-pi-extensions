@@ -3,8 +3,8 @@ import {
 	type Component,
 	sliceByColumn,
 	stripTerminalSequences,
-	truncateToWidth,
 	type TUI,
+	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
 
@@ -228,14 +228,20 @@ function colorFooter(
 function colorPathAndUsage(line: string, theme: FooterTheme): string {
 	const plain = stripTerminalSequences(line);
 	const usageStart = usageFields(plain)[0]?.index ?? -1;
-	const pathArea = (usageStart < 0 ? plain : plain.slice(0, usageStart)).trimEnd();
+	const pathArea = (
+		usageStart < 0 ? plain : plain.slice(0, usageStart)
+	).trimEnd();
 	const pathMatch = pathArea.match(/^(.*?)(?:\s+(\([^()]+\)))?(?:\s+•\s+.*)?$/);
 	let colored = line;
 	const path = pathMatch?.[1]?.trimEnd();
 	const branch = pathMatch?.[2];
-	if (path) colored = colored.replace(path, paintField(path, FIELD_COLORS.path, theme));
+	if (path)
+		colored = colored.replace(path, paintField(path, FIELD_COLORS.path, theme));
 	if (branch) {
-		colored = colored.replace(branch, paintField(branch, FIELD_COLORS.branch, theme));
+		colored = colored.replace(
+			branch,
+			paintField(branch, FIELD_COLORS.branch, theme),
+		);
 	}
 	return colorUsage(colored, theme);
 }
@@ -244,7 +250,10 @@ function colorUsageAndContext(line: string, theme: FooterTheme): string {
 	let colored = colorUsage(line, theme);
 	const context = stripTerminalSequences(colored).match(CONTEXT_FIELD)?.[0];
 	if (context) {
-		colored = colored.replace(context, paintField(context, contextColor(context), theme));
+		colored = colored.replace(
+			context,
+			paintField(context, contextColor(context), theme),
+		);
 	}
 	return colored;
 }
@@ -252,7 +261,10 @@ function colorUsageAndContext(line: string, theme: FooterTheme): string {
 function colorUsage(line: string, theme: FooterTheme): string {
 	let colored = line;
 	for (const { value } of usageFields(stripTerminalSequences(line))) {
-		colored = colored.replace(value, paintField(value, usageColor(value), theme));
+		colored = colored.replace(
+			value,
+			paintField(value, usageColor(value), theme),
+		);
 	}
 	return colored;
 }
@@ -261,7 +273,9 @@ function usageFields(line: string): Array<{ value: string; index: number }> {
 	return [...line.matchAll(USAGE_FIELD)].flatMap((match) => {
 		const value = match[1];
 		if (!value) return [];
-		return [{ value, index: (match.index ?? 0) + match[0].length - value.length }];
+		return [
+			{ value, index: (match.index ?? 0) + match[0].length - value.length },
+		];
 	});
 }
 

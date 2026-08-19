@@ -13,10 +13,10 @@
 
 import {
 	CustomEditor,
-	SessionManager,
-	getAgentDir,
 	type ExtensionAPI,
 	type ExtensionContext,
+	getAgentDir,
+	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 
 import {
@@ -28,19 +28,19 @@ import {
 import { installEditorNavigation } from "./src/editor-navigation.ts";
 import { installFooterColors } from "./src/footer-colors.ts";
 import {
-	installImagePreview,
-	type ImagePreviewController,
-} from "./src/image-preview.ts";
-import {
-	WRAPPED,
-	type Prompt,
 	extractPrompts,
 	isRecallable,
 	livePromptTexts,
 	mergePrompts,
+	type Prompt,
 	resolveBase,
 	selectSessions,
+	WRAPPED,
 } from "./src/history.ts";
+import {
+	type ImagePreviewController,
+	installImagePreview,
+} from "./src/image-preview.ts";
 import { installRecorder } from "./src/recorder.ts";
 import {
 	appendPrompt,
@@ -109,8 +109,7 @@ function installKeybindings(keybindings: EditorKeybindings): void {
 		});
 	};
 	const existing =
-		patched[FULLSCREEN_KEYBINDINGS] ??
-		patched[LEGACY_FULLSCREEN_KEYBINDINGS];
+		patched[FULLSCREEN_KEYBINDINGS] ?? patched[LEGACY_FULLSCREEN_KEYBINDINGS];
 	if (existing && existing !== true) {
 		existing.apply = apply;
 		patched[FULLSCREEN_KEYBINDINGS] = existing;
@@ -195,7 +194,10 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("input", (event) => {
-		if (event.source === "interactive" && event.streamingBehavior !== undefined) {
+		if (
+			event.source === "interactive" &&
+			event.streamingBehavior !== undefined
+		) {
 			submittedPrompt = undefined;
 			return;
 		}
@@ -284,11 +286,7 @@ export default function (pi: ExtensionAPI) {
 		removeTerminalInput = ctx.ui.onTerminalInput?.((data) => {
 			const candidate = pendingPrompt;
 			const promptText = candidate?.text ?? submittedPrompt;
-			if (
-				data !== "\x1b" ||
-				!promptText ||
-				candidate?.processed === true
-			) {
+			if (data !== "\x1b" || !promptText || candidate?.processed === true) {
 				return undefined;
 			}
 			if (activeEditor?.isShowingAutocomplete?.()) return undefined;
@@ -308,7 +306,8 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			candidate.cancelled = true;
-			candidate.entryId = entry?.id;
+			if (entry) candidate.entryId = entry.id;
+			else delete candidate.entryId;
 			ctx.ui.setEditorText(promptText);
 			return undefined;
 		});
@@ -355,7 +354,7 @@ export default function (pi: ExtensionAPI) {
 			installAutocompleteDetails(editor, tui, theme);
 			removeFooterColors?.();
 			removeFooterColors = installFooterColors(tui, ctx);
-			for (const prompt of seeded) editor.addToHistory(prompt);
+			for (const prompt of seeded) editor.addToHistory?.(prompt);
 			return editor;
 		};
 		factory[WRAPPED] = base ?? null;

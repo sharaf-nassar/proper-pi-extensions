@@ -310,11 +310,11 @@ export function loadConfig(configPath = CONFIG_PATH): Config {
 }
 
 export function saveConfig(cfg: Config): void {
-	fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n");
+	fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(cfg, null, 2)}\n`);
 }
 
 // ---------------------------------------------------------------- arms
-const ARMS: Record<string, { cpa: string }> = {
+const ARMS = {
 	"claude-haiku-4-5": { cpa: "claude-haiku-4-5-20251001" },
 	"claude-sonnet-5": { cpa: "claude-sonnet-5" },
 	"claude-opus-5": { cpa: "claude-opus-5" },
@@ -322,7 +322,12 @@ const ARMS: Record<string, { cpa: string }> = {
 	"gpt-5-6-luna": { cpa: "gpt-5.6-luna" },
 	"gpt-5-6-terra": { cpa: "gpt-5.6-terra" },
 	"gpt-5-6-sol": { cpa: "gpt-5.6-sol" },
-};
+} as const;
+type Arm = keyof typeof ARMS;
+
+function isArm(value: string): value is Arm {
+	return value in ARMS;
+}
 const CLAUDE_ARMS = new Set([
 	"claude-haiku-4-5",
 	"claude-sonnet-5",
@@ -332,7 +337,7 @@ const CLAUDE_ARMS = new Set([
 // Post-verdict quota swap: fixed cross-harness tier pairs. The judge is
 // never menu-filtered; an out-of-quota pick swaps to its partner (both
 // dead -> caller falls back). luna's return pair is haiku (cheap tier).
-const SWAP: Record<string, string> = {
+const SWAP: Record<Arm, Arm> = {
 	"claude-fable-5": "gpt-5-6-sol",
 	"gpt-5-6-sol": "claude-fable-5",
 	"claude-opus-5": "gpt-5-6-terra",
@@ -353,18 +358,18 @@ export const SENTINEL_RE = /\[\[\s*llm-router\s*:\s*([^\]]+?)\s*\]\]/i;
 /** Resolve a sentinel model name to an arm key. Accepts arm keys
  * ("gpt-5-6-sol"), CPA ids ("gpt-5.6-sol"), or any unique fragment
  * ("sol", "opus"); ambiguous or unknown -> null. Pure — see smoke.ts. */
-export function resolveArm(name: string): string | null {
-	const n = name.trim().toLowerCase().replace(/[\s.]/g, "-");
-	if (ARMS[n]) return n;
-	const hits = Object.keys(ARMS).filter(
-		(arm) => arm.includes(n) || n.includes(arm),
+export function resolveArm(name: string): Arm | null {
+	const normalized = name.trim().toLowerCase().replace(/[\s.]/g, "-");
+	if (isArm(normalized)) return normalized;
+	const hits = (Object.keys(ARMS) as Arm[]).filter(
+		(arm) => arm.includes(normalized) || normalized.includes(arm),
 	);
-	return hits.length === 1 ? hits[0] : null;
+	return hits.length === 1 ? (hits.at(0) ?? null) : null;
 }
 
 // @lat: [[configuration#Judge model overrides]]
-function judgeOverrides(cfg: Config): Map<string, string> {
-	const overrides = new Map<string, string>();
+function judgeOverrides(cfg: Config): Map<Arm, string> {
+	const overrides = new Map<Arm, string>();
 	for (const [name, value] of Object.entries(cfg.judgeModelOverrides ?? {})) {
 		const arm = resolveArm(name);
 		const model = typeof value === "string" ? value.trim() : "";
@@ -375,7 +380,7 @@ function judgeOverrides(cfg: Config): Map<string, string> {
 
 /** CPA model executed when the judge selects a stable arm slot. */
 export function judgeCpaModel(cfg: Config, arm: string): string {
-	return judgeOverrides(cfg).get(arm) ?? ARMS[arm]?.cpa ?? arm;
+	return isArm(arm) ? (judgeOverrides(cfg).get(arm) ?? ARMS[arm].cpa) : arm;
 }
 
 /** Replace arm labels in judge instructions while retaining stable schema
@@ -394,10 +399,10 @@ export function applyJudgeModelOverrides(
 			.join("|"),
 		"g",
 	);
-	const replaced = instructions.replace(
-		pattern,
-		(arm) => `${overrides.get(arm)} [selection key: ${arm}]`,
-	);
+	const replaced = instructions.replace(pattern, (arm) => {
+		const model = isArm(arm) ? overrides.get(arm) : undefined;
+		return `${model ?? arm} [selection key: ${arm}]`;
+	});
 	return (
 		"Model overrides are active. Each actual model below inherits the use cases " +
 		"of its selection key. Return the selection key in JSON.\n\n" +
@@ -412,11 +417,13 @@ export function parseSentinel(
 ): { name: string; stripped: string } | null {
 	const m = SENTINEL_RE.exec(text);
 	if (!m) return null;
+	const name = m.at(1);
+	if (!name) return null;
 	const before = text.slice(0, m.index);
 	let after = text.slice(m.index + m[0].length);
 	// collapse the seam so "Task: [[…]] fix X" strips to "Task: fix X"
 	if (/\s$/.test(before)) after = after.replace(/^[ \t]+/, "");
-	return { name: m[1], stripped: (before + after).trim() };
+	return { name, stripped: (before + after).trim() };
 }
 
 // ------------------------------------------------------- command pins
@@ -428,10 +435,11 @@ export function parseSentinel(
 export function commandPin(
 	cfg: Config,
 	text: string,
-): { arm: string; effort: ThinkingLevel | null } | null {
+): { arm: Arm; effort: ThinkingLevel | null } | null {
 	const m = /^\/([^\s]+)/.exec(text.trim());
 	if (!m) return null;
-	const want = m[1].toLowerCase();
+	const want = m.at(1)?.toLowerCase();
+	if (!want) return null;
 	const hit = Object.entries(cfg.commandPins ?? {}).find(
 		([k]) => k.replace(/^\//, "").toLowerCase() === want,
 	);
@@ -551,7 +559,9 @@ export class ExemplarIndex {
 	top(text: string, k = 3): Exemplar[] {
 		const q = this.tfidf(termFreq(text));
 		const scored = this.rows.map((row, i) => {
-			const d = this.tfidf(this.vecs[i]);
+			const vector = this.vecs.at(i);
+			if (!vector) throw new Error("exemplar vector index is incomplete");
+			const d = this.tfidf(vector);
 			let cos = 0;
 			for (const [t, w] of q) cos += w * (d.get(t) ?? 0);
 			return { cos, row };
@@ -597,12 +607,12 @@ export function exemplarNote(cfg: Config, task: string): string {
 // --------------------------------------------------------------- quota
 // Port of cpa_quota.py. CPA hides a model from /v1/models once no account
 // serves it, so listed == at least one account has quota.
-async function fetchJson(
+async function fetchJson<T = unknown>(
 	url: string,
 	init: RequestInit = {},
 	timeoutMs = 10_000,
 	signal?: AbortSignal,
-): Promise<any> {
+): Promise<T> {
 	const ctl = new AbortController();
 	const timer = setTimeout(() => ctl.abort(), timeoutMs);
 	try {
@@ -612,7 +622,7 @@ async function fetchJson(
 		// fetch resolves on HTTP errors; a 401/500 JSON body must not be
 		// mistaken for data (an empty auth-count map would zero every arm)
 		if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
-		return JSON.parse(text);
+		return JSON.parse(text) as T;
 	} finally {
 		clearTimeout(timer);
 	}
@@ -648,11 +658,25 @@ export interface AccountUsage {
 
 class UpstreamRateLimitError extends Error {}
 
-function apiCallBody(resp: any): any {
-	const code = Number(resp?.status_code ?? 0);
+type ApiCallResponse = { status_code?: unknown; body?: unknown };
+type AuthFile = {
+	auth_index?: number;
+	disabled?: boolean;
+	provider?: "claude" | "codex";
+	unavailable?: boolean;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+	return typeof value === "object" && value !== null && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: undefined;
+}
+
+function apiCallBody(resp: ApiCallResponse): unknown {
+	const code = Number(resp.status_code ?? 0);
 	if (code === 429) throw new UpstreamRateLimitError("api-call upstream 429");
 	if (code < 200 || code >= 300) throw new Error(`api-call upstream ${code}`);
-	const body = resp?.body;
+	const { body } = resp;
 	if (typeof body !== "string") return body;
 	try {
 		return JSON.parse(body);
@@ -671,21 +695,24 @@ async function accountUsages(cfg: Config): Promise<AccountUsage[] | null> {
 		Authorization: `Bearer ${key}`,
 		"Content-Type": "application/json",
 	};
-	const files = (await fetchJson(`${mgmt}/auth-files`, { headers })).files ?? [];
+	const { files = [] } = await fetchJson<{ files?: AuthFile[] }>(
+		`${mgmt}/auth-files`,
+		{ headers },
+	);
 	const active = files.filter(
-		(f: any) =>
-			!f.disabled &&
-			!f.unavailable &&
-			(f.provider === "claude" || f.provider === "codex"),
+		(file): file is AuthFile & { provider: "claude" | "codex" } =>
+			!file.disabled &&
+			!file.unavailable &&
+			(file.provider === "claude" || file.provider === "codex"),
 	);
 	const usages = await Promise.all(
-		active.map(async (f: any): Promise<AccountUsage | null> => {
+		active.map(async (file): Promise<AccountUsage | null> => {
 			const call = (url: string, extra: Record<string, string> = {}) =>
-				fetchJson(`${mgmt}/api-call`, {
+				fetchJson<ApiCallResponse>(`${mgmt}/api-call`, {
 					method: "POST",
 					headers,
 					body: JSON.stringify({
-						auth_index: f.auth_index,
+						auth_index: file.auth_index,
 						method: "GET",
 						url,
 						header: {
@@ -696,7 +723,7 @@ async function accountUsages(cfg: Config): Promise<AccountUsage[] | null> {
 					}),
 				});
 			try {
-				if (f.provider === "claude") {
+				if (file.provider === "claude") {
 					const body = apiCallBody(
 						await call("https://api.anthropic.com/api/oauth/usage", {
 							"anthropic-beta": "oauth-2025-04-20",
@@ -704,23 +731,33 @@ async function accountUsages(cfg: Config): Promise<AccountUsage[] | null> {
 					);
 					let general = 0;
 					const models: Record<string, number> = {};
-					for (const [k, v] of Object.entries(body ?? {})) {
-						const u = (v as any)?.utilization;
-						if (typeof u !== "number") continue;
-						const arm = CLAUDE_WINDOW_ARMS[k];
-						if (arm) models[arm] = Math.max(models[arm] ?? 0, u);
-						else if (k === "five_hour" || k === "seven_day")
-							general = Math.max(general, u);
+					const bodyRecord = asRecord(body) ?? {};
+					for (const [key, value] of Object.entries(bodyRecord)) {
+						const utilization = asRecord(value)?.utilization;
+						if (typeof utilization !== "number") continue;
+						const arm = CLAUDE_WINDOW_ARMS[key];
+						if (arm) {
+							models[arm] = Math.max(models[arm] ?? 0, utilization);
+						} else if (key === "five_hour" || key === "seven_day") {
+							general = Math.max(general, utilization);
+						}
 					}
 					// limits[]: authoritative per-model weekly percentages;
 					// unscoped entries (session, weekly_all) feed general
-					for (const lim of Array.isArray(body?.limits) ? body.limits : []) {
-						const pct = lim?.percent;
-						if (typeof pct !== "number") continue;
+					const limits = bodyRecord.limits;
+					for (const value of Array.isArray(limits) ? limits : []) {
+						const limit = asRecord(value);
+						const percent = limit?.percent;
+						if (typeof percent !== "number") continue;
+						const scope = asRecord(limit?.scope);
+						const model = asRecord(scope?.model);
+						const displayName = model?.display_name;
 						const arm =
-							CLAUDE_MODEL_ARMS[(lim?.scope?.model?.display_name ?? "").toLowerCase()];
-						if (arm) models[arm] = Math.max(models[arm] ?? 0, pct);
-						else if (!lim?.scope) general = Math.max(general, pct);
+							typeof displayName === "string"
+								? CLAUDE_MODEL_ARMS[displayName.toLowerCase()]
+								: undefined;
+						if (arm) models[arm] = Math.max(models[arm] ?? 0, percent);
+						else if (!scope) general = Math.max(general, percent);
 					}
 					return { type: "claude", general, models };
 				}
@@ -730,16 +767,19 @@ async function accountUsages(cfg: Config): Promise<AccountUsage[] | null> {
 				// live shape: rate_limit.{primary,secondary}_window.used_percent
 				// (rate_limits kept as a fallback for other CPA versions)
 				let general = 0;
-				for (const w of Object.values(
-					body?.rate_limit ?? body?.rate_limits ?? {},
-				)) {
-					const u = (w as any)?.used_percent ?? (w as any)?.usedPercent;
-					if (typeof u === "number") general = Math.max(general, u);
+				const bodyRecord = asRecord(body);
+				const windows = asRecord(
+					bodyRecord?.rate_limit ?? bodyRecord?.rate_limits,
+				);
+				for (const value of Object.values(windows ?? {})) {
+					const window = asRecord(value);
+					const used = window?.used_percent ?? window?.usedPercent;
+					if (typeof used === "number") general = Math.max(general, used);
 				}
 				return { type: "codex", general, models: {} };
 			} catch (e) {
 				if (e instanceof UpstreamRateLimitError)
-					return { type: f.provider, general: 100, models: {} };
+					return { type: file.provider, general: 100, models: {} };
 				return null; // one unknown account failure never blocks routing
 			}
 		}),
@@ -781,8 +821,10 @@ export function quotaBlockedArms(
 		const accounts = usages.filter((u) => u.type === type);
 		if (!accounts.length) continue; // no data for this lane: don't block
 		const avg =
-			accounts.reduce((s, u) => s + Math.max(u.general, u.models[arm] ?? 0), 0) /
-			accounts.length;
+			accounts.reduce(
+				(s, u) => s + Math.max(u.general, u.models[arm] ?? 0),
+				0,
+			) / accounts.length;
 		if (avg >= maxPct) blocked.add(arm);
 	}
 	return blocked;
@@ -798,30 +840,31 @@ export async function armAvailability(
 	modelIds: Record<string, string> = {},
 ): Promise<Record<string, ArmStatus>> {
 	const key = process.env[cfg.cpaKeyEnv] ?? "";
-	const models = await fetchJson(`${cfg.cpaBase}/v1/models`, {
-		headers: { Authorization: `Bearer ${key}` },
-	});
-	const listed = new Set<string>(
-		(models.data ?? []).map((m: { id: string }) => m.id),
+	const models = await fetchJson<{ data?: Array<{ id: string }> }>(
+		`${cfg.cpaBase}/v1/models`,
+		{
+			headers: { Authorization: `Bearer ${key}` },
+		},
 	);
+	const listed = new Set<string>((models.data ?? []).map((model) => model.id));
 
 	let authCounts: Map<string, number> | null = null;
 	const mgmtKey = managementKey(cfg);
 	if (mgmtKey) {
 		try {
-			const perAuth = await fetchJson(
+			type PerAuth = { models?: Array<string | { id?: string }> };
+			const perAuth = await fetchJson<PerAuth[] | { data?: PerAuth[] }>(
 				`${cfg.cpaBase}/v0/management/auth-files/models`,
 				{
 					headers: { Authorization: `Bearer ${mgmtKey}` },
 				},
 			);
 			authCounts = new Map();
-			for (const entry of Array.isArray(perAuth)
-				? perAuth
-				: (perAuth.data ?? [])) {
-				for (const mid of entry.models ?? []) {
-					const id = typeof mid === "object" ? mid.id : mid;
-					authCounts.set(id, (authCounts.get(id) ?? 0) + 1);
+			const entries = Array.isArray(perAuth) ? perAuth : (perAuth.data ?? []);
+			for (const entry of entries) {
+				for (const model of entry.models ?? []) {
+					const id = typeof model === "string" ? model : model.id;
+					if (id) authCounts.set(id, (authCounts.get(id) ?? 0) + 1);
 				}
 			}
 		} catch {
@@ -861,7 +904,8 @@ export async function armAvailability(
 export function resolveVerdictModel(
 	model: string,
 	avail: Record<string, ArmStatus>,
-): { final: string; swapped: boolean } {
+): { final: Arm; swapped: boolean } {
+	if (!isArm(model)) throw new Error(`judge returned unknown arm ${model}`);
 	if (avail[model]?.available) return { final: model, swapped: false };
 	const partner = SWAP[model];
 	if (avail[partner]?.available) return { final: partner, swapped: true };
@@ -881,13 +925,19 @@ export interface Verdict {
 	quota_gate_skipped?: boolean; // threshold set but no usage data (bad key?)
 }
 
+type JudgeResult = Pick<Verdict, "harness" | "model" | "rationale"> &
+	Partial<Verdict>;
+type ChatCompletion = {
+	choices?: Array<{ message?: { content?: string } }>;
+};
+
 async function judgeCall(
 	cfg: Config,
 	instructions: string,
 	task: string,
 	menu: string[],
 	signal?: AbortSignal,
-): Promise<any> {
+): Promise<JudgeResult> {
 	const schema = {
 		type: "object",
 		properties: {
@@ -910,21 +960,23 @@ async function judgeCall(
 		},
 	};
 	if (cfg.judge.effort) body.reasoning_effort = cfg.judge.effort;
-	const headers: Record<string, string> = { "Content-Type": "application/json" };
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+	};
 	const key = process.env[cfg.judge.apiKeyEnv] ?? "";
 	if (key) headers.Authorization = `Bearer ${key}`;
 
 	let last = "";
 	for (let attempt = 0; attempt < 2; attempt++) {
 		try {
-			const resp = await fetchJson(
+			const resp = await fetchJson<ChatCompletion>(
 				`${cfg.judge.baseUrl.replace(/\/+$/, "")}/chat/completions`,
 				{ method: "POST", headers, body: JSON.stringify(body) },
 				60_000,
 				signal,
 			);
-			const text = resp?.choices?.[0]?.message?.content;
-			if (text) return JSON.parse(text);
+			const text = resp.choices?.at(0)?.message?.content;
+			if (text) return JSON.parse(text) as JudgeResult;
 			last = JSON.stringify(resp).slice(0, 200);
 		} catch (e) {
 			// user cancellation must not burn the retry
@@ -950,8 +1002,8 @@ export async function route(
 		RUBRIC + exemplarNote(cfg, task),
 	);
 	const modelIds = Object.fromEntries(
-		Object.keys(ARMS).map((arm) => [arm, judgeCpaModel(cfg, arm)]),
-	);
+		(Object.keys(ARMS) as Arm[]).map((arm) => [arm, judgeCpaModel(cfg, arm)]),
+	) as Record<Arm, string>;
 	const t0 = Date.now();
 	// availability probes run while the judge thinks
 	const [verdict, avail] = await Promise.all([
@@ -976,7 +1028,7 @@ export async function route(
 	}
 	verdict.cpa_model = cpaModel;
 	const down = Object.keys(avail)
-		.filter((a) => !avail[a].available)
+		.filter((arm) => !avail[arm]?.available)
 		.sort();
 	if (down.length) verdict.arms_out_of_quota = down;
 	// cached: free second call — flags a configured-but-inactive gate
@@ -1001,8 +1053,8 @@ const dim = (s: string) => `\x1b[2m${s}\x1b[22m`;
  * blocking the prompt. Returns the arm plus a notice suffix. */
 async function quotaFinal(
 	cfg: Config,
-	arm: string,
-): Promise<{ final: string; extra: string }> {
+	arm: Arm,
+): Promise<{ final: Arm; extra: string }> {
 	try {
 		const r = resolveVerdictModel(arm, await armAvailability(cfg));
 		return {
@@ -1076,7 +1128,8 @@ export default function (pi: ExtensionAPI) {
 	// natively from the routed model, the footer shows it, and workflow
 	// children inherit it. llm-router/auto must never serve a request.
 	pi.on("input", async (event, ctx) => {
-		if (ctx.model?.provider !== PROVIDER || routed) return { action: "continue" };
+		if (ctx.model?.provider !== PROVIDER || routed)
+			return { action: "continue" };
 		if (!event.text.trim()) return { action: "continue" };
 
 		// our own commands (/llm-router, /llm-router-config) are pure UI —
@@ -1096,7 +1149,9 @@ export default function (pi: ExtensionAPI) {
 				// after setModel: pi clamps the level to the new model
 				// (older pi has no setThinkingLevel — pin the model anyway)
 				if (pin.effort && typeof pi.setThinkingLevel === "function")
-					(pi.setThinkingLevel as unknown as (level: string) => void)(pin.effort);
+					(pi.setThinkingLevel as unknown as (level: string) => void)(
+						pin.effort,
+					);
 				const eff = pin.effort ? dim(` @${pin.effort}`) : "";
 				ctx.ui.notify(
 					`llm-router: ${cyan(final)}${eff} ${dim("(pinned command)")}${extra}`,
@@ -1153,7 +1208,7 @@ export default function (pi: ExtensionAPI) {
 					return {
 						action: "transform",
 						text: sentinel.stripped,
-						images: event.images,
+						...(event.images ? { images: event.images } : {}),
 					};
 				}
 				ctx.ui.notify(
@@ -1164,7 +1219,9 @@ export default function (pi: ExtensionAPI) {
 		}
 		const taskText = sentinel ? sentinel.stripped : event.text;
 		ctx.ui.notify(
-			green(`llm-router: asking ${cfg.judge.model} which model fits this task…`),
+			green(
+				`llm-router: asking ${cfg.judge.model} which model fits this task…`,
+			),
 			"info",
 		);
 		// Esc while the judge is consulted aborts the request and swallows
@@ -1188,7 +1245,9 @@ export default function (pi: ExtensionAPI) {
 			// amber — a subtle warning, not an error. Rationale is capped
 			// instead of slicing the composed string (ANSI-safe).
 			const rat =
-				v.rationale.length > 150 ? `${v.rationale.slice(0, 149)}…` : v.rationale;
+				v.rationale.length > 150
+					? `${v.rationale.slice(0, 149)}…`
+					: v.rationale;
 			const picked = v.swapped_from ? yellow(v.model) : cyan(v.model);
 			const swap = v.swapped_from
 				? yellow(` (swapped from ${v.swapped_from}: no quota)`)
@@ -1225,10 +1284,17 @@ export default function (pi: ExtensionAPI) {
 			routed = true;
 			ctx.ui.notify(note, failed ? "error" : "info");
 		} else {
-			ctx.ui.notify(`${note} (no switchable cliproxyapi model found!)`, "error");
+			ctx.ui.notify(
+				`${note} (no switchable cliproxyapi model found!)`,
+				"error",
+			);
 		}
 		return sentinel
-			? { action: "transform", text: sentinel.stripped, images: event.images }
+			? {
+					action: "transform",
+					text: sentinel.stripped,
+					...(event.images ? { images: event.images } : {}),
+				}
 			: { action: "continue" };
 	});
 
@@ -1250,44 +1316,51 @@ export default function (pi: ExtensionAPI) {
 		if (typeof ctx.ui.custom !== "function") {
 			return ctx.ui.editor(title, ""); // older pi: visible fallback
 		}
-		return ctx.ui.custom(
-			(tui: any, theme: any, _kb: any, done: (v: string | undefined) => void) => {
-				let value = "";
-				return {
-					invalidate() {},
-					// pi-tui aborts if a rendered line exceeds the terminal —
-					// clip every line to the width we're given (content is
-					// clipped BEFORE styling, so no ANSI-aware measuring needed)
-					render(width: number): string[] {
-						const w = Math.max(10, Math.floor(width) || 80);
-						const clip = (s: string) => (s.length > w ? `${s.slice(0, w - 1)}…` : s);
-						const dots = Math.max(0, Math.min(value.length, w - 3));
-						return [
-							theme.fg("accent", clip(title)),
-							"",
-							clip("  " + "•".repeat(dots)) + theme.fg("dim", "▏"),
-							"",
-							theme.fg("dim", clip("  enter save · esc cancel · empty clears")),
-						];
-					},
-					handleInput(data: string): void {
-						if (data === "\r" || data === "\n") return done(value);
-						if (data === "\x1b" || data === "\x03") return done(undefined);
-						if (data === "\x7f" || data === "\b") value = value.slice(0, -1);
-						else if (data.startsWith("\x1b[200~"))
-							value += data
-								.slice(6)
-								.split("\x1b[201~")
-								.join("")
-								.replace(/[\x00-\x1f\x7f]/g, "");
-						else if (!data.startsWith("\x1b"))
-							value += data.replace(/[\x00-\x1f\x7f]/g, "");
-						// other \x1b… sequences (arrows etc.): ignored
-						tui.requestRender();
-					},
-				};
-			},
-		);
+		return ctx.ui.custom((tui, theme, _keybindings, done) => {
+			let value = "";
+			const stripControls = (text: string) =>
+				[...text]
+					.filter((character) => {
+						const code = character.charCodeAt(0);
+						return code >= 32 && code !== 127;
+					})
+					.join("");
+			return {
+				invalidate() {},
+				// pi-tui aborts if a rendered line exceeds the terminal —
+				// clip every line to the width we're given (content is
+				// clipped BEFORE styling, so no ANSI-aware measuring needed)
+				render(width: number): string[] {
+					const w = Math.max(10, Math.floor(width) || 80);
+					const clip = (s: string) =>
+						s.length > w ? `${s.slice(0, w - 1)}…` : s;
+					const dots = Math.max(0, Math.min(value.length, w - 3));
+					return [
+						theme.fg("accent", clip(title)),
+						"",
+						`${clip(`  ${"•".repeat(dots)}`)}${theme.fg("dim", "▏")}`,
+						"",
+						theme.fg("dim", clip("  enter save · esc cancel · empty clears")),
+					];
+				},
+				handleInput(data: string): void {
+					if (data === "\r" || data === "\n") {
+						done(value);
+						return;
+					}
+					if (data === "\x1b" || data === "\x03") {
+						done(undefined);
+						return;
+					}
+					if (data === "\x7f" || data === "\b") value = value.slice(0, -1);
+					else if (data.startsWith("\x1b[200~"))
+						value += stripControls(data.slice(6).split("\x1b[201~").join(""));
+					else if (!data.startsWith("\x1b")) value += stripControls(data);
+					// other \x1b… sequences (arrows etc.): ignored
+					tui.requestRender();
+				},
+			};
+		});
 	}
 
 	// /llm-router: switch the session back to llm-router/auto — the next
@@ -1300,7 +1373,10 @@ export default function (pi: ExtensionAPI) {
 			const auto = ctx.modelRegistry.find(PROVIDER, "auto");
 			if (auto && (await pi.setModel(auto))) {
 				routed = false;
-				ctx.ui.notify("llm-router: active — next prompt picks the model", "info");
+				ctx.ui.notify(
+					"llm-router: active — next prompt picks the model",
+					"info",
+				);
 			} else {
 				ctx.ui.notify(
 					"llm-router: llm-router/auto not found in model registry",
@@ -1377,20 +1453,22 @@ export default function (pi: ExtensionAPI) {
 					let ids: string[] = [];
 					try {
 						const key = process.env[cfg.judge.apiKeyEnv] ?? "";
-						const models = await fetchJson(
+						const models = await fetchJson<{ data?: Array<{ id: string }> }>(
 							`${cfg.judge.baseUrl.replace(/\/+$/, "")}/models`,
 							{
 								headers: key ? { Authorization: `Bearer ${key}` } : {},
 							},
 						);
-						ids = (models.data ?? []).map((m: { id: string }) => m.id).sort();
+						ids = (models.data ?? []).map((model) => model.id).sort();
 					} catch {
 						// provider unreachable: fall through to manual entry
 					}
 					// only offer the arm models the router is calibrated on; a
 					// non-CPA provider (no arm ids in its listing) keeps its full
 					// catalog, and "(enter manually)" always allows any id
-					const armIds = new Set(Object.values(ARMS).map((a) => a.cpa));
+					const armIds = new Set<string>(
+						Object.values(ARMS).map((arm) => arm.cpa),
+					);
 					const armOnly = ids.filter((id) => armIds.has(id));
 					if (armOnly.length) ids = armOnly;
 					// "id [provider]" like /model: pi registry provider when the id
@@ -1438,25 +1516,33 @@ export default function (pi: ExtensionAPI) {
 					const clean = stripCheck(pick);
 					saveConfig({
 						...cfg,
-						judge: { ...cfg.judge, effort: clean.startsWith("none") ? null : clean },
+						judge: {
+							...cfg.judge,
+							effort: clean.startsWith("none") ? null : clean,
+						},
 					});
 				} else if (action === "Judge overrides") {
-					const arms = Object.keys(ARMS);
+					const arms = Object.keys(ARMS) as Arm[];
 					const rows = arms.map((arm) => `${arm} → ${judgeCpaModel(cfg, arm)}`);
 					const row = await ctx.ui.select("Judge model slot to override", rows);
 					if (!row) continue;
 					const arm = arms[rows.indexOf(row)];
+					if (!arm) continue;
 					let ids: string[];
 					try {
 						const key = process.env[cfg.cpaKeyEnv] ?? "";
-						const models = await fetchJson(`${cfg.cpaBase}/v1/models`, {
+						const models = await fetchJson<{
+							data?: Array<{ id?: string }>;
+						}>(`${cfg.cpaBase}/v1/models`, {
 							headers: key ? { Authorization: `Bearer ${key}` } : {},
 						});
 						ids = [
 							...new Set<string>(
 								(models.data ?? [])
 									.map((model: { id?: string }) => model.id)
-									.filter((id: unknown): id is string => typeof id === "string"),
+									.filter(
+										(id: unknown): id is string => typeof id === "string",
+									),
 							),
 						].sort((a, b) => a.localeCompare(b));
 					} catch (e) {
@@ -1464,7 +1550,10 @@ export default function (pi: ExtensionAPI) {
 						continue;
 					}
 					if (!ids.length) {
-						ctx.ui.notify("llm-router: CPA reported no enabled models", "error");
+						ctx.ui.notify(
+							"llm-router: CPA reported no enabled models",
+							"error",
+						);
 						continue;
 					}
 					const current = judgeCpaModel(cfg, arm);
@@ -1501,14 +1590,16 @@ export default function (pi: ExtensionAPI) {
 							? (await ctx.ui.editor("Command name (without the /)", ""))
 									?.trim()
 									.replace(/^\//, "")
-							: pins[rows.indexOf(row)][0];
+							: pins[rows.indexOf(row)]?.[0];
 					if (!name) continue;
 					const current = cfg.commandPins?.[name];
 					const REMOVE = "(remove pin)";
 					const modelPick = await ctx.ui.select(
 						`Model for /${name.replace(/^\//, "")}`,
 						[
-							...Object.keys(ARMS).map((a) => (a === current?.model ? a + CHECK : a)),
+							...Object.keys(ARMS).map((a) =>
+								a === current?.model ? a + CHECK : a,
+							),
 							...(current ? [REMOVE] : []),
 						],
 					);

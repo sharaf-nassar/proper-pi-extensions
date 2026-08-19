@@ -5,12 +5,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
-import {
-	getCapabilities,
-	setCapabilities,
-} from "@earendil-works/pi-tui";
+import { getCapabilities, setCapabilities } from "@earendil-works/pi-tui";
 import properBase from "../index.ts";
+import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import { readPrompts, storePath } from "../src/store.ts";
 
 const PNG_1X1 = Buffer.from(
@@ -20,11 +17,16 @@ const PNG_1X1 = Buffer.from(
 
 test("clipboard image markers show paths and expand before submission", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "proper-base-image-preview-"));
-	const imagePath = join(tmpdir(), "pi-clipboard-12345678-1234-1234-1234-123456789abc.png");
+	const imagePath = join(
+		tmpdir(),
+		"pi-clipboard-12345678-1234-1234-1234-123456789abc.png",
+	);
 	const historyPath = storePath(getAgentDir(), cwd);
 	await writeFile(imagePath, PNG_1X1);
 	let onSessionStart: ((event: unknown, ctx: any) => Promise<void>) | undefined;
-	let installedFactory: ((tui: any, theme: any, keybindings: any) => any) | undefined;
+	let installedFactory:
+		| ((tui: any, theme: any, keybindings: any) => any)
+		| undefined;
 	let overlayComponent: { render(width: number): string[] } | undefined;
 	let overlayOptions: any;
 	let text = "";

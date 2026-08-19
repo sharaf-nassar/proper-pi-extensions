@@ -64,7 +64,9 @@ function decodeEntry(line: string): Prompt | undefined {
 		const parsed = JSON.parse(line) as { t?: unknown; ts?: unknown };
 		if (typeof parsed.t !== "string" || !parsed.t) return undefined;
 		const ts =
-			typeof parsed.ts === "number" && Number.isFinite(parsed.ts) ? parsed.ts : 0;
+			typeof parsed.ts === "number" && Number.isFinite(parsed.ts)
+				? parsed.ts
+				: 0;
 		return { text: parsed.t, ts };
 	} catch {
 		return undefined;

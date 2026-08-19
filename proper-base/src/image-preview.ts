@@ -45,7 +45,10 @@ type InstalledEditor = PreviewEditor & {
 };
 type OverlayTui = TUI & { [ACTIVE_OVERLAY]?: OverlayHandle };
 
-function singleDeletionIndex(before: string, after: string): number | undefined {
+function singleDeletionIndex(
+	before: string,
+	after: string,
+): number | undefined {
 	if (before.length !== after.length + 1) return undefined;
 	let index = 0;
 	while (index < after.length && before[index] === after[index]) index++;
@@ -85,7 +88,7 @@ export function installImagePreview(
 		if (!active) return;
 		active.hide();
 		overlay = undefined;
-		if (host[ACTIVE_OVERLAY] === active) host[ACTIVE_OVERLAY] = undefined;
+		if (host[ACTIVE_OVERLAY] === active) delete host[ACTIVE_OVERLAY];
 	};
 	const hasDescription = () =>
 		Boolean(target.autocompleteList?.getSelectedItem()?.description);
@@ -94,10 +97,7 @@ export function installImagePreview(
 		const inactive = overlay;
 		if (!inactive) return;
 		queueMicrotask(() => {
-			if (
-				overlay === inactive &&
-				(!isVisible() || !isMounted(tui, target))
-			) {
+			if (overlay === inactive && (!isVisible() || !isMounted(tui, target))) {
 				releaseOverlay();
 			}
 		});
@@ -224,7 +224,7 @@ export function installImagePreview(
 			controller.clear();
 			target.render = render;
 			delete target.onChange;
-			target.onChange = handler;
+			if (handler) target.onChange = handler;
 			delete target[INSTALLED];
 		},
 		update(_next) {

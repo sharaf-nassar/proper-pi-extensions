@@ -52,6 +52,14 @@ Pressing Esc on an [`ask_user_question`](https://www.npmjs.com/package/@juicesha
 
 Questionnaires that fail before you see them — no UI, an RPC host that cannot render the dialog, rejected parameters — still reach the model, so it can fall back to asking in plain text. This does nothing if the tool is not installed.
 
+### Subagent worker context
+
+pi-subagents ships its packaged `worker` agent with `defaultContext: fork`, so every worker child replays the parent transcript. When the child resolves to the parent's own provider, api, and model, pi keeps the inherited signed thinking blocks and Anthropic rejects the request with "`thinking` blocks in the latest assistant message cannot be modified" — the worker dies on its first turn.
+
+Pi has no install hook of its own, so proper-base's npm `postinstall` script writes `subagents.agentOverrides.worker.defaultContext: "fresh"` into `~/.pi/agent/settings.json` once, at install time, and prints one line saying so. Nothing touches your settings while pi is running.
+
+If a `worker` override already exists it is left alone, whatever it says: set `"defaultContext": "fork"` to keep forking deliberately, or delete the key and reinstall to be seeded again. Installing with `--ignore-scripts` skips this entirely.
+
 ### Autocomplete descriptions
 
 When editor autocomplete is open, the selected item's description appears in a bordered, non-capturing overlay immediately above the prompt. Its text uses the same teal accent as the selected autocomplete item for stronger readability and visual continuity. The box expands upward over terminal history, so changing selections never moves the prompt, autocomplete list, or footer. Text wraps to the terminal width and uses all rows available above the prompt before adding an ellipsis.
@@ -122,7 +130,8 @@ Tests use built-in `node:test` with no test framework. Package-local dev depende
 
 ```bash
 npm test
-npx tsc
+npm run typecheck
+npm run test:coverage
 ```
 
 `src/history.ts` and `src/recorder.ts` import nothing from pi, so they are testable on their own. `src/store.ts` runs against a temp directory rather than a mocked filesystem. Footer and autocomplete fixtures exercise their editor/TUI integration through small fakes. `index.ts` is the pi wiring.

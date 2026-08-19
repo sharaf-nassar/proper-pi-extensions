@@ -4,7 +4,7 @@ The proper-llm-router package uses Node's built-in test runner for offline compa
 
 ## Harness structure
 
-`npm test` runs `test/*.test.ts` first, then `smoke.ts`. Both use Node's experimental TypeScript type stripping; no build or third-party test framework is required.
+`npm run test:unit` runs `test/*.test.ts`, while `npm run test:smoke` runs `smoke.ts`. Both use Node's experimental TypeScript type stripping; `npm test` runs them in that order.
 
 `smoke.ts` imports the extension and its public pure functions, runs deterministic assertions, then calls one live route. A deterministic assertion failure stops before network work. The harness first loads a guaranteed-missing config path and verifies that `exemplarsPath` resolves beside the moved extension, then uses normal config, accepts an optional CLI task, calls `route()`, and requires non-empty verdict fields.
 
@@ -84,6 +84,12 @@ This check is intentionally live and can fail because of credentials, CPA health
 
 There is no fixture-only flag. Every invocation that passes the deterministic assertions proceeds to the external live route, which prevents an offline CI job from using the current harness unchanged.
 
+## Strict validation
+
+Strict compiler, lint, and coverage checks prevent new dynamic-data shortcuts from weakening router guarantees.
+
+`npm run typecheck` enables strict mode, exact optional properties, unchecked-index diagnostics, unused checks, fallthrough checks, and no-emit compilation. Biome rejects explicit `any` in runtime source. `npm run test:coverage` requires at least 40% lines, 55% branches, and 52% functions from the focused unit fixtures.
+
 ## Current coverage gaps
 
 The smoke harness does not exercise every extension behavior.
@@ -96,4 +102,4 @@ The live route proves one integrated verdict, but it does not isolate which exte
 
 Documentation-only changes must pass lat.md link and section validation.
 
-Run `lat check` after editing `lat.md/`. Behavior changes should also run the smoke command documented in `operations.md` when configured services are available.
+Run `lat check` after editing `lat.md/`. Behavior changes should run strict type diagnostics, unit fixtures, and the smoke command documented in `operations.md` when configured services are available.

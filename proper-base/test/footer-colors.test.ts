@@ -5,16 +5,12 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
-
-import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import properBase from "../index.ts";
+import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 
 test("footer layout, colors, and shutdown restoration stay composed", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "proper-base-footer-"));
-	type SessionHandler = (
-		event: unknown,
-		ctx: any,
-	) => void | Promise<void>;
+	type SessionHandler = (event: unknown, ctx: any) => void | Promise<void>;
 	let onSessionStart: SessionHandler | undefined;
 	let onSessionShutdown: SessionHandler | undefined;
 	let installedFactory:
@@ -114,9 +110,7 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 
 		const lowLines = footer.render(100).map(stripTerminalSequences);
 		assert.ok(lowLines[0]?.startsWith("~/work/scribe (main)"));
-		assert.ok(
-			lowLines[0]?.endsWith("↑10M ↓261K R114M W2M CH99.5% $115.997"),
-		);
+		assert.ok(lowLines[0]?.endsWith("↑10M ↓261K R114M W2M CH99.5% $115.997"));
 		assert.equal(lowLines[0]?.length, 99);
 		assert.ok(lowLines[1]?.startsWith("55.5%/1.0M (auto)"));
 		assert.ok(lowLines[1]?.endsWith("gpt-5.6-sol • low"));
@@ -145,7 +139,9 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 		);
 		contextPercent = 95;
 		assert.ok(
-			footer.render(100)[1]?.includes(color(218, 122, 122, "95.0%/1.0M (auto)")),
+			footer
+				.render(100)[1]
+				?.includes(color(218, 122, 122, "95.0%/1.0M (auto)")),
 		);
 		contextPercent = 55.5;
 		assert.ok(low.includes("\x1b[38;2;192;132;252mgpt-5.6-sol\x1b[39m"));
@@ -178,7 +174,7 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 		await new Promise((resolve) => setTimeout(resolve, 180));
 		assert.ok(stripTerminalSequences(firstMax).endsWith("gpt-5.6-sol • max"));
 		assert.ok(renderRequests > 0);
-		assert.ok((firstMax.match(/\x1b\[38;2;/g) ?? []).length >= 4);
+		assert.ok(firstMax.split("\x1b[38;2;").length - 1 >= 4);
 
 		effort = "ultra";
 		const requestsBeforeUltra = renderRequests;
@@ -187,7 +183,7 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 		await new Promise((resolve) => setTimeout(resolve, 180));
 		assert.ok(stripTerminalSequences(ultra).endsWith("gpt-5.6-sol • ultra"));
 		assert.ok(renderRequests > requestsBeforeUltra);
-		assert.ok((ultra.match(/\x1b\[38;2;/g) ?? []).length >= 6);
+		assert.ok(ultra.split("\x1b[38;2;").length - 1 >= 6);
 
 		await onSessionShutdown?.({}, ctx);
 		stale = true;

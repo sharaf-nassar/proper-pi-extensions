@@ -1,0 +1,91 @@
+minimum_pre_commit_version: "4.5.0"
+default_stages: [pre-commit]
+fail_fast: false
+
+repos:
+  - repo: meta
+    hooks:
+      - id: check-hooks-apply
+        always_run: true
+      - id: check-useless-excludes
+        always_run: true
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-illegal-windows-names
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: forbid-submodules
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/biomejs/pre-commit
+    rev: f386812de43c18f7c9a052b82079584c28959dd1 # v2.5.9
+    hooks:
+      - id: biome-ci
+        args: [--error-on-warnings, --max-diagnostics=none]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/crate-ci/typos
+    rev: 5e183518f8764162ed2841339af896246fccbcfd # v1.49.0
+    hooks:
+      - id: typos
+        args: [--force-exclude]
+        stages: [pre-commit]
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: b82a6c8896e491b9cb377a99ff3412131920681b # v0.23.2
+    hooks:
+      - id: markdownlint-cli2
+
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: 99470f5e12208ff0fb17ab81c3c494f7620a1d8d # v0.11.0
+    hooks:
+      - id: shellcheck
+        files: ^\.beads/hooks/
+
+  - repo: https://github.com/google/osv-scanner
+    rev: c48ab012a628e14d14375e72b0397e555d7120d5 # v2.3.6
+    hooks:
+      - id: osv-scanner
+        stages: [pre-push]
+
+  - repo: local
+    hooks:
+      - id: repository-policy
+        name: Reject validation bypasses and policy tampering
+        entry: node scripts/policy-guard.mjs
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: repository-fast-checks
+        name: Run repository checks
+        entry: node scripts/check-repo.mjs fast
+        language: system
+        pass_filenames: false
+        always_run: true
+        require_serial: true
+      - id: repository-full-checks
+        name: Run full repository checks
+        entry: node scripts/check-repo.mjs full
+        language: system
+        pass_filenames: false
+        always_run: true
+        require_serial: true
+        stages: [pre-push]

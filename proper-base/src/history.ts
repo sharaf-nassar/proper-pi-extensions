@@ -99,7 +99,8 @@ function messageText(content: MessageContent): string {
 	if (!Array.isArray(content)) return "";
 	let text = "";
 	for (const part of content) {
-		if (part?.type === "text" && typeof part.text === "string") text += part.text;
+		if (part?.type === "text" && typeof part.text === "string")
+			text += part.text;
 	}
 	return text;
 }

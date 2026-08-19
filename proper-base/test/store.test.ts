@@ -1,14 +1,14 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { test } from "node:test";
 
 import {
-	MAX_PROMPT_CHARS,
 	appendPrompt,
 	compactIfNeeded,
 	encodeEntry,
+	MAX_PROMPT_CHARS,
 	projectKey,
 	readPrompts,
 	storePath,

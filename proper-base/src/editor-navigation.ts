@@ -23,11 +23,13 @@ type NavigableEditor = Component & {
 		startCol: number;
 		length: number;
 	}>;
-	findCurrentVisualLine?(visualLines: Array<{
-		logicalLine: number;
-		startCol: number;
-		length: number;
-	}>): number;
+	findCurrentVisualLine?(
+		visualLines: Array<{
+			logicalLine: number;
+			startCol: number;
+			length: number;
+		}>,
+	): number;
 	[INSTALLED]?: boolean;
 };
 
@@ -86,7 +88,11 @@ export function installEditorNavigation(
 		}
 
 		const currentLine = cursor ? lines[cursor.line] : undefined;
-		if (!cursor || currentLine === undefined || cursor.col < currentLine.length) {
+		if (
+			!cursor ||
+			currentLine === undefined ||
+			cursor.col < currentLine.length
+		) {
 			handleInput(data);
 			return;
 		}
@@ -112,7 +118,8 @@ export function installEditorNavigation(
 			if (!before || before.line >= lastLine) break;
 			handleInput("\x1b[B");
 			const after = target.getCursor?.();
-			if (!after || (after.line === before.line && after.col === before.col)) break;
+			if (!after || (after.line === before.line && after.col === before.col))
+				break;
 		}
 		handleInput(data);
 	};

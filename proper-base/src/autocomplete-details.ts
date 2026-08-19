@@ -95,13 +95,11 @@ export function installInlineSlashAutocomplete(editor: Component): void {
 	const handleInput = target.handleInput.bind(target);
 	target.handleInput = (data: string) => {
 		handleInput(data);
-		if (
-			target.isShowingAutocomplete?.() ||
-			!/^[/a-zA-Z0-9._:-]$/.test(data)
-		) {
+		if (target.isShowingAutocomplete?.() || !/^[/a-zA-Z0-9._:-]$/.test(data)) {
 			return;
 		}
 		const state = target.state;
+		if (!state) return;
 		if (inlineSlashContext(state.lines, state.cursorLine, state.cursorCol)) {
 			target.tryTriggerAutocomplete?.();
 		}
@@ -141,9 +139,7 @@ function createAutocompleteDetailBox(theme: DetailTheme) {
 					border(`┌${"─".repeat(width - 2)}┐`),
 					...lines.map(
 						(line) =>
-							`${border("│")} ${(
-								theme.selectList.selectedText ?? theme.selectList.description
-							)(line)}${" ".repeat(
+							`${border("│")} ${(theme.selectList.selectedText ?? theme.selectList.description)(line)}${" ".repeat(
 								Math.max(0, textWidth - visibleWidth(line)),
 							)} ${border("│")}`,
 					),
@@ -159,7 +155,9 @@ export function sortModelAutocompleteDescending(
 	current: AutocompleteProvider,
 ): AutocompleteProvider {
 	return {
-		triggerCharacters: current.triggerCharacters,
+		...(current.triggerCharacters
+			? { triggerCharacters: current.triggerCharacters }
+			: {}),
 		async getSuggestions(lines, cursorLine, cursorCol, options) {
 			const inline = inlineSlashContext(lines, cursorLine, cursorCol);
 			const requestLines = inline ? [...lines] : lines;
@@ -181,7 +179,8 @@ export function sortModelAutocompleteDescending(
 				.split(/\s+/)
 				.filter(Boolean);
 			const strictMatches = suggestions.items.filter((item) => {
-				const searchable = `${item.label} ${item.value} ${item.description ?? ""}`.toLowerCase();
+				const searchable =
+					`${item.label} ${item.value} ${item.description ?? ""}`.toLowerCase();
 				return terms.every((term) => searchable.includes(term));
 			});
 			const items =
@@ -233,11 +232,8 @@ export function sortModelAutocompleteDescending(
 		},
 		shouldTriggerFileCompletion(lines, cursorLine, cursorCol) {
 			return (
-				current.shouldTriggerFileCompletion?.(
-					lines,
-					cursorLine,
-					cursorCol,
-				) ?? true
+				current.shouldTriggerFileCompletion?.(lines, cursorLine, cursorCol) ??
+				true
 			);
 		},
 	};
@@ -303,7 +299,7 @@ export function installAutocompleteDetails(
 		if (!active) return;
 		active.hide();
 		overlay = undefined;
-		if (host[ACTIVE_OVERLAY] === active) host[ACTIVE_OVERLAY] = undefined;
+		if (host[ACTIVE_OVERLAY] === active) delete host[ACTIVE_OVERLAY];
 	};
 	const scheduleReleaseOverlay = () => {
 		const inactive = overlay;
