@@ -4,50 +4,56 @@ proper-base combines cross-session history with focused editor, fullscreen, canc
 
 ## Purpose
 
-The package groups local pi behavior in one extension: cross-session prompt history, autocomplete descriptions, fullscreen renderer compatibility, footer styling, and questionnaire cancellation.
+The package groups local pi behavior in one extension: automatic session naming, cross-session prompt history, autocomplete details, fullscreen compatibility, footer styling, and cancellation.
 
-Pi's editor history normally covers only the current session, while session files omit sessions that never receive an assistant message. The extension merges persisted session prompts with a private append-only store without changing pi's session format. Pi's compact autocomplete rows truncate descriptions; proper-base keeps the list compact and shows the selected description in an overlay above the prompt.
+Pi session messages contain model-facing expansions rather than trustworthy raw input. The extension records editor submissions in a private append-only store and rejects replayed session messages, while keeping autocomplete descriptions compact and visible above the prompt.
 
 ## Architectural boundary
 
 The runtime is split by responsibility.
 
-- `index.ts` wires `session_start`, pi session discovery, editor replacement, early-cancel branch recovery, base keybinding overrides, `ask_user_question` cancellation, and the package entry point.
+- `index.ts` wires `session_start`, first-response session naming, editor replacement, early-cancel branch recovery, base keybinding overrides, `ask_user_question` cancellation, and the package entry point.
 - `src/autocomplete-details.ts` owns overlay lifecycle, boxed rendering, terminal positioning, selected-description updates, descending `/model` argument ordering, and immediate submission of selected model completions.
-- `src/editor-navigation.ts` implements two-stage End behavior while preserving configured keybindings and custom editor fallback.
+- `src/editor-navigation.ts` implements recalled-history cursor placement and two-stage Home/End behavior while preserving configured keybindings and custom editor fallback.
 - `src/footer-colors.ts` rearranges Pi's built-in footer statistics, applies model and effort colors, and owns the bounded maximum-effort animation timer.
+- `src/jump-to-bottom.ts` renders the scrolled-up jump-to-bottom button as an editor row and claims mouse input ahead of the alternate-screen renderer.
 - `src/image-preview.ts` replaces clipboard paths with compact markers, renders their source paths in a text-only overlay, and expands markers before submission without enabling terminal image protocols.
-- `src/history.ts` contains pure prompt extraction, session ordering, deduplication, exclusion, and merge logic.
+- `src/history-guard.ts` blocks Pi's transformed session replay and admits only recorder-trusted prompts.
+- `src/history.ts` contains pure recall filtering, timestamp ordering, deduplication, and editor-factory unwrapping.
 - `src/recorder.ts` intercepts editor submission while preserving later handler assignments and repeated installation.
 - `src/store.ts` owns project-key encoding, private JSONL appends, bounded tail reads, and compaction.
+- `src/transient-retry.ts` rewrites CLIProxyAPI transient stream errors into pi's retryable form.
 - `test/` uses built-in `node:test` against pure logic, real temporary files, and a small editor integration fixture; `tsconfig.json` and package-local dependencies provide no-emit diagnostics and pi-tui wrapping utilities, not a test framework or build step.
 
 ## Core invariants
 
 These rules preserve history and autocomplete details without destabilizing the editor.
 
-1. History scope is the current working directory, matching pi's session bucketing.
-2. Session files and the recorded store merge by timestamp; duplicate text keeps its newest timestamp.
-3. Prompts already seeded from the live session are excluded, and at most 200 merged prompts reach the editor.
-4. Recording runs through the editor's `onSubmit` path because pi input events do not see every command.
-5. Read, parse, append, compaction, or session-list failures degrade to partial history and never block startup or submission.
-6. Editor wrapping composes with an existing factory and unwraps its own prior wrapper on reload, resume, or fork.
-7. Store files remain private, reads are bounded, and oversized prompts are skipped rather than truncated.
-8. Autocomplete details use a selected-item-accent, non-capturing overlay above the editor, so selection changes never alter prompt, list, or footer layout; inactive or unmounted boxes are removed from pi's overlay stack so renderer mode changes remain available.
-9. Footer styling moves cumulative usage through cost onto the top path row, keeps context and model information aligned on row two with one trailing safety column, assigns stable subtle colors to each metric, escalates context color at 70% and 90%, animates only visible `max` or `ultra`, and leaves custom footers untouched.
-10. Fullscreen Home, End, PageUp, and PageDown remain editor keys; only their Ctrl+Shift-modified forms control the transcript viewport, without discarding unrelated user bindings.
-11. A dismissed `ask_user_question` aborts the turn, while an answered one and every questionnaire failure reach the model unchanged.
-12. Slash-command completion works at command-token boundaries anywhere in the prompt and replaces only the active segment; every `/model ` result list is descending, searches strictly filter by every term when possible, and Enter or Tab submits only after Pi produces the selected `provider/model` command.
-13. Esc before assistant processing restores the prompt and removes its turn from the active branch; processed turns retain Pi's normal abort behavior, and the append-only session file keeps only an abandoned audit branch.
-14. Ctrl+V and Ctrl+Shift+V invoke Pi's clipboard paste action; image paths appear as `[image N]` markers with source paths in a text-only overlay, terminal capabilities remain unchanged, and intact markers expand before history storage and Pi submission.
-15. Shift+Enter and Alt+Enter insert prompt newlines; Alt+Enter is not retained as the follow-up queue shortcut.
-16. Home first reaches the current visible-row start and then the full prompt start; End first reaches the logical-line end and then the full prompt end, without taking over Ctrl+Shift+Home/End.
+1. Only a fresh unnamed session requests a model-generated title; explicit names and branches with a completed assistant response remain unchanged, and title text is bounded and stripped of terminal control characters.
+2. History scope is the current working directory, matching pi's session bucketing.
+3. Only raw prompts captured by the editor submit recorder may enter history; Pi session messages and startup replay are never trusted because they contain expanded skills and templates.
+4. Duplicate recorded text keeps its newest timestamp, and at most 200 prompts reach the editor.
+5. Recording runs through the editor's `onSubmit` path because pi input events do not see every command.
+6. Store read, parse, append, or compaction failures never block startup or submission.
+7. Editor wrapping composes with an existing factory and unwraps its own prior wrapper on reload, resume, or fork.
+8. Store files remain private, reads are bounded, and oversized prompts are skipped rather than truncated.
+9. Autocomplete details use a selected-item-accent, non-capturing overlay above the editor, so selection changes never alter prompt, list, or footer layout; inactive or unmounted boxes are removed from pi's overlay stack so renderer mode changes remain available.
+10. Footer styling moves cumulative usage through cost onto the top path row, keeps context and model information aligned on row two with one trailing safety column, assigns stable subtle colors to each metric, escalates context color at 70% and 90%, animates only visible `max` or `ultra`, and leaves custom footers untouched.
+11. Fullscreen Home, End, PageUp, and PageDown remain editor keys; only their Ctrl+Shift-modified forms control the transcript viewport, without discarding unrelated user bindings.
+12. A dismissed `ask_user_question` aborts the turn, while an answered one and every questionnaire failure reach the model unchanged.
+13. Slash-command completion works at command-token boundaries anywhere in the prompt and replaces only the active segment; every `/model ` result list is descending, searches strictly filter by every term when possible, and Enter or Tab submits only after Pi produces the selected `provider/model` command.
+14. Esc before assistant processing restores the prompt and removes its turn from the active branch; processed turns retain Pi's normal abort behavior, and the append-only session file keeps only an abandoned audit branch.
+15. Ctrl+V and Ctrl+Shift+V invoke Pi's clipboard paste action; image paths become `[image N]` markers without moving the cursor away from the replacement, marker deletion leaves the cursor at the removed marker, source paths stay in a text-only overlay, terminal capabilities remain unchanged, and intact markers expand before history storage and Pi submission.
+16. Shift+Enter and Alt+Enter insert prompt newlines; Alt+Enter is not retained as the follow-up queue shortcut.
+17. Up leaves a recalled prompt at line 0, column 0; Home then moves through the current visible-row and full-prompt starts, while End moves through logical-line and full-prompt ends without taking over Ctrl+Shift+Home/End.
+18. The jump-to-bottom button exists only for a viewport renderer that is not following output, occupies an editor row rather than an overlay so scrollbar dragging survives, and consumes only the mouse events landing on its own cells.
+19. Transient-error normalization touches only errored assistant messages matching the CPA `empty_stream` wording and never re-prefixes an already retryable message.
 
 ## Documentation map
 
 Each document owns one runtime concern.
 
-- [lifecycle](./lifecycle.md) — startup, prompt sources, cursor navigation, image previews, early-cancel recovery, editor composition, fullscreen key routing, autocomplete details, and footer decoration.
+- [lifecycle](./lifecycle.md) — startup, prompt sources, cursor navigation, image previews, early-cancel recovery, editor composition, fullscreen key routing, the jump-to-bottom button, autocomplete details, footer decoration, and transient stream retry.
 - [storage](./storage.md) — project paths, JSONL format, permissions, bounded reads, limits, and compaction.
 - [operations](./operations.md) — package identity, installation, runtime requirements, and data removal.
 - [tests](./tests.md) — deterministic history, recorder, autocomplete, fullscreen key routing, footer styling, and real-filesystem store coverage.

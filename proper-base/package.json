@@ -1,7 +1,7 @@
 {
   "name": "pi-proper-base",
   "version": "0.2.0",
-  "description": "Baseline Pi behavior for history, prompt editing, fullscreen navigation, and footer styling",
+  "description": "Baseline Pi behavior for session naming, history, prompt editing, fullscreen navigation, and footer styling",
   "keywords": [
     "pi-package",
     "pi",
@@ -11,6 +11,7 @@
     "customization",
     "history",
     "prompt-history",
+    "session-title",
     "autocomplete",
     "fullscreen",
     "scrolling",

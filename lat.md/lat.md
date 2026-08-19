@@ -40,6 +40,6 @@ Git uses `.beads/hooks` through `core.hooksPath`. The Beads-managed `pre-commit`
 
 Biome enforces formatting, recommended lint rules, explicit-any rejection in runtime source, and focused or skipped test rejection. Both TypeScript packages enable strict diagnostics, unchecked-index checks, exact optional properties, unused checks, and no-emit compilation. Markdown, shell, JSON, YAML, TOML, spelling, file hygiene, package-lock consistency, package contents, and lat.md links are also checked.
 
-`scripts/policy-guard.mjs` rejects staged edits to hook and validation policy, deleted tests, and new suppression directives unless a human deliberately sets `ALLOW_POLICY_CHANGES=1`. The `prepare-commit-msg` shim runs the committed guard when possible so a staged guard cannot approve itself.
+`scripts/policy-guard.mjs` rejects staged edits to hook and validation policy, deleted tests, and new suppression directives unless a human deliberately sets `ALLOW_POLICY_CHANGES=1`. Package manifests are not guarded — `package.json` edits pass while `package-lock.json` stays protected — and lock consistency is separately enforced by the package-lock hook. The `prepare-commit-msg` shim runs the committed guard when possible so a staged guard cannot approve itself.
 
 These local controls are friction, not a security boundary. A process with the developer's filesystem and Git permissions can replace hooks, change `core.hooksPath`, or bypass Git porcelain; authoritative enforcement requires a remote pre-receive policy or protected CI rules.

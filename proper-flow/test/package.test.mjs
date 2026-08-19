@@ -22,3 +22,16 @@ test("package exposes the four workflow prompts", async () => {
 		assert.match(source, /^argument-hint: .+$/m, name);
 	}
 });
+
+test("implement-ready accepts epic, task, or all scopes", async () => {
+	const source = await readFile(
+		new URL("prompts/implement-ready.md", root),
+		"utf8",
+	);
+	assert.match(source, /^argument-hint: "\[epic id \| task id\/name \| all\]/m);
+	assert.match(
+		source,
+		/Resolve a non-`all` scope before initializing the rail:/,
+	);
+	assert.match(source, /single-task mode/);
+});

@@ -1,11 +1,12 @@
 ---
 description: Fan out parallel agents over the ready beads frontier — one agent per task, relaunching as tasks unblock, until all work is done
-argument-hint: "[epic id | all] [max parallel agents, e.g. 4]"
+argument-hint: "[epic id | task id/name | all] [max parallel agents, e.g. 4]"
 ---
 
 Orchestrate parallel implementation of the ready beads frontier. Scope from the
-user: $ARGUMENTS (an epic id to stay within, or "all" for the whole board;
-optionally a number capping concurrent agents — default: no cap).
+user: $ARGUMENTS (an epic id, one task id or unique task title, or "all" for
+the whole board; optionally a number capping concurrent agents — default: no
+cap).
 
 You are the ORCHESTRATOR: you dispatch and verify agents, re-survey, and report.
 You MAY mutate files when needed, but never outside the rail's ownership model:
@@ -63,17 +64,28 @@ escalation retry is the ONLY pin. Record each pinned dispatch and include
 escalation counts in the final report. (No surveyor agents exist in this
 flow: `survey` is a rail command YOU run directly between waves.)
 
-0. No args given? Prompt for scope before doing anything else. List the open
-   epics (`bd list --status=open --type=epic`, plus any epic with open
-   children) as numbered options — for each: number, epic id, title, and its
-   open/ready/blocked task counts — plus a final "All" option for the whole
-   board. If exactly one epic is in scope, do NOT prompt — auto-select it and
-   print a one-line notice like "Single epic in scope — auto-selecting
-   temet-cgh (admin-theme-polish)." Otherwise (2+ epics): prefer the
-   ask-user-question tool when available (one option per epic + "All");
-   otherwise print the numbered list in chat and ask the user to reply with a
-   number or "all". Wait for the choice — do not pick a default. (Numbered
-   options are intentional here and override any letter-label convention.)
+0. Resolve scope before doing anything else. Parse an optional final standalone
+   integer as the concurrency cap; everything before it is the scope.
+
+   No scope given? Show the open epics (`bd list --status=open --type=epic`,
+   plus any epic with open children), each with id, title, and its
+   open/ready/blocked task counts, plus "All". Ask for an epic id, a task id or
+   title, or "all". Never auto-select an epic: even with one epic present, the
+   user may intend one standalone or child task.
+
+   Resolve a non-`all` scope before initializing the rail:
+   - If it looks like an id, try `bd show <scope> --json`.
+   - Otherwise, or if that lookup fails, run
+     `bd search <scope> --status open,in_progress,deferred --json --limit 20`.
+     Prefer one case-insensitive exact title match; otherwise accept a sole
+     result. If multiple candidates remain, list id, title, type, and status and
+     ask the user to choose. No match is an error — do not reinterpret it as
+     `all`.
+   - An epic result selects EPIC mode with that epic id. Any non-epic result
+     selects single-task mode with exactly that task id. A closed, deferred, or
+     already-owned task is not silently replaced with another task; report its
+     state and stop or ask the user what to do.
+   - `all` selects ALL mode. Record `TARGET_TASK=<id>` only in single-task mode.
 
    While scoping, also record HOLDS: any task the user wants kept out of this
    run — touching production, needing credentials or installs, or simply
@@ -84,7 +96,12 @@ flow: `survey` is a rail command YOU run directly between waves.)
    state it, list it, screen it.
 
 1. Initialize and survey through the rail:
-   - `init --repo <path> --scope <epic|all>` → save `run_dir` and `actor`.
+   - Set `RAIL_SCOPE` to the epic id in EPIC mode and `all` in ALL or
+     single-task mode. The rail's non-`all` scope is descendant-only, so passing
+     a task id would exclude the task itself. Run
+     `init --repo <path> --scope <RAIL_SCOPE>` and save `run_dir` and `actor`.
+     In single-task mode, filter every survey bucket, dispatch decision, and
+     final report to `TARGET_TASK`; never dispatch another board task.
      A non-null `hooks_hazard` (absolute `core.hooksPath`) is informational,
      NOT a gate: the rail creates every task worktree hook-free (per-worktree
      `core.hooksPath` override), so repo hooks — beads DB sync included —
@@ -97,7 +114,10 @@ flow: `survey` is a rail command YOU run directly between waves.)
      `verify-integration --gates` and the primary hooks on your main commit.
    - `survey --run-dir <run_dir>` → the frontier. A nonzero exit or invalid
      JSON is a failure, NEVER an empty frontier. Save this first frontier's
-     id set — step 2 adjudicates any task that later appears beyond it.
+     in-scope id set — step 2 adjudicates any task that later appears beyond
+     it. In single-task mode, the set is either `TARGET_TASK` or empty after
+     filtering; use its matching `ready`, `unacceptable`, `p4_excluded`, or
+     `blocked` entry to explain whether it can run.
 
    The rail has already applied every mechanical filter, so do not re-derive
    them: epics are excluded, `p4_excluded` holds ready P4 items, and
@@ -141,18 +161,22 @@ flow: `survey` is a rail command YOU run directly between waves.)
    The loop lives in you; the script is per-wave.
 
    Each wave:
-   - Survey: re-run rail `survey` yourself → the current frontier.
+   - Survey: re-run rail `survey` yourself → the current frontier. In
+     single-task mode, discard every entry except `TARGET_TASK`; once it is
+     completed, stuck, or non-dispatchable, the run ends without refilling.
    - Pick the wave: PRE-ASSIGN each agent its exact task id — agents must NOT
      survey, pick, or re-route for themselves; assignment by the orchestrator
      is what prevents two agents claiming the same task. Slice to the cap,
      and screen every candidate:
      - HOLDS: never dispatch a task on the hold list (step 0).
-     - Newly-ready tasks (any id beyond the first frontier saved in step 1,
-       including beads filed mid-run) are ADJUDICATED, never auto-dispatched:
-       check the hold list, and ask whether closing it needs anything a
-       worker must not do — production access, credentials, spend, an
-       irreversible action. If yes, surface it to the user and leave it out
-       of the wave; the rest of the frontier keeps dispatching.
+     - In EPIC and ALL modes, newly-ready tasks (any id beyond the first
+       frontier saved in step 1, including beads filed mid-run) are
+       ADJUDICATED, never auto-dispatched: check the hold list, and ask whether
+       closing one needs anything a worker must not do — production access,
+       credentials, spend, or an irreversible action. If yes, surface it to
+       the user and leave it out of the wave; the rest of the frontier keeps
+       dispatching. In single-task mode, every non-target id is simply out of
+       scope.
    - Per assigned task, YOU run the rail pre-dispatch sequence
      (overlap → claim → worktree; details below).
    - Dispatch the wave as ONE `subagent` call: a `workflowScript` whose body
@@ -301,8 +325,9 @@ flow: `survey` is a rail command YOU run directly between waves.)
    human gate, surface the gate's question to the user — never answer it
    yourself. That task alone waits; the frontier keeps draining.
 
-6. Done: when all scoped tasks are closed, close the epic if it is now
-   childless-open (`bd epic close-eligible`), run the repo's FULL quality
+6. Done: when all scoped tasks are closed, close an in-scope epic if it is now
+   childless-open (`bd epic close-eligible`); a single-task run never closes
+   unrelated epics. Run the repo's FULL quality
    gates once on main (the complete gate, even when per-integration `--gates`
    ran only a smoke subset), then file ponytail debt and run the ponytail
    review (both below), and only then absorb.
@@ -325,7 +350,7 @@ flow: `survey` is a rail command YOU run directly between waves.)
      --label ponytail-debt --description "<file>:<line> — <full comment text>.
      Upgrade trigger: <the trigger, or 'none stated'>.
      source-task: <task-bead-id>  source-commit: <squash sha>
-     source-epic: <epic-id or 'all-board run'>  source-run: <run_id>"`
+     source-epic: <epic-id, 'single-task <id>', or 'all-board run'>  source-run: <run_id>"`
    - Unparented and dependency-free is deliberate: both a `--parent` and a
      `discovered-from` edge would pull these into /spec's SCOPE closure, whose
      zero-open-P4 invariant would then force every later spec run to adjudicate
@@ -349,8 +374,10 @@ flow: `survey` is a rail command YOU run directly between waves.)
      A finding is an inference, not an author's declaration (the skill lists and
      never applies; correctness and security stay out of its lens):
      - CONFIRMED, cheap, in scope (cross-task duplication above all): file a
-       small task bead and run it through the normal rail path in THIS run,
-       unprefixed (router-judged). Batch compatible findings into one bead.
+       small task bead. In EPIC or ALL mode, run it through the normal rail path
+       in THIS run, unprefixed (router-judged). In single-task mode, leave it as
+       a follow-up; never expand the run beyond `TARGET_TASK`. Batch compatible
+       findings into one bead.
      - CONFIRMED but larger, risky, or out of scope: file a follow-up bead
        (normal priority, label `review-followup`) and leave it open.
      - REFUTED: dismiss with a one-line reason.
@@ -392,7 +419,8 @@ flow: `survey` is a rail command YOU run directly between waves.)
    confirm `.beads/` is clean. If some `bd` command must run after the absorb,
    repeat it.
 
-7. Report using the run's OWN scoped result — completed (with their commits on
+7. Report using the run's OWN scoped result — for single-task mode this means
+   only `TARGET_TASK`, never board siblings. Include completed (with commits on
    main), retries, stuck, stranded, unacceptable, p4_excluded, blocked_remaining,
    leftover_worktrees, overlap_guard (declared/undeclared), files_drift
    (workers whose diff left their declared Files), integration_gates (the

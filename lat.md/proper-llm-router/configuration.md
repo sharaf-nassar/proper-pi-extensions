@@ -12,6 +12,7 @@ Missing files and missing keys use built-in defaults.
 | `judge.apiKeyEnv` | `ANTHROPIC_AUTH_TOKEN` | environment variable holding the judge key |
 | `judge.model` | `gpt-5.6-terra` | model ID sent to the judge endpoint |
 | `judge.effort` | `medium` | optional `reasoning_effort`; `null` omits it |
+| `judge.fast` | `false` | `true` sends `service_tier: "priority"` on judge requests |
 | `fallbackModel` | `gpt-5.6-terra` | CPA model ID used after judged-path failure or for bare commands |
 | `cpaBase` | `http://127.0.0.1:8317` | CPA base for model and management requests |
 | `cpaKeyEnv` | `ANTHROPIC_AUTH_TOKEN` | environment variable holding the CPA API key |
@@ -79,7 +80,7 @@ Pin edits affect the next armed routing decision. They do not repin a session th
 
 `/llm-router-config` opens a UI-only configuration loop when the current pi context has a UI.
 
-The menu has one `Judge` entry that opens model, effort, and override pickers. It can also add, repoint, or remove command pins, set a quota threshold from `off`, `50%`, `75%`, `80%`, `90%`, or `95%`, enter a masked management key, edit the full JSON object, and run a live route test.
+The menu has one `Judge` entry that opens model, effort, and fast pickers, plus a top-level `Overrides` entry for judge model overrides. The fast picker is an on/off toggle that always saves the choice; after enabling, it reads the judge catalog's `?client_version=pi` listing and warns when the configured judge model lists no `service_tiers` entry, since CPA silently ignores the tier there. A missing model or unreachable catalog produces no warning. It can also add, repoint, or remove command pins, set a quota threshold from `off`, `50%`, `75%`, `80%`, `90%`, or `95%`, enter a masked management key, edit the full JSON object, and run a live route test.
 
 The menu summary reports current override and pin counts. The pin editor offers canonical arm keys and every session thinking level supported by the selected model, plus a choice that leaves the session default unchanged. `ultra` appears only when that model's `thinkingLevelMap.ultra` is a non-empty string.
 

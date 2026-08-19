@@ -2,176 +2,35 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-	extractPrompts,
 	isRecallable,
-	livePromptTexts,
 	mergePrompts,
 	resolveBase,
-	selectSessions,
 	WRAPPED,
 } from "../src/history.ts";
 
-test("extractPrompts reads string content", () => {
-	const entries = [
-		{ type: "message", message: { role: "user", content: "hello" } },
-	];
-	assert.deepEqual(
-		extractPrompts(entries).map((p) => p.text),
-		["hello"],
-	);
-});
-
-test("extractPrompts joins text parts the way pi does", () => {
-	// pi's getUserMessageText joins text blocks with an empty separator.
-	const entries = [
-		{
-			type: "message",
-			message: {
-				role: "user",
-				content: [
-					{ type: "text", text: "foo" },
-					{ type: "image", data: "..." },
-					{ type: "text", text: "bar" },
-				],
-			},
-		},
-	];
-	assert.deepEqual(
-		extractPrompts(entries).map((p) => p.text),
-		["foobar"],
-	);
-});
-
-test("extractPrompts keeps chronological order and ignores non-user entries", () => {
-	const entries = [
-		{ type: "message", message: { role: "user", content: "first" } },
-		{ type: "message", message: { role: "assistant", content: "reply" } },
-		{ type: "compaction" },
-		{ type: "message", message: { role: "user", content: "second" } },
-	];
-	assert.deepEqual(
-		extractPrompts(entries).map((p) => p.text),
-		["first", "second"],
-	);
-});
-
-test("extractPrompts trims and drops blank prompts", () => {
-	const entries = [
-		{ type: "message", message: { role: "user", content: "  spaced  " } },
-		{ type: "message", message: { role: "user", content: "   " } },
-		{ type: "message", message: { role: "user", content: "" } },
-		{ type: "message", message: { role: "user", content: [] } },
-	];
-	assert.deepEqual(
-		extractPrompts(entries).map((p) => p.text),
-		["spaced"],
-	);
-});
-
-test("extractPrompts unwraps skill blocks to the typed prompt", () => {
-	const content =
-		'<skill name="unslop" location="/skills/unslop/SKILL.md">\nbody\n</skill>\n\nclean this up';
-	const entries = [{ type: "message", message: { role: "user", content } }];
-	assert.deepEqual(
-		extractPrompts(entries).map((p) => p.text),
-		["clean this up"],
-	);
-});
-
-test("extractPrompts drops skill blocks that carry no typed prompt", () => {
-	const content =
-		'<skill name="unslop" location="/skills/unslop/SKILL.md">\nbody\n</skill>';
-	const entries = [{ type: "message", message: { role: "user", content } }];
-	assert.deepEqual(
-		extractPrompts(entries).map((p) => p.text),
-		[],
-	);
-});
-
-test("extractPrompts tolerates malformed entries", () => {
-	const entries = [
-		{ type: "message" },
-		{ type: "message", message: { role: "user" } },
-		{ type: "message", message: { role: "user", content: [{ type: "text" }] } },
-		{ type: "message", message: { role: "user", content: "kept" } },
-	];
-	assert.deepEqual(
-		extractPrompts(entries as never).map((p) => p.text),
-		["kept"],
-	);
-});
-
-test("selectSessions orders newest first", () => {
-	const sessions = [
-		{ path: "/s/old.jsonl", modified: new Date(1000) },
-		{ path: "/s/new.jsonl", modified: new Date(3000) },
-		{ path: "/s/mid.jsonl", modified: new Date(2000) },
-	];
-	assert.deepEqual(
-		selectSessions(sessions).map((s) => s.path),
-		["/s/new.jsonl", "/s/mid.jsonl", "/s/old.jsonl"],
-	);
-});
-
-test("selectSessions excludes the live session file", () => {
-	// pi seeds the current session's prompts itself; including it here would duplicate them.
-	const sessions = [
-		{ path: "/s/a.jsonl", modified: new Date(2000) },
-		{ path: "/s/live.jsonl", modified: new Date(3000) },
-	];
-	assert.deepEqual(
-		selectSessions(sessions, "/s/live.jsonl").map((s) => s.path),
-		["/s/a.jsonl"],
-	);
-});
-
-test("selectSessions handles an absent or unknown live session", () => {
-	const sessions = [{ path: "/s/a.jsonl", modified: new Date(1) }];
-	assert.equal(selectSessions(sessions, undefined).length, 1);
-	assert.equal(selectSessions(sessions, "/s/other.jsonl").length, 1);
-	assert.deepEqual(selectSessions([], "/s/live.jsonl"), []);
-});
-
-test("extractPrompts records entry timestamps", () => {
-	const entries = [
-		{
-			type: "message",
-			timestamp: "2026-08-14T20:00:00.000Z",
-			message: { role: "user", content: "dated" },
-		},
-		{ type: "message", message: { role: "user", content: "undated" } },
-	];
-	assert.deepEqual(extractPrompts(entries), [
-		{ text: "dated", ts: Date.parse("2026-08-14T20:00:00.000Z") },
-		{ text: "undated", ts: 0 },
-	]);
-});
-
 test("mergePrompts returns oldest first so Up yields the newest prompt", () => {
-	const sessions = [
+	const firstBatch = [
 		{ text: "older", ts: 10 },
 		{ text: "newer", ts: 30 },
 	];
-	const store = [{ text: "middle", ts: 20 }];
-	assert.deepEqual(mergePrompts([sessions, store], 10), [
+	const secondBatch = [{ text: "middle", ts: 20 }];
+	assert.deepEqual(mergePrompts([firstBatch, secondBatch], 10), [
 		"older",
 		"middle",
 		"newer",
 	]);
 });
 
-test("mergePrompts interleaves sources by time rather than grouping them", () => {
-	// The store and the session files overlap in time; grouping by source
-	// would put every recorded prompt after every session prompt.
-	const sessions = [
+test("mergePrompts interleaves batches by timestamp", () => {
+	const firstBatch = [
 		{ text: "s1", ts: 1 },
 		{ text: "s2", ts: 4 },
 	];
-	const store = [
+	const secondBatch = [
 		{ text: "r1", ts: 2 },
 		{ text: "r2", ts: 3 },
 	];
-	assert.deepEqual(mergePrompts([sessions, store], 10), [
+	assert.deepEqual(mergePrompts([firstBatch, secondBatch], 10), [
 		"s1",
 		"r1",
 		"r2",
@@ -197,14 +56,6 @@ test("mergePrompts keeps the newest prompts when over the limit", () => {
 	assert.deepEqual(mergePrompts([source], 2), ["b", "c"]);
 });
 
-test("mergePrompts drops prompts pi seeds from the live session", () => {
-	const source = [
-		{ text: "live", ts: 2 },
-		{ text: "past", ts: 1 },
-	];
-	assert.deepEqual(mergePrompts([source], 10, new Set(["live"])), ["past"]);
-});
-
 test("mergePrompts keeps same-timestamp prompts in the order seen", () => {
 	const source = [
 		{ text: "first", ts: 7 },
@@ -217,15 +68,6 @@ test("mergePrompts handles empty and degenerate input", () => {
 	assert.deepEqual(mergePrompts([], 10), []);
 	assert.deepEqual(mergePrompts([[], []], 10), []);
 	assert.deepEqual(mergePrompts([[{ text: "a", ts: 1 }]], 0), []);
-});
-
-test("livePromptTexts collects the live session's prompts for exclusion", () => {
-	const entries = [
-		{ type: "message", message: { role: "user", content: "one" } },
-		{ type: "message", message: { role: "assistant", content: "reply" } },
-		{ type: "message", message: { role: "user", content: "two" } },
-	];
-	assert.deepEqual([...livePromptTexts(entries)].sort(), ["one", "two"]);
 });
 
 test("resolveBase passes through an editor we have not wrapped", () => {

@@ -51,7 +51,25 @@ export function installEditorNavigation(
 	target.handleInput = (data: string) => {
 		const home = keybindings.matches(data, "tui.editor.cursorLineStart");
 		const end = keybindings.matches(data, "tui.editor.cursorLineEnd");
-		if ((!home && !end) || target.isShowingAutocomplete?.()) {
+		const previous =
+			keybindings.matches(data, "tui.editor.cursorUp") ||
+			keybindings.matches(data, "tui.editor.historyPrevious");
+		if (target.isShowingAutocomplete?.()) {
+			handleInput(data);
+			return;
+		}
+		if (previous) {
+			const before = target.getLines?.().join("\n");
+			handleInput(data);
+			const state = target.state;
+			if (state && target.getLines?.().join("\n") !== before) {
+				state.cursorLine = 0;
+				if (target.setCursorCol) target.setCursorCol(0);
+				else state.cursorCol = 0;
+			}
+			return;
+		}
+		if (!home && !end) {
 			handleInput(data);
 			return;
 		}

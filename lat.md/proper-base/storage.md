@@ -6,7 +6,7 @@ The recorded store preserves submitted prompts independently of pi session persi
 
 Each working directory maps to one file under `~/.pi/agent/proper-history/` using pi's session-directory encoding.
 
-The store directory is created with mode `0700`, and a new JSONL file is created with mode `0600`. Deleting that project file forgets only the recorded source; session-file history remains available.
+The store directory is created with mode `0700`, and a new JSONL file is created with mode `0600`. Deleting that project file forgets the project's cross-session prompt history; Pi session messages are intentionally not used as a fallback.
 
 ## Entry format and append behavior
 

@@ -24,7 +24,8 @@
  * the next prompt gets routed.
  * {
  *   "judge": { "baseUrl": "...", "apiKeyEnv": "...", "model": "...",
- *              "effort": "medium" | null },   // any OpenAI-compatible
+ *              "effort": "medium" | null,    // any OpenAI-compatible
+ *              "fast": false },              // priority service tier
  *   "fallbackModel": "gpt-5.6-terra",         // used when the judge fails
  *   "cpaBase": "http://127.0.0.1:8317",       // arm availability probe
  *   "cpaKeyEnv": "ANTHROPIC_AUTH_TOKEN",
@@ -84,6 +85,9 @@ export interface JudgeConfig {
 	apiKeyEnv: string;
 	model: string;
 	effort: string | null;
+	// send service_tier "priority" on judge requests (CPA fast lane; only
+	// effective for catalog models that support it, e.g. gpt-5.6-*)
+	fast: boolean;
 }
 // Pi 0.84.2 stops at max, while CLIProxyAPI already advertises ultra for
 // supported GPT models. The compatibility patch below extends Pi's runtime
@@ -255,6 +259,7 @@ const DEFAULTS: Config = {
 		apiKeyEnv: "ANTHROPIC_AUTH_TOKEN",
 		model: "gpt-5.6-terra",
 		effort: "medium",
+		fast: false,
 	},
 	fallbackModel: "gpt-5.6-terra",
 	cpaBase: "http://127.0.0.1:8317",
@@ -381,6 +386,26 @@ function judgeOverrides(cfg: Config): Map<Arm, string> {
 /** CPA model executed when the judge selects a stable arm slot. */
 export function judgeCpaModel(cfg: Config, arm: string): string {
 	return isArm(arm) ? (judgeOverrides(cfg).get(arm) ?? ARMS[arm].cpa) : arm;
+}
+
+/** CPA's `?client_version=pi` catalog entry (subset used for fast). */
+export interface CatalogModel {
+	id?: string;
+	slug?: string;
+	service_tiers?: unknown[];
+}
+
+/** Whether a judge model advertises a fast tier in the CPA catalog:
+ * true/false when listed, null when absent (non-CPA judge endpoints). */
+export function judgeFastSupported(
+	models: CatalogModel[],
+	judgeModel: string,
+): boolean | null {
+	const entry = models.find(
+		(model) => model.slug === judgeModel || model.id === judgeModel,
+	);
+	if (!entry) return null;
+	return Array.isArray(entry.service_tiers) && entry.service_tiers.length > 0;
 }
 
 /** Replace arm labels in judge instructions while retaining stable schema
@@ -960,6 +985,7 @@ async function judgeCall(
 		},
 	};
 	if (cfg.judge.effort) body.reasoning_effort = cfg.judge.effort;
+	if (cfg.judge.fast) body.service_tier = "priority";
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
 	};
@@ -1423,7 +1449,7 @@ export default function (pi: ExtensionAPI) {
 			for (;;) {
 				const cfg = loadConfig();
 				const summary =
-					`judge: ${cfg.judge.model}@${cfg.judge.effort ?? "no-effort"} via ${cfg.judge.baseUrl}\n` +
+					`judge: ${cfg.judge.model}@${cfg.judge.effort ?? "no-effort"}${cfg.judge.fast ? "+fast" : ""} via ${cfg.judge.baseUrl}\n` +
 					`fallback: ${cfg.fallbackModel}` +
 					` | quota gate: ${cfg.quotaMaxPct == null ? "off" : `${cfg.quotaMaxPct}%`}` +
 					` | key: ${keyNote}` +
@@ -1431,6 +1457,7 @@ export default function (pi: ExtensionAPI) {
 					` | pinned commands: ${Object.keys(cfg.commandPins ?? {}).length}`;
 				let action = await ctx.ui.select(`llm-router config\n${summary}`, [
 					"Judge",
+					"Overrides",
 					"Pinned commands",
 					"Quota threshold",
 					"CPA management key",
@@ -1443,7 +1470,7 @@ export default function (pi: ExtensionAPI) {
 					const judgeAction = await ctx.ui.select("Judge settings", [
 						"Model",
 						"Effort",
-						"Overrides",
+						"Fast",
 					]);
 					if (!judgeAction) continue;
 					action = `Judge ${judgeAction.toLowerCase()}`;
@@ -1521,7 +1548,37 @@ export default function (pi: ExtensionAPI) {
 							effort: clean.startsWith("none") ? null : clean,
 						},
 					});
-				} else if (action === "Judge overrides") {
+				} else if (action === "Judge fast") {
+					const current = cfg.judge.fast ? "on" : "off";
+					const pick = await ctx.ui.select(
+						`Judge fast mode — priority service tier (current: ${current})`,
+						["on", "off"].map((e) => (e === current ? e + CHECK : e)),
+					);
+					if (!pick) continue;
+					const fast = stripCheck(pick) === "on";
+					saveConfig({ ...cfg, judge: { ...cfg.judge, fast } });
+					if (fast) {
+						// catalog awareness: CPA ignores the tier on unsupported
+						// models, so a no-op config deserves a warning, not a block
+						try {
+							const key = process.env[cfg.judge.apiKeyEnv] ?? "";
+							const catalog = await fetchJson<{ models?: CatalogModel[] }>(
+								`${cfg.judge.baseUrl.replace(/\/+$/, "")}/models?client_version=pi`,
+								{ headers: key ? { Authorization: `Bearer ${key}` } : {} },
+							);
+							if (
+								judgeFastSupported(catalog.models ?? [], cfg.judge.model) ===
+								false
+							)
+								ctx.ui.notify(
+									`llm-router: ${cfg.judge.model} lists no fast tier — fast is saved but will have no effect`,
+									"warning",
+								);
+						} catch {
+							// non-CPA judge or catalog unreachable: nothing to check
+						}
+					}
+				} else if (action === "Overrides") {
 					const arms = Object.keys(ARMS) as Arm[];
 					const rows = arms.map((arm) => `${arm} → ${judgeCpaModel(cfg, arm)}`);
 					const row = await ctx.ui.select("Judge model slot to override", rows);

@@ -22,6 +22,9 @@ const CLIPBOARD_IMAGE_PATH =
 type PreviewEditor = Component & {
 	getText?(): string;
 	setText?(text: string): void;
+	getCursor?(): { line: number; col: number };
+	state?: { cursorLine: number; cursorCol: number };
+	setCursorCol?(column: number): void;
 	onChange?: (text: string) => void;
 	autocompleteList?: {
 		getSelectedItem(): { description?: string } | null;
@@ -142,6 +145,35 @@ export function installImagePreview(
 		else releaseOverlay();
 	};
 
+	const cursorOffset = (text: string): number | undefined => {
+		const cursor = target.getCursor?.();
+		if (!cursor) return undefined;
+		const lines = text.split("\n");
+		let offset = 0;
+		for (let line = 0; line < cursor.line; line++) {
+			offset += (lines[line]?.length ?? 0) + 1;
+		}
+		return offset + cursor.col;
+	};
+	const restoreCursor = (text: string, offset: number | undefined) => {
+		const state = target.state;
+		if (offset === undefined || !state) return;
+		const before = text.slice(0, Math.max(0, Math.min(offset, text.length)));
+		const lines = before.split("\n");
+		state.cursorLine = lines.length - 1;
+		const column = lines.at(-1)?.length ?? 0;
+		if (target.setCursorCol) target.setCursorCol(column);
+		else state.cursorCol = column;
+	};
+	const replaceText = (text: string, offset: number | undefined) => {
+		changingText = true;
+		try {
+			target.setText?.(text);
+		} finally {
+			changingText = false;
+		}
+		restoreCursor(text, offset);
+	};
 	const markerForPath = (path: string): string | undefined => {
 		const known = markersByPath.get(path);
 		if (known) return known;
@@ -156,8 +188,27 @@ export function installImagePreview(
 		markersByPath.set(path, marker);
 		return marker;
 	};
-	const ingest = (text: string) =>
-		text.replace(CLIPBOARD_IMAGE_PATH, (path) => markerForPath(path) ?? path);
+	const ingest = (text: string, cursor: number | undefined) => {
+		let mappedCursor = cursor;
+		let delta = 0;
+		const ingested = text.replace(
+			CLIPBOARD_IMAGE_PATH,
+			(path, offset: number) => {
+				const marker = markerForPath(path);
+				if (!marker) return path;
+				const end = offset + path.length;
+				const difference = marker.length - path.length;
+				if (cursor !== undefined) {
+					if (cursor >= end) mappedCursor = cursor + delta + difference;
+					else if (cursor > offset)
+						mappedCursor = offset + delta + marker.length;
+				}
+				delta += difference;
+				return marker;
+			},
+		);
+		return { text: ingested, cursor: mappedCursor };
+	};
 	const onChange = (text: string) => {
 		if (changingText) {
 			previousText = text;
@@ -182,18 +233,14 @@ export function installImagePreview(
 				const cleaned =
 					text.slice(0, markerStart) +
 					text.slice(markerStart + preview.marker.length - 1);
-				changingText = true;
-				target.setText?.(cleaned);
-				changingText = false;
+				replaceText(cleaned, markerStart);
 				return;
 			}
 		}
 
-		const ingested = ingest(text);
-		if (ingested !== text) {
-			changingText = true;
-			target.setText?.(ingested);
-			changingText = false;
+		const ingested = ingest(text, cursorOffset(text));
+		if (ingested.text !== text) {
+			replaceText(ingested.text, ingested.cursor);
 			return;
 		}
 		previousText = text;

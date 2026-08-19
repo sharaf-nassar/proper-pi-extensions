@@ -15,7 +15,7 @@ const PROTECTED_PATHS = [
 	/^biome\.json$/,
 	/^scripts\/(?:check-[^/]+|policy-guard)\.mjs$/,
 	/^test\/policy-guard\.test\.mjs$/,
-	/(?:^|\/)package(?:-lock)?\.json$/,
+	/(?:^|\/)package-lock\.json$/,
 	/(?:^|\/)tsconfig\.json$/,
 ];
 

@@ -13,7 +13,9 @@ agent guidance. Read that directory's `CLAUDE.md` before changing it.
 
 ## lat.md
 
-- Before coding: `lat search "<task>"` to find relevant design intent.
+- Before coding on this project's architecture, design, protocols, or
+  tests: `lat search "<task>"` to find the relevant design intent. Skip
+  it for unrelated, general, or tooling questions.
 - After changing behavior, architecture, or tests: update that package's
   section under root `lat.md/`, then run `lat check` from the repository root.
 - Syntax and section rules live in the `lat-md` skill, not here.

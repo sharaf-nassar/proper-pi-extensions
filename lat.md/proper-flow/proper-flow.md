@@ -6,7 +6,7 @@ proper-flow packages four Beads workflow prompts as one independently installabl
 
 The package owns `/triage`, `/file`, `/spec`, and `/implement-ready`, keeping workflow prompts versioned beside related Pi extensions instead of loose global files.
 
-The four commands form a pipeline. Triage selects the appropriate entry point, file investigates broken behavior, spec turns fuzzy scope into implement-ready beads, and implement-ready executes the ready frontier.
+The four commands form a pipeline. Triage selects the entry point, file investigates broken behavior, spec creates implement-ready beads, and implement-ready executes one task, an epic frontier, or the whole ready board.
 
 ## Resource boundary
 
@@ -23,6 +23,7 @@ The package keeps command identity and ownership predictable.
 3. The package is the only installed source for these four prompts; duplicate files under `~/.pi/agent/prompts/` are removed.
 4. Prompt responsibilities stay separate: routing, bug investigation, specification, then implementation.
 5. proper-llm-router owns command model pins; proper-flow does not duplicate routing configuration.
+6. `/implement-ready` resolves a task id or unique title to one exact bead and never refills that run with sibling board work.
 
 ## Documentation map
 

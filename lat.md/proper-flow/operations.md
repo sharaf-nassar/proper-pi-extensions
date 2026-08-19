@@ -20,6 +20,8 @@ Prompt execution depends on user-level workflow tools rather than npm dependenci
 
 The commands expect `bd`, formulas under `~/.beads/formulas/`, and the implementation rail at `~/.beads/rail/implement-ready.sh`. `/implement-ready` can use pi-subagents, while proper-llm-router independently supplies command pins and worker model routing.
 
+`/implement-ready` accepts an epic id, a task id or unique title, or `all`. Task titles resolve through Beads search. Single-task mode initializes the descendant-oriented rail with `all`, then filters every survey, dispatch, and report to the resolved task id.
+
 ## Validation
 
 Run the package check from `proper-flow/`.

@@ -4,23 +4,31 @@ Each `session_start` rebuilds the editor wrapper and seeds a bounded history ass
 
 ## Startup sequence
 
-Startup compacts the project store when needed, loads history, unwraps any prior proper-base wrapper, and installs a new factory around the current editor factory.
+Startup compacts the project store when needed, loads only recorder-captured history, unwraps any prior proper-base wrapper, and installs a new factory around the current editor factory.
 
-If another extension already provides an editor, that factory remains the base. Otherwise proper-base creates pi's `CustomEditor`. The seeded prompts are added oldest first so the first Up press returns the newest entry.
+If another extension already provides an editor, that factory remains the base. Otherwise proper-base creates pi's `CustomEditor`. A history guard captures the editor's original append method, blocks Pi's later session replay, and adds trusted store prompts oldest first so the first Up press returns the newest entry.
+
+## Automatic session title
+
+A fresh unnamed session asks the model to summarize the task in its first successful response, then applies that title through Pi's native session-name API.
+
+At `session_start`, proper-base enables title capture only when `pi.getSessionName()` is empty and the active branch has no assistant message. `before_agent_start` appends a short system instruction requiring a final `<session_title>` marker containing a plain 3–7 word title. Explicit names and resumed or forked branches with prior assistant output are never changed.
+
+A markdown transformer hides the marker as soon as it appears during streaming. On finalized assistant output, proper-base extracts at most 64 characters, removes C0 and C1 terminal control characters, and calls `pi.setSessionName()`. Pi then refreshes the terminal tab and session selector through its native `session_info_changed` path. The assistant message itself remains intact so provider text or thought signatures are preserved for future turns.
+
+Tool-use responses may defer the marker until the final response in the same agent run. An aborted or failed response leaves naming armed for a retry; a successful final response that omits the marker ends the attempt rather than adding the instruction to later user turns.
 
 ## Prompt sources
 
-History combines the private store with pi session files for the current working directory.
+History has one trusted source: the private recorder store for the current working directory.
 
-The store covers prompts from sessions pi never persisted. Session files preserve prompts from before installation and remain a fallback if the store is deleted. Sessions are read newest first, the live session file is skipped, and scanning stops after collecting 200 prompts.
-
-Failure to list or open sessions leaves store history available. Damaged sessions contribute no prompts instead of failing startup.
+Pi session messages are model-facing records. Skill invocations become `<skill>` blocks containing the full skill body, and prompt templates become their expanded bodies. Reading those messages cannot reconstruct exact user input, so proper-base never imports them and blocks Pi's initial transcript replay from adding them through `addToHistory()`.
 
 ## Prompt normalization
 
-Only user messages produce history entries.
+Only text captured by the editor's submission path can enter history.
 
-String content is used directly. Text parts are concatenated the same way pi builds live editor history, while non-text parts are ignored. Whitespace-only prompts are dropped. Skill-wrapper messages are reduced to the trailing text the user typed; a wrapper without trailing text is omitted.
+The recorder keeps exact outgoing text after display-only image markers expand to their source paths. Store writes trim outer whitespace and reject blank or oversized entries. Skill and prompt-template commands remain in their submitted slash-command form.
 
 ## Recallable submissions
 
@@ -32,15 +40,15 @@ The filter runs on append and again on the seeded result, so stores written befo
 
 ## Merge contract
 
-Sources merge by prompt text and timestamp rather than by source order.
+Recorded prompts order by timestamp before reaching the editor.
 
-A duplicate collapses onto its newest timestamp. Same-timestamp entries retain encounter order. Prompts already present in pi's live-session history are excluded, the newest 200 survive the limit, and the result is returned oldest first for `addToHistory()`.
+A duplicate collapses onto its newest timestamp. Same-timestamp entries retain encounter order, the newest 200 survive the limit, and the result is returned oldest first to the guard's trusted append method.
 
 ## Submission interception
 
 Recording wraps the editor instance's `onSubmit` property rather than relying on pi's input event.
 
-The property descriptor wraps both an existing handler and handlers assigned later by pi. A preparation step expands display-only image markers before recording and delegation, so history and Pi receive usable paths. Recording occurs before delegating so a downstream failure cannot lose the prompt, and the `Recallable submissions` filter decides whether the prepared text reaches the store. A symbol marker prevents recorder stacking when installation repeats.
+The property descriptor wraps both an existing handler and handlers assigned later by pi. A preparation step expands display-only image markers before recording and delegation, so history and Pi receive usable paths. Recording occurs before delegation and immediately appends the trusted text through the history guard; Pi's later `addToHistory()` call is ignored. The `Recallable submissions` filter decides whether the prepared text reaches the store, and symbol markers prevent wrapper stacking.
 
 The early-cancellation capture keeps its own narrower rule: any leading `/` or `!` disqualifies a submission from restore, regardless of whether history would recall it.
 
@@ -52,7 +60,7 @@ proper-base binds Pi's `app.clipboard.pasteImage` action to Ctrl+V and Ctrl+Shif
 
 proper-base does not enable Kitty rendering or change terminal image capabilities, including under `TERM_PROGRAM=Scribe`. The overlay contains plain text only.
 
-A one-character deletion inside an intact marker removes the whole marker and its path entry. Submission preparation expands every intact marker back to its source path before recorder storage and Pi dispatch, so agent input never receives the display-only tag. Preview state survives an unprocessed early cancellation, then clears once assistant processing begins or a normal turn settles.
+A one-character deletion inside an intact marker removes the whole marker and its path entry. Path-to-marker replacement maps the pre-rewrite cursor offset onto the shorter marker, while marker deletion restores the marker's former start offset; neither rewrite leaves the cursor at prompt end. Submission preparation expands every intact marker back to its source path before recorder storage and Pi dispatch, so agent input never receives the display-only tag. Preview state survives an unprocessed early cancellation, then clears once assistant processing begins or a normal turn settles.
 
 ## Autocomplete description pane
 
@@ -76,11 +84,11 @@ proper-base ensures both chords belong to `tui.input.newLine` while preserving o
 
 ## Prompt cursor navigation
 
-Home and End move through visible prompt rows and full-prompt boundaries in two stages.
+History recall starts at the prompt beginning, while Home and End retain two-stage row and prompt boundaries.
 
 For Home, proper-base reuses Pi's current visual-line map and render width. The first press moves to the start column of the current soft-wrapped row; a second press from that boundary moves to line 0, column 0. The same two-stage rule applies across hard-newline paragraphs, and Home at the full prompt start is a no-op.
 
-End retains its existing behavior: native Pi handling reaches the current logical line end, then a second press moves to the final column of the final line. Autocomplete keeps native handling, custom editors without Pi's visual-line state keep their own behavior, and Ctrl+Shift+Home/End remain fullscreen transcript actions.
+When Up or a dedicated previous-history binding changes the prompt text, proper-base places the cursor at line 0, column 0 after native handling. End retains its existing behavior: native Pi handling reaches the current logical line end, then a second press moves to the final column of the final line. Autocomplete keeps native handling, custom editors without Pi's state keep their own behavior, and Ctrl+Shift+Home/End remain fullscreen transcript actions.
 
 ## Pinned transcript scrolling
 
@@ -91,6 +99,14 @@ With `tuiMode` set to `fullscreen`, pi owns transcript scrolling while queued me
 Pi normally gives fullscreen transcript actions priority on unmodified Home, End, PageUp, and PageDown. The editor factory rewrites those four `tui.altScreen` action bindings on pi's shared keybinding manager to Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown. The unmodified and Shift-only keys therefore remain available to the terminal and pi's native editor actions.
 
 Pi reloads `keybindings.json` after extension `session_start` handlers, so proper-base wraps the manager's `reload()` method once and reapplies its four overrides after the native file load. The wrapper delegates through a symbol-stored mutable controller: hot reload replaces the controller's apply callback, preventing a closure from an older extension version from restoring obsolete bindings after the new `session_start`. A legacy boolean marker is upgraded by wrapping its stale reload handler so the newest apply pass runs last. Unrelated user bindings are preserved, repeated factory installation cannot stack current wrappers or drift values, and these four transcript bindings intentionally override user values while proper-base is active.
+
+## Jump-to-bottom button
+
+A scrolled-up viewport shows a clickable jump-to-bottom button on the row directly above the prompt.
+
+The editor's `render()` prepends one right-aligned inverse-video row reading `↓ jump to bottom` whenever the renderer reports a viewport that is not following output, falling back to a bare arrow on narrow terminals and to no row when even that cannot fit. The row belongs to the editor's own output rather than an overlay: any visible overlay entry disables Pi's scrollbar hit testing, which is the gesture in use while the button is on screen. The wrapper installs before the image-preview and autocomplete-detail wrappers so both overlay margins account for the extra row.
+
+Installation is skipped unless the renderer exposes the alternate-screen viewport surface, so regular mode, where the terminal owns scrolling, is untouched. Pi's alternate-screen renderer registers its own input listener in its constructor and consumes every mouse event, so the click listener moves itself to the front of the renderer's listener set. A left press or release inside the button's screen cells is consumed, and the press scrolls the viewport to the end; a renamed internal listener field leaves the button rendered but inert rather than breaking. The button's screen row is derived from the terminal height minus the editor rows and the rows below the editor, matching the overlay anchoring described under `Autocomplete description pane`.
 
 ## Footer presentation
 
@@ -123,6 +139,14 @@ The tool is provided by `@juicesharp/rpiv-ask-user-question`, which resolves Esc
 The same result also reports `cancelled` for host and validation failures, which additionally set `error`: no UI, an RPC host without custom rendering, rejected parameters, and questionnaire module-load failures. Those keep their normal delivery so the model can fall back to asking in plain text. Results from other tools and answered questionnaires are untouched.
 
 The handler is registered once at extension load rather than per `session_start`, so reload, resume, and fork cannot stack it.
+
+## Transient stream retry
+
+A `message_end` handler makes CLIProxyAPI's `empty_stream` failure retryable instead of turn-fatal.
+
+CLIProxyAPI can close a stream before the first payload; pi-ai surfaces this as a `Codex error: empty_stream: upstream stream closed before first payload` assistant error that matches none of pi's retryable patterns, so the turn dies. The handler rewrites such errored assistant messages with the `network error:` prefix, after which pi's normal retry budget and backoff apply.
+
+Matching is by error text alone, not provider ID, because the wording is CPA-specific. Already-prefixed messages pass through untouched, so the normalizer composes with the provider package's own `message_end` normalizer, which covers different patterns; pi chains `message_end` transforms across extensions in load order.
 
 ## Reload and composition
 

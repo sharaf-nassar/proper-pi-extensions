@@ -206,7 +206,8 @@ await handleAliasInput(
 assert.strictEqual(aliasSwitches, 1);
 
 // @lat: [[lat.md/proper-llm-router/tests#Config menu fixture]]
-// UI check: judge model, effort, and overrides share one top-level entry
+// UI check: judge model, effort, and fast share one top-level entry;
+// overrides is its own top-level entry
 let configHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
 llmRouter({
 	on() {},
@@ -239,7 +240,8 @@ assert.deepStrictEqual(
 	(menus[0] ?? []).filter((item) => item.startsWith("Judge")),
 	["Judge"],
 );
-assert.deepStrictEqual(menus[1] ?? [], ["Model", "Effort", "Overrides"]);
+assert.ok((menus[0] ?? []).includes("Overrides"));
+assert.deepStrictEqual(menus[1] ?? [], ["Model", "Effort", "Fast"]);
 
 // live check: full route() against the configured judge + CPA quota probe
 const task =

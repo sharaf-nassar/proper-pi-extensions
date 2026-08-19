@@ -1,20 +1,28 @@
 # Verification
 
-The package uses 64 `node:test` cases across history, editor, image markers, fullscreen, cancellation, footer, and filesystem behavior.
+The package uses 62 `node:test` cases across session naming, history, editor, image markers, fullscreen, cancellation, footer, and filesystem behavior.
+
+## Session-title fixture
+
+A session integration fixture verifies first-response naming without a second model request.
+
+It proves a fresh unnamed branch receives the title instruction, the streamed metadata marker stays hidden, terminal control characters are removed before `pi.setSessionName()`, and later turns stop receiving the instruction. Separate phases keep naming armed after an aborted response, stop after completed output omits metadata, and prove explicit names or branches with prior assistant output are never renamed.
 
 ## History fixtures
 
-History tests cover message extraction, text-part concatenation, trimming, malformed entries, timestamps, and skill-wrapper removal.
+History tests cover timestamp ordering, newest-timestamp deduplication, stable ties, entry caps, repeated editor-factory unwrapping, and the recallable-submission rule.
 
-They also verify newest-first session selection, live-session exclusion, cross-source timestamp interleaving, newest-timestamp deduplication, stable ties, live-prompt exclusion, entry caps, and repeated editor-factory unwrapping.
+The recall filter keeps plain text, prompt templates, and skills while excluding `/model <provider>/<id>`, `/new`, `/reload`, and extension commands. A guard fixture proves arbitrary session-replay text is rejected unless the recorder explicitly admits it.
 
-One case pins the recallable-submission rule: plain text, a prompt template with a task, and a skill command are recallable, while `/model <provider>/<id>`, `/new`, `/reload`, and an extension command are not.
+A session integration fixture seeds a raw `/skill:unslop` invocation from the store, attempts to replay its expanded `<skill>` body, and verifies only the raw command enters history. It then submits another skill invocation and proves the recorder adds that exact slash command immediately.
 
 ## Clipboard image fixture
 
 A session integration fixture verifies text-only image markers remain usable downstream.
 
 It starts with text-only capabilities, loads proper-base under `TERM_PROGRAM=Scribe`, and verifies capabilities remain unchanged. A real one-pixel PNG becomes `[image 1]`; a non-capturing overlay shows the marker and source path without Kitty escapes; submission expands the marker so Pi's downstream handler receives the original path.
+
+A focused cursor fixture uses a fake editor whose `setText()` moves to prompt end. It proves path-to-marker replacement restores the cursor after the marker and deleting one marker character removes the full marker while restoring its former start position.
 
 ## Recorder fixtures
 
@@ -36,7 +44,13 @@ An inline-command fixture verifies slash completion receives only the active com
 
 A session integration fixture applies the real Pi 0.84.2 `KeybindingsManager` to the installed editor factory.
 
-It verifies Ctrl+V and Ctrl+Shift+V both match Pi's clipboard paste action without removing an existing Alt+V alias. Shift+Enter and Alt+Enter both match prompt newline while other newline aliases survive, and Alt+Enter no longer matches follow-up queueing. Fullscreen transcript actions claim Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown instead of unmodified or Shift-only keys; the editor retains its native unmodified bindings; and modern modifier sequences match the intended actions. The same fixture verifies Home first reaches a soft-wrapped visible-row start and then the full prompt start, including across a hard newline, while End reaches the logical line end and then the full prompt end. It also proves native reload reapplies current bindings without losing unrelated user values, repeated installation remains idempotent, and the terminal writer stays untouched for Pi's native mouse handling.
+It verifies Ctrl+V and Ctrl+Shift+V both match Pi's clipboard paste action without removing an existing Alt+V alias. Shift+Enter and Alt+Enter both match prompt newline while other newline aliases survive, and Alt+Enter no longer matches follow-up queueing. Fullscreen transcript actions claim Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown instead of unmodified or Shift-only keys; the editor retains its native unmodified bindings; and modern modifier sequences match the intended actions. Navigation fixtures verify a recalled prompt ends at line 0, column 0; Home first reaches a soft-wrapped visible-row start and then the full prompt start, including across a hard newline; and End reaches the logical line end and then the full prompt end. They also prove native reload reapplies current bindings without losing unrelated user values, repeated installation remains idempotent, and the terminal writer stays untouched for Pi's native mouse handling.
+
+## Jump-to-bottom fixture
+
+A fake alternate-screen TUI verifies the button's visibility rule, geometry, and mouse priority.
+
+One case proves the extra row appears only while the viewport is scrolled away from output, spans the full width, shrinks to a bare arrow on a narrow terminal, and disappears when even the arrow cannot fit. A second case registers a renderer-style consuming listener first, then verifies the installed listener still receives a press on the button's computed row, scrolls to the end once, swallows the matching release, leaves a press on the prompt row to the renderer, and stops responding after disposal.
 
 ## Footer fixture
 
@@ -55,6 +69,12 @@ It submits through the wrapped editor, captures the accepted user entry, and pre
 A fixture drives the registered `tool_result` handler with synthetic tool results and records whether `ctx.abort()` was called.
 
 It verifies a dismissed questionnaire aborts, while an answered one, a failure envelope carrying `error`, a missing `details` object, and another tool's cancelled result all run on.
+
+## Transient retry fixture
+
+The transient-retry fixture verifies CLIProxyAPI transient stream errors become retryable without touching other messages.
+
+An errored assistant message whose text matches the CPA `empty_stream` pattern must return a copy whose `errorMessage` gains the `network error:` prefix pi treats as retryable. User messages, non-error stops, unrelated error text, and already-prefixed messages must pass through by reference so the `message_end` handler performs no transform.
 
 ## Store fixtures
 
@@ -80,6 +100,6 @@ Strict compiler and coverage gates keep test fixtures from hiding unsafe assumpt
 
 The suite does not instantiate pi or pi-tui's real interactive editor.
 
-The autocomplete, early-cancellation, fullscreen-keybinding, and footer fixtures run the extension's complete `session_start` callback against minimal fake API and component trees, and the questionnaire fixture calls its registered `tool_result` handler directly.
+The session-title, history-seeding, autocomplete, early-cancellation, fullscreen-keybinding, and footer fixtures run the extension's complete lifecycle callbacks against minimal fake API and component trees, and the questionnaire fixture calls its registered `tool_result` handler directly.
 
-Package discovery, real terminal modifier reporting, real terminal color fidelity, selection key handling, session listing failures, replacement footers, built-in modal selectors, and interaction with later-loaded extensions remain startup or manual integration checks. Pure history and storage modules cover the ordering and persistence rules that carry the highest regression risk.
+Package discovery, real terminal modifier reporting, real terminal color fidelity, selection key handling, replacement footers, built-in modal selectors, and interaction with later-loaded extensions remain startup or manual integration checks. Pure history and storage modules cover the ordering and persistence rules that carry the highest regression risk.

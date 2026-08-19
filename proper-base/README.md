@@ -1,6 +1,6 @@
 # proper-base
 
-Baseline behavior for [pi](https://pi.dev): cross-session prompt history, richer autocomplete, editable cancellation, fullscreen navigation, clipboard markers, and a compact color-coded footer.
+Baseline behavior for [pi](https://pi.dev): automatic session titles, cross-session prompt history, richer autocomplete, editable cancellation, fullscreen navigation, clipboard markers, and a compact color-coded footer.
 
 pi's Up/Down history covers the current session only. Start a new session in a project you have worked in for weeks and the editor history is empty. This extension seeds it with the prompts you typed in the other sessions recorded for the same working directory.
 
@@ -16,6 +16,12 @@ This package was renamed from the local `proper-customs` directory and the unpub
 
 ## Behaviour
 
+### Automatic session titles
+
+For a fresh unnamed session, proper-base asks the model to include a concise 3–7 word title in hidden metadata at the end of its first completed response. The extension applies it with Pi's native session-name API, so the terminal tab changes from `π - <directory>` to `π - <title> - <directory>` and `/resume` shows the same name.
+
+The metadata is hidden while streaming. Existing names and sessions that already contain an assistant response are never renamed. If the first response is aborted or errors, the next completed response gets the same title request.
+
 ### Prompt editing
 
 Shift+Enter and Alt+Enter both insert a new line in the prompt; Ctrl+J remains available too. proper-base removes Alt+Enter from Pi's follow-up queue action so the editor receives it.
@@ -29,6 +35,8 @@ Pi's native `fullscreen` TUI keeps queued messages, status, widgets, the prompt,
 proper-base does not duplicate Pi's transcript renderer. It removes inactive autocomplete detail overlays from Pi's overlay stack so switching between regular and fullscreen modes remains available.
 
 In fullscreen mode, Home, End, PageUp, and PageDown move within the prompt editor. Hold Ctrl+Shift with those keys to move the transcript above it: Ctrl+Shift+Home/End jump to the top/bottom, and Ctrl+Shift+PageUp/PageDown scroll by a page. Unrelated custom keybindings are preserved. Mouse selection, wheel scrolling, scrollbar dragging, and link clicks remain Pi's native behavior.
+
+Scrolling the transcript away from its end reveals a `↓ jump to bottom` button on the row directly above the prompt, right-aligned and drawn in inverse video. Clicking it returns the viewport to the newest output; it disappears again once the transcript follows output. The button is a rendered editor row rather than an overlay, so scrollbar dragging keeps working while it is visible.
 
 ### Footer colors
 
@@ -70,41 +78,28 @@ This covers skills, slash commands, and other editor autocomplete providers that
 
 ### Clipboard images
 
-Ctrl+V and Ctrl+Shift+V both invoke Pi's image-or-text clipboard paste action when the terminal forwards the chord. Pasting an image inserts a short `[image N]` marker and shows its source path in a full-width, non-capturing overlay above the prompt. Multiple paths stack vertically, and the overlay yields to autocomplete descriptions.
+Ctrl+V and Ctrl+Shift+V both invoke Pi's image-or-text clipboard paste action when the terminal forwards the chord. Pasting an image inserts a short `[image N]` marker at the cursor and shows its source path in a full-width, non-capturing overlay above the prompt. Deleting any character inside a marker removes that marker and leaves the cursor where it was. Multiple paths stack vertically, and the overlay yields to autocomplete descriptions.
 
 Kitty image rendering is intentionally disabled, including under Scribe, so proper-base never changes terminal image capabilities. On submit, every intact marker expands back to its source path before Pi's handler and prompt-history recorder receive it; agents therefore see the usable image path rather than the display-only marker.
 
 ### Prompt history
 
-Every prompt is recorded the moment you submit it, and the editor is seeded on `session_start` from two sources merged by timestamp:
+Every recallable prompt is recorded when you submit it. On `session_start`, the editor is seeded only from the private raw-input store at `~/.pi/agent/proper-history/--<cwd>--.jsonl`.
 
-1. **pi's session files** for the current cwd, which cover history from before you installed this and survive if the store is deleted.
-2. **A recorded store** at `~/.pi/agent/proper-history/--<cwd>--.jsonl`, which covers sessions pi never wrote to disk.
-
-The first press of Up gives your most recent prompt, whichever session you typed it in.
+Pi session messages are deliberately never used as history. Pi persists expanded skill bodies and prompt-template bodies there, not the slash command the user typed. proper-base also blocks Pi's startup replay from adding those transformed messages to the editor. The first press of Up therefore returns raw user input, with the cursor at its beginning.
 
 ### Why a store is needed
 
-pi does not create a session file until the session receives its first assistant message. From `session-manager.js`:
-
-```js
-const hasAssistant = this.fileEntries.some(
-    (e) => e.type === "message" && e.message.role === "assistant");
-if (!hasAssistant) { /* nothing reaches disk */ }
-```
-
-This is deliberate, so that opening pi and quitting does not litter `/resume` with empty sessions. The side effect is that a session spent entirely on slash commands leaves no trace. Reading session files alone would lose all of it.
-
-Recording happens on the editor's `onSubmit`, which is the only hook that sees everything. pi's `input` event fires after built-in commands return and after extension commands are dispatched, so `/resume` and `/piolium-help` never reach it.
+The editor's `onSubmit` is the only source that sees the exact outgoing text before Pi expands skills and prompt templates. Pi's `input` event fires too late for built-in and extension commands, while session messages contain transformed model input. The private store records the trusted pre-expansion text immediately.
 
 ### Details worth knowing
 
 - Scope is the working directory, matching how pi already buckets sessions. Two projects never see each other's prompts.
-- Prompts pi seeds itself from the live session are excluded, so `/resume` does not list everything twice.
+- Pi's startup history replay is ignored; only entries captured by proper-base's submit recorder can enter history.
 - Duplicates collapse onto their most recent timestamp, so a prompt you run often stays near the top instead of filling the list.
-- Skill invocations are unwrapped to the prompt you typed. pi stores those as a `<skill>` block wrapping the whole skill body, and recalling that blob is useless.
-- 200 prompts is the cap. Sessions are read newest first and reading stops once the cap is met, so a project with hundreds of sessions does not pay to parse all of them at startup.
-- A damaged session file or store line is skipped instead of breaking startup.
+- Skill and prompt-template invocations remain exactly as submitted, such as `/skill:unslop clean this up` or `/implement-ready task-name`.
+- 200 prompts is the cap.
+- A damaged store line is skipped instead of breaking startup.
 
 ### The store
 
@@ -138,7 +133,7 @@ npm run test:coverage
 
 ## Alternatives
 
-- [`pi-input-history`](https://www.npmjs.com/package/pi-input-history) also seeds from sessions in the cwd and adds a Ctrl+R fuzzy reverse search. It reads session files only, so it loses everything pi does not persist. It also does not exclude the live session or unwrap skill blocks, and its editor wrapper stacks on repeated `session_start`.
+- [`pi-input-history`](https://www.npmjs.com/package/pi-input-history) also seeds from sessions in the cwd and adds a Ctrl+R fuzzy reverse search. Reading session messages can surface expanded skill and prompt-template bodies instead of raw user input; proper-base deliberately refuses that source.
 - [`pi-history`](https://www.npmjs.com/package/pi-history) keeps its own append store, which survives session deletion, and offers a global scope plus ghost completion.
 - [`@zigai/pi-prompt-history`](https://www.npmjs.com/package/@zigai/pi-prompt-history) restores current-session history only, deliberately isolated from other sessions in the same project.
 

@@ -28,6 +28,7 @@ test("policy guard blocks validation edits and suppression shortcuts", () => {
 	assert.equal(isProtectedPolicyPath(".pre-commit-config.yaml"), true);
 	assert.equal(isProtectedPolicyPath("proper-base/tsconfig.json"), true);
 	assert.equal(isProtectedPolicyPath("proper-base/package-lock.json"), true);
+	assert.equal(isProtectedPolicyPath("proper-base/package.json"), false);
 	assert.equal(isProtectedPolicyPath("CLAUDE.md"), true);
 	assert.equal(isProtectedPolicyPath("scripts/check-repo.mjs"), true);
 	assert.equal(isProtectedPolicyPath("proper-base/src/history.ts"), false);

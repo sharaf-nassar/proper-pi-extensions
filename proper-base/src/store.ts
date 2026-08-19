@@ -1,10 +1,9 @@
 /**
  * Append-only prompt store.
  *
- * pi does not write a session file until the session receives its first
- * assistant message (`session-manager.js:_persist`), so a session spent on
- * slash commands leaves nothing on disk. This store records every submitted
- * prompt immediately, independent of whether pi keeps the session.
+ * Pi session messages contain expanded skills and prompt templates rather than
+ * exact editor input. This store records each recallable submitted prompt
+ * immediately, before those transformations.
  *
  * One file per project, append-only JSONL. Concurrent pi sessions in the same
  * project append to the same file, so entries are written as a single small

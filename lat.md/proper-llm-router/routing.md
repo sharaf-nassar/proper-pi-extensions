@@ -47,7 +47,7 @@ The request requires `harness`, `model`, and `rationale`, rejects extra fields, 
 
 The router trusts the parsed response rather than validating it locally. It does not verify that `harness` agrees with the selected slot. A quota swap recomputes the harness from the partner slot, while a known-arm override recomputes it from the target; an arbitrary target keeps the judge's value.
 
-The router adds `reasoning_effort` only when configured. It makes at most two 60-second attempts. Empty content, invalid JSON, HTTP errors, and transport errors consume an attempt; user cancellation does not.
+The router adds `reasoning_effort` only when configured and adds `service_tier: "priority"` only when `judge.fast` is enabled; whether that tier takes effect is up to the endpoint and model. It makes at most two 60-second attempts. Empty content, invalid JSON, HTTP errors, and transport errors consume an attempt; user cancellation does not.
 
 ## Direct routes
 

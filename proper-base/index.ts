@@ -6,9 +6,8 @@
  * editor from the other sessions recorded for the same working directory, and
  * records every prompt as you submit it.
  *
- * Recording matters because pi does not create a session file until the session
- * receives its first assistant message. A session spent on slash commands
- * leaves nothing behind, so session files alone are not a complete record.
+ * The editor submit path is the only trusted source: Pi session messages store
+ * expanded skills and prompt templates rather than the exact outgoing input.
  */
 
 import {
@@ -16,7 +15,6 @@ import {
 	type ExtensionAPI,
 	type ExtensionContext,
 	getAgentDir,
-	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 
 import {
@@ -28,19 +26,17 @@ import {
 import { installEditorNavigation } from "./src/editor-navigation.ts";
 import { installFooterColors } from "./src/footer-colors.ts";
 import {
-	extractPrompts,
 	isRecallable,
-	livePromptTexts,
 	mergePrompts,
-	type Prompt,
 	resolveBase,
-	selectSessions,
 	WRAPPED,
 } from "./src/history.ts";
+import { type HistoryGuard, installHistoryGuard } from "./src/history-guard.ts";
 import {
 	type ImagePreviewController,
 	installImagePreview,
 } from "./src/image-preview.ts";
+import { installJumpToBottom } from "./src/jump-to-bottom.ts";
 import { installRecorder } from "./src/recorder.ts";
 import {
 	appendPrompt,
@@ -48,11 +44,16 @@ import {
 	readPrompts,
 	storePath,
 } from "./src/store.ts";
+import { normalizeCpaTransientError } from "./src/transient-retry.ts";
 
 /** Prompts seeded into the editor. Older prompts past this point are dropped. */
 const MAX_ENTRIES = 200;
 const CANCEL_PROMPT_COMMAND = "__proper-cancel-prompt";
 const CANCEL_ANCHOR = "proper-cancel-anchor";
+const SESSION_TITLE_INSTRUCTION = `At the end of your first assistant response, add exactly one line in this format: <session_title>concise 3-7 word task title</session_title>. Use plain text without quotes or terminal control characters. This is hidden session metadata; do not mention it.`;
+const SESSION_TITLE_PATTERN = /\s*<session_title>([^<]*)<\/session_title>\s*$/i;
+const SESSION_TITLE_DISPLAY_PATTERN = /\s*<session_title>[\s\S]*$/i;
+const SESSION_TITLE_MAX_LENGTH = 64;
 
 type EditorFactory = NonNullable<
 	ReturnType<ExtensionContext["ui"]["getEditorComponent"]>
@@ -148,8 +149,23 @@ type RestoreRequest = { entryId: string };
  */
 type QuestionnaireDetails = { cancelled?: boolean; error?: string };
 
+function extractSessionTitle(text: string): string | undefined {
+	const match = SESSION_TITLE_PATTERN.exec(text);
+	if (!match) return undefined;
+
+	return (
+		(match[1] ?? "")
+			.replace(/\p{Cc}/gu, " ")
+			.replace(/\s+/g, " ")
+			.trim()
+			.slice(0, SESSION_TITLE_MAX_LENGTH)
+			.trim() || undefined
+	);
+}
+
 export default function (pi: ExtensionAPI) {
 	let removeFooterColors: (() => void) | undefined;
+	let removeJumpToBottom: (() => void) | undefined;
 	let imagePreview: ImagePreviewController | undefined;
 	let removeTerminalInput: (() => void) | undefined;
 	let activeEditor: PromptEditor | undefined;
@@ -157,6 +173,12 @@ export default function (pi: ExtensionAPI) {
 	let submittedPrompt: string | undefined;
 	let pendingPrompt: PendingPrompt | undefined;
 	let restoreRequest: RestoreRequest | undefined;
+	let sessionTitlePending = false;
+
+	pi.registerMarkdownTransformer?.((markdown, context) => {
+		if (context.messageType !== "assistant") return markdown;
+		return markdown.replace(SESSION_TITLE_DISPLAY_PATTERN, "");
+	});
 
 	const findPendingEntry = (ctx: ExtensionContext) => {
 		if (!pendingPrompt?.messageTimestamp) return undefined;
@@ -227,6 +249,52 @@ export default function (pi: ExtensionAPI) {
 		if (pendingPrompt) pendingPrompt.processed = true;
 	});
 
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Automatic session title]]
+	pi.on("before_agent_start", (event) => {
+		if (!sessionTitlePending || pi.getSessionName?.()) {
+			sessionTitlePending = false;
+			return;
+		}
+		return {
+			systemPrompt: `${event.systemPrompt}\n\n${SESSION_TITLE_INSTRUCTION}`,
+		};
+	});
+
+	pi.on("message_end", (event) => {
+		const normalized = normalizeCpaTransientError(event.message);
+		if (normalized !== event.message) return { message: normalized };
+	});
+
+	pi.on("message_end", (event) => {
+		if (
+			!sessionTitlePending ||
+			event.message.role !== "assistant" ||
+			event.message.stopReason === "aborted" ||
+			event.message.stopReason === "error" ||
+			pi.getSessionName?.()
+		) {
+			return;
+		}
+
+		const title = event.message.content.find(
+			(part) => part.type === "text" && extractSessionTitle(part.text),
+		);
+		if (title?.type !== "text") {
+			if (
+				event.message.stopReason === "stop" ||
+				event.message.stopReason === "length"
+			) {
+				sessionTitlePending = false;
+			}
+			return;
+		}
+		const extracted = extractSessionTitle(title.text);
+		if (!extracted) return;
+
+		sessionTitlePending = false;
+		pi.setSessionName?.(extracted);
+	});
+
 	pi.on("tool_execution_start", () => {
 		if (pendingPrompt) pendingPrompt.processed = true;
 	});
@@ -267,6 +335,8 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_shutdown", () => {
 		removeFooterColors?.();
 		removeFooterColors = undefined;
+		removeJumpToBottom?.();
+		removeJumpToBottom = undefined;
 		imagePreview?.dispose();
 		imagePreview = undefined;
 		removeTerminalInput?.();
@@ -276,9 +346,18 @@ export default function (pi: ExtensionAPI) {
 		submittedPrompt = undefined;
 		pendingPrompt = undefined;
 		restoreRequest = undefined;
+		sessionTitlePending = false;
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
+		sessionTitlePending =
+			!pi.getSessionName?.() &&
+			!ctx.sessionManager
+				.getBranch()
+				.some(
+					(entry) =>
+						entry.type === "message" && entry.message.role === "assistant",
+				);
 		submittedPrompt = undefined;
 		pendingPrompt = undefined;
 		restoreRequest = undefined;
@@ -318,11 +397,15 @@ export default function (pi: ExtensionAPI) {
 
 		// Stores written before command filtering still hold UI commands.
 		const commands = pi.getCommands();
-		const seeded = (
-			await loadHistory(ctx.cwd, store, ctx.sessionManager)
-		).filter((text) => isRecallable(text, commands));
+		const seeded = mergePrompts([readPrompts(store)], MAX_ENTRIES).filter(
+			(text) => isRecallable(text, commands),
+		);
+		let historyGuard: HistoryGuard | undefined;
 		const record = (text: string, sourceText: string) => {
-			if (isRecallable(text, pi.getCommands())) appendPrompt(store, text);
+			if (isRecallable(text, pi.getCommands())) {
+				appendPrompt(store, text);
+				historyGuard?.add(text);
+			}
 			if (
 				!sourceText.trimStart().startsWith("/") &&
 				!sourceText.trimStart().startsWith("!")
@@ -341,6 +424,9 @@ export default function (pi: ExtensionAPI) {
 				new CustomEditor(tui, theme, keybindings);
 			activeEditor = editor as PromptEditor;
 			activeTui = tui;
+			historyGuard = installHistoryGuard(editor);
+			removeJumpToBottom?.();
+			removeJumpToBottom = installJumpToBottom(editor, tui);
 			imagePreview?.dispose();
 			imagePreview = installImagePreview(editor, tui, ctx);
 			installEditorNavigation(editor, keybindings);
@@ -354,62 +440,11 @@ export default function (pi: ExtensionAPI) {
 			installAutocompleteDetails(editor, tui, theme);
 			removeFooterColors?.();
 			removeFooterColors = installFooterColors(tui, ctx);
-			for (const prompt of seeded) editor.addToHistory?.(prompt);
+			for (const prompt of seeded) historyGuard?.add(prompt);
 			return editor;
 		};
 		factory[WRAPPED] = base ?? null;
 
 		ctx.ui.setEditorComponent(factory);
 	});
-}
-
-/**
- * Prompts to seed, oldest first.
- *
- * Two sources are merged. Session files carry history from before this
- * extension was installed and survive if the store is deleted. The store covers
- * sessions pi never wrote to disk. Prompts pi seeds itself from the live
- * session are excluded so they are not listed twice.
- */
-async function loadHistory(
-	cwd: string,
-	store: string,
-	sessionManager: ExtensionContext["sessionManager"],
-): Promise<string[]> {
-	const sources: Prompt[][] = [readPrompts(store)];
-
-	try {
-		const sessions = selectSessions(
-			await SessionManager.list(cwd),
-			sessionManager.getSessionFile(),
-		);
-		let collected = 0;
-		for (const session of sessions) {
-			if (collected >= MAX_ENTRIES) break;
-			const prompts = readSession(session.path);
-			if (prompts.length === 0) continue;
-			sources.push(prompts);
-			collected += prompts.length;
-		}
-	} catch {
-		// Seed from the store alone if the session directory cannot be read.
-	}
-
-	let live: Set<string>;
-	try {
-		live = livePromptTexts(sessionManager.getBranch());
-	} catch {
-		live = new Set();
-	}
-
-	return mergePrompts(sources, MAX_ENTRIES, live);
-}
-
-/** Read one session file. A damaged session is skipped rather than failing startup. */
-function readSession(path: string): Prompt[] {
-	try {
-		return extractPrompts(SessionManager.open(path).getEntries());
-	} catch {
-		return [];
-	}
 }

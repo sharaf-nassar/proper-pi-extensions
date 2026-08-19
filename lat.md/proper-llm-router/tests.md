@@ -22,6 +22,14 @@ The usage rate-limit fixture verifies that a definitive upstream 429 blocks the 
 
 `test/quota-rate-limit.test.ts` runs the real `armAvailability()` path with CPA HTTP responses stubbed at the external boundary. A Claude usage 429 must make Claude arms unavailable at an 80% threshold while leaving listed Codex arms available.
 
+## Judge fast fixture
+
+The judge fast fixture verifies that `judge.fast` controls the `service_tier` field on the judge request.
+
+`test/judge-fast.test.ts` asserts the loaded default is off, then runs the real `route()` path with the CPA listing and judge completion stubbed at the fetch boundary. With `judge.fast` enabled the captured judge body must carry `service_tier: "priority"`; with defaults it must omit the field entirely.
+
+A companion fixture exercises `judgeFastSupported()` on a static catalog: a populated `service_tiers` array is supported, an empty or missing array is unsupported, and an unlisted model returns null. The toggle-time warning path in the config menu remains integration-only.
+
 ## Swap fixtures
 
 The swap fixtures build a complete availability map with selected arms marked down.
@@ -64,7 +72,7 @@ It verifies that an extension-origin first input switches away from `llm-router/
 
 The config-menu fixture registers the extension against a minimal pi API and records the real command handler's select menus.
 
-It verifies that the top-level menu has one `Judge` entry and that entry opens `Model`, `Effort`, and `Overrides` choices. The fixture stubs only the management-key HTTP probe and exits before any picker performs provider work or writes config.
+It verifies that the top-level menu has one `Judge` entry plus a top-level `Overrides` entry, and that the `Judge` entry opens `Model`, `Effort`, and `Fast` choices. The fixture stubs only the management-key HTTP probe and exits before any picker performs provider work or writes config.
 
 ## Ultra compatibility fixtures
 

@@ -8,12 +8,74 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { getCapabilities, setCapabilities } from "@earendil-works/pi-tui";
 import properBase from "../index.ts";
 import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
+import { installImagePreview } from "../src/image-preview.ts";
 import { readPrompts, storePath } from "../src/store.ts";
 
 const PNG_1X1 = Buffer.from(
 	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=",
 	"base64",
 );
+
+test("image marker rewrites preserve the cursor location", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "proper-base-image-cursor-"));
+	const imagePath = join(
+		dir,
+		"pi-clipboard-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.png",
+	);
+	await writeFile(imagePath, PNG_1X1);
+	let text = "before  after";
+	const state = { lines: [text], cursorLine: 0, cursorCol: 7 };
+	const editor = {
+		state,
+		onChange: undefined as ((value: string) => void) | undefined,
+		getText: () => text,
+		getCursor: () => ({ line: state.cursorLine, col: state.cursorCol }),
+		setCursorCol(column: number) {
+			state.cursorCol = column;
+		},
+		setText(value: string) {
+			text = value;
+			state.lines = value.split("\n");
+			state.cursorLine = state.lines.length - 1;
+			state.cursorCol = state.lines.at(-1)?.length ?? 0;
+			this.onChange?.(value);
+		},
+		insertTextAtCursor(value: string) {
+			text =
+				text.slice(0, state.cursorCol) + value + text.slice(state.cursorCol);
+			state.lines = [text];
+			state.cursorCol += value.length;
+			this.onChange?.(text);
+		},
+		render: () => [text],
+		invalidate() {},
+	};
+	const tui = {
+		children: [editor],
+		terminal: { rows: 24 },
+		showOverlay() {
+			return { hide() {} };
+		},
+	};
+
+	try {
+		installImagePreview(editor, tui as never, {} as never);
+		editor.insertTextAtCursor(imagePath);
+		assert.equal(text, "before [image 1] after");
+		assert.deepEqual(editor.getCursor(), { line: 0, col: 16 });
+
+		const markerStart = text.indexOf("[image 1]");
+		const deletion = markerStart + 4;
+		text = text.slice(0, deletion) + text.slice(deletion + 1);
+		state.lines = [text];
+		state.cursorCol = deletion;
+		editor.onChange?.(text);
+		assert.equal(text, "before  after");
+		assert.deepEqual(editor.getCursor(), { line: 0, col: markerStart });
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
 
 test("clipboard image markers show paths and expand before submission", async () => {
 	const cwd = await mkdtemp(join(tmpdir(), "proper-base-image-preview-"));

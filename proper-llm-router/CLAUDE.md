@@ -7,7 +7,9 @@ Beads (`bd`). Context loads via the SessionStart hook in
 
 ## lat.md
 
-- Before coding: `lat search "<task>"` to find the relevant design intent.
+- Before coding on this project's architecture, design, protocols, or
+  tests: `lat search "<task>"` to find the relevant design intent. Skip
+  it for unrelated, general, or tooling questions.
 - After changing behavior, architecture, or tests: update
   `../lat.md/proper-llm-router/`, then run `lat check` from the repository root.
 - Syntax and section rules live in the `lat-md` skill, not here.

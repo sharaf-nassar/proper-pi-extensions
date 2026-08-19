@@ -27,7 +27,8 @@ no runtime extension entrypoint or dependency tree.
   `implement-ready.md` define their slash-command names.
 - Preserve `description` and `argument-hint` frontmatter for autocomplete.
 - Keep routing responsibilities separate: triage chooses a flow, file
-  investigates bugs, spec refines scope, and implement-ready executes beads.
+  investigates bugs, spec refines scope, and implement-ready executes one task,
+  an epic frontier, or the whole board.
 - `spec.md` is twin-maintained with the Claude command and Codex skill named in
   that prompt; mirror substantive workflow changes across all copies.
 - Shared Beads formulas and the implementation rail remain external user tools,

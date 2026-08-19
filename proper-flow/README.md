@@ -9,7 +9,7 @@ Workflow prompt templates for [pi](https://pi.dev) and [Beads](https://github.co
 | `/triage` | Route a request to direct filing, bug investigation, or specification. |
 | `/file` | Reproduce a bug, identify its root cause, and file implementation-ready beads. |
 | `/spec` | Run the global `speckit` formula from an idea, epic, or backlog issue. |
-| `/implement-ready` | Orchestrate ready beads through the shared implementation rail. |
+| `/implement-ready` | Implement one task, an epic's ready frontier, or all ready beads through the shared rail. |
 
 `/constitution` remains a separate global governance prompt and is not part of this package.
 
