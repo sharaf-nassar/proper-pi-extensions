@@ -20,7 +20,7 @@ The management key comes from `cpaManagementKey`, then from the environment vari
 
 For Claude, the router calls `api.anthropic.com/api/oauth/usage`. It records the maximum account-wide percentage and maps weekly model windows from named fields and `limits[]` entries to Claude arms. Unscoped `limits[]` values can also raise the account-wide figure; Haiku depends on the display-name mapping because it has no named window key.
 
-For Codex, the router calls `chatgpt.com/backend-api/wham/usage`. It records the maximum `used_percent` or `usedPercent` across `rate_limit`, with `rate_limits` accepted as a compatibility fallback. All Codex arms share that account-wide value.
+For Codex, the router calls `chatgpt.com/backend-api/wham/usage`. It records the maximum `used_percent` or `usedPercent` across `rate_limit`, with `rate_limits` accepted as a compatibility fallback. When the `rate_limit` object reports `allowed: false` or `limit_reached: true`, the account counts as 100% regardless of window percentages, because burst throttles reject chat requests while `used_percent` is still low. All Codex arms share that account-wide value.
 
 An upstream 429 is definitive exhaustion, so that credential contributes 100% account-wide usage instead of being dropped. Other failed credential probes are dropped. A successful 2xx response with no recognized usage fields still becomes a zero-valued account, which can lower the lane average and prevents the gate from being marked skipped. If no credential returns any parsed account object, the threshold gate has no data and must not block an arm.
 

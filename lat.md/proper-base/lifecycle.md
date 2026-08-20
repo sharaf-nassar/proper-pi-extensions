@@ -60,7 +60,7 @@ proper-base binds Pi's `app.clipboard.pasteImage` action to Ctrl+V and Ctrl+Shif
 
 proper-base does not enable Kitty rendering or change terminal image capabilities, including under `TERM_PROGRAM=Scribe`. The overlay contains plain text only.
 
-A one-character deletion inside an intact marker removes the whole marker and its path entry. Path-to-marker replacement maps the pre-rewrite cursor offset onto the shorter marker, while marker deletion restores the marker's former start offset; neither rewrite leaves the cursor at prompt end. Submission preparation expands every intact marker back to its source path before recorder storage and Pi dispatch, so agent input never receives the display-only tag. Preview state survives an unprocessed early cancellation, then clears once assistant processing begins or a normal turn settles.
+A one-character deletion inside an intact marker removes the whole marker and its path entry. Path-to-marker replacement maps the pre-rewrite cursor offset onto the shorter marker, while marker deletion restores the marker's former start offset; neither rewrite leaves the cursor at prompt end. When history recall supplies an image path, replacement updates Pi's active history state in place instead of calling its public `setText()`, which would exit history browsing and make repeated Up presses recall the same entry. Submission preparation expands every intact marker back to its source path before recorder storage and Pi dispatch, so agent input never receives the display-only tag. Preview state survives an unprocessed early cancellation, then clears once assistant processing begins or a normal turn settles.
 
 ## Autocomplete description pane
 

@@ -22,6 +22,8 @@ The usage rate-limit fixture verifies that a definitive upstream 429 blocks the 
 
 `test/quota-rate-limit.test.ts` runs the real `armAvailability()` path with CPA HTTP responses stubbed at the external boundary. A Claude usage 429 must make Claude arms unavailable at an 80% threshold while leaving listed Codex arms available.
 
+`test/quota-burst-throttle.test.ts` covers the burst-throttle variant in its own file because `armAvailability()` caches usage in module state and each test file gets its own process. A Codex usage body with `allowed: false` and `limit_reached: true` but only 70% window usage must block Codex arms at an 80% threshold while leaving listed Claude arms available.
+
 ## Judge fast fixture
 
 The judge fast fixture verifies that `judge.fast` controls the `service_tier` field on the judge request.

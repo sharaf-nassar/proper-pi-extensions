@@ -1,6 +1,6 @@
 # Verification
 
-The package uses 62 `node:test` cases across session naming, history, editor, image markers, fullscreen, cancellation, footer, and filesystem behavior.
+The package uses 65 `node:test` cases across session naming, history, editor, image markers, fullscreen, cancellation, footer, and filesystem behavior.
 
 ## Session-title fixture
 
@@ -22,7 +22,7 @@ A session integration fixture verifies text-only image markers remain usable dow
 
 It starts with text-only capabilities, loads proper-base under `TERM_PROGRAM=Scribe`, and verifies capabilities remain unchanged. A real one-pixel PNG becomes `[image 1]`; a non-capturing overlay shows the marker and source path without Kitty escapes; submission expands the marker so Pi's downstream handler receives the original path.
 
-A focused cursor fixture uses a fake editor whose `setText()` moves to prompt end. It proves path-to-marker replacement restores the cursor after the marker and deleting one marker character removes the full marker while restoring its former start position.
+A focused cursor fixture uses a fake editor whose `setText()` moves to prompt end. It proves path-to-marker replacement restores the cursor after the marker and deleting one marker character removes the full marker while restoring its former start position. A history fixture recalls an image prompt followed by an older plain prompt and verifies marker replacement does not reset Pi's history index, so repeated Up presses keep moving backward.
 
 ## Recorder fixtures
 
@@ -98,8 +98,8 @@ Strict compiler and coverage gates keep test fixtures from hiding unsafe assumpt
 
 ## Coverage boundary
 
-The suite does not instantiate pi or pi-tui's real interactive editor.
+The suite does not instantiate pi; one image-history fixture instantiates pi-tui's real `Editor` while lifecycle fixtures use minimal fakes.
 
-The session-title, history-seeding, autocomplete, early-cancellation, fullscreen-keybinding, and footer fixtures run the extension's complete lifecycle callbacks against minimal fake API and component trees, and the questionnaire fixture calls its registered `tool_result` handler directly.
+The image-history fixture exercises native history state and Up handling. Session-title, history-seeding, autocomplete, early-cancellation, fullscreen-keybinding, and footer fixtures run the extension's complete lifecycle callbacks against minimal fake API and component trees, and the questionnaire fixture calls its registered `tool_result` handler directly.
 
 Package discovery, real terminal modifier reporting, real terminal color fidelity, selection key handling, replacement footers, built-in modal selectors, and interaction with later-loaded extensions remain startup or manual integration checks. Pure history and storage modules cover the ordering and persistence rules that carry the highest regression risk.

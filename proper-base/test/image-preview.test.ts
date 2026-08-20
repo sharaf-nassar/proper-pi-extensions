@@ -5,9 +5,14 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { getCapabilities, setCapabilities } from "@earendil-works/pi-tui";
+import {
+	Editor,
+	getCapabilities,
+	setCapabilities,
+} from "@earendil-works/pi-tui";
 import properBase from "../index.ts";
 import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
+import { installEditorNavigation } from "../src/editor-navigation.ts";
 import { installImagePreview } from "../src/image-preview.ts";
 import { readPrompts, storePath } from "../src/store.ts";
 
@@ -72,6 +77,52 @@ test("image marker rewrites preserve the cursor location", async () => {
 		editor.onChange?.(text);
 		assert.equal(text, "before  after");
 		assert.deepEqual(editor.getCursor(), { line: 0, col: markerStart });
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("recalled image prompts keep history browsing active", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "proper-base-image-history-"));
+	const imagePath = join(
+		dir,
+		"pi-clipboard-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.png",
+	);
+	await writeFile(imagePath, PNG_1X1);
+	const tui = {
+		children: [] as unknown[],
+		terminal: { rows: 24 },
+		requestRender() {},
+		showOverlay() {
+			return { hide() {} };
+		},
+	};
+	const editor = new Editor(
+		tui as never,
+		{ borderColor: (value: string) => value, selectList: {} } as never,
+	);
+	tui.children.push(editor);
+	editor.addToHistory("older prompt");
+	editor.addToHistory(`inspect ${imagePath}`);
+	const keybindings = new KeybindingsManager();
+
+	try {
+		installImagePreview(editor, tui as never, {} as never);
+		installEditorNavigation(editor, keybindings);
+
+		editor.handleInput("\x1b[A");
+		assert.equal(editor.getText(), "inspect [image 1]");
+		assert.equal(
+			(editor as unknown as { historyIndex: number }).historyIndex,
+			0,
+		);
+
+		editor.handleInput("\x1b[A");
+		assert.equal(editor.getText(), "older prompt");
+		assert.equal(
+			(editor as unknown as { historyIndex: number }).historyIndex,
+			1,
+		);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

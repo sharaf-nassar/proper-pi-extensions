@@ -796,6 +796,12 @@ async function accountUsages(cfg: Config): Promise<AccountUsage[] | null> {
 				const windows = asRecord(
 					bodyRecord?.rate_limit ?? bodyRecord?.rate_limits,
 				);
+				// burst throttles 429 chat requests while used_percent stays low
+				// (observed live: weekly window 70% during "would exceed your
+				// account's rate limit"); the endpoint flags those states via
+				// the allowed/limit_reached booleans instead
+				if (windows?.allowed === false || windows?.limit_reached === true)
+					general = 100;
 				for (const value of Object.values(windows ?? {})) {
 					const window = asRecord(value);
 					const used = window?.used_percent ?? window?.usedPercent;

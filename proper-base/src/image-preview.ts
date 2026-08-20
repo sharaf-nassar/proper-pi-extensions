@@ -23,7 +23,8 @@ type PreviewEditor = Component & {
 	getText?(): string;
 	setText?(text: string): void;
 	getCursor?(): { line: number; col: number };
-	state?: { cursorLine: number; cursorCol: number };
+	state?: { lines?: string[]; cursorLine: number; cursorCol: number };
+	historyIndex?: number;
 	setCursorCol?(column: number): void;
 	onChange?: (text: string) => void;
 	autocompleteList?: {
@@ -166,6 +167,15 @@ export function installImagePreview(
 		else state.cursorCol = column;
 	};
 	const replaceText = (text: string, offset: number | undefined) => {
+		const state = target.state;
+		if ((target.historyIndex ?? -1) >= 0 && state?.lines) {
+			state.lines = text.split("\n");
+			restoreCursor(text, offset);
+			previousText = text;
+			sync(text);
+			handler?.(text);
+			return;
+		}
 		changingText = true;
 		try {
 			target.setText?.(text);
