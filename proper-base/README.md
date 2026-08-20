@@ -1,6 +1,6 @@
 # proper-base
 
-Baseline behavior for [pi](https://pi.dev): automatic session titles, cross-session prompt history, richer autocomplete, editable cancellation, fullscreen navigation, clipboard markers, and a compact color-coded footer.
+Baseline behavior for [pi](https://pi.dev): a quiet settled transcript, automatic session titles, cross-session prompt history, richer autocomplete, editable cancellation, fullscreen navigation, clipboard markers, and a compact color-coded footer.
 
 pi's Up/Down history covers the current session only. Start a new session in a project you have worked in for weeks and the editor history is empty. This extension seeds it with the prompts you typed in the other sessions recorded for the same working directory.
 
@@ -15,6 +15,14 @@ pi install /path/to/proper-pi-extensions/proper-base
 This package was renamed from the local `proper-customs` directory and the unpublished `pi-proper-customs` package identity. Update existing local installs to the `proper-base` path and keep only one registration. The former history-only package remains available as `npm:pi-proper-history`; existing `proper-history` recorded data remains compatible.
 
 ## Behaviour
+
+### Quiet settled transcript
+
+While the model is working, earlier turns remain compact and each current action uses Pi's normal live output only until that action finishes. Assistant steps compact on message completion, and each tool compacts on its own completion, so parallel tools remain visible independently while they run. Completed rows stay at the action's original position, before any later assistant response.
+
+After processing settles, proper-base leaves only direct tool-free model replies visible. Every thought, tool call, error, and update becomes its own descriptive one-line row, such as `tool · read · src/index.ts` or `thought · inspect the renderer`. Thoughts are violet, tools blue, updates teal, and errors red; labels preserve the distinction without relying on color. Click any row to expand or collapse only that item. Expanded items also end with a compact left-aligned `collapse` button. Pi's normal tool-output shortcut, Ctrl+O by default, remains the global expand/collapse control.
+
+This applies only to agent-owned output. Slash-command UI such as `/session`, extension notifications, and other text produced while Pi is idle keep their native rendering. Session history and model context keep the original messages, and removing the extension restores Pi's native transcript renderer.
 
 ### Automatic session titles
 
@@ -81,6 +89,18 @@ This covers skills, slash commands, and other editor autocomplete providers that
 Ctrl+V and Ctrl+Shift+V both invoke Pi's image-or-text clipboard paste action when the terminal forwards the chord. Pasting an image inserts a short `[image N]` marker at the cursor and shows its source path in a full-width, non-capturing overlay above the prompt. Deleting any character inside a marker removes that marker and leaves the cursor where it was. Multiple paths stack vertically, and the overlay yields to autocomplete descriptions.
 
 Kitty image rendering is intentionally disabled, including under Scribe, so proper-base never changes terminal image capabilities. On submit, every intact marker expands back to its source path before Pi's handler and prompt-history recorder receive it; agents therefore see the usable image path rather than the display-only marker.
+
+### Model image context
+
+Images remain available throughout the user turn that introduced them, including every follow-up model call while tools run. Once a newer user message begins, proper-base replaces image blocks from earlier turns with a short text marker in the outbound context. The saved session remains unchanged, so transcript rendering, export, resume, and branching retain the original images.
+
+This prevents old image bytes from being resent on every later turn. Re-read or resend an earlier image when the model needs to inspect it again.
+
+### Prompt-template display
+
+Pi expands file-based prompt templates before creating the user session message. proper-base keeps that expansion for the model but renders the exact slash invocation in the user transcript instead. `/implement-ready epic-1 4` therefore stays `/implement-ready epic-1 4`; it never becomes the full orchestration template on screen.
+
+The display mapping persists as a small hash-to-command custom entry, so reload, resume, and fork preserve the raw command without storing a second copy of the expanded body. Plain prompts and model context are unchanged.
 
 ### Prompt history
 

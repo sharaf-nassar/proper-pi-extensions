@@ -30,6 +30,14 @@ Only text captured by the editor's submission path can enter history.
 
 The recorder keeps exact outgoing text after display-only image markers expand to their source paths. Store writes trim outer whitespace and reject blank or oversized entries. Skill and prompt-template commands remain in their submitted slash-command form.
 
+## Prompt display
+
+Prompt templates keep their raw slash invocation in the transcript while Pi and the model continue using the expanded body.
+
+The `input` event records every interactive submission in order and marks only commands whose `getCommands()` source is `prompt`. When the corresponding expanded user `message_start` arrives, proper-base hashes its normalized text and maps that hash to the raw command. A display-only user Markdown transformer replaces matching expanded bodies with the raw invocation, so `/implement-ready epic-1 4` never becomes the full template in the user bubble.
+
+At `agent_settled`, new hash-to-command records persist in a renderer-less custom session entry. Only the SHA-256 hash and raw command are stored; the already-persisted expanded prompt body is not duplicated. `session_start` rebuilds the map from active-branch records, preserving the compact display after reload, resume, or fork. Plain prompts, extension commands, and the actual model context remain unchanged.
+
 ## Recallable submissions
 
 UI commands are excluded from history so recalling a prompt cannot re-run one.
@@ -62,6 +70,14 @@ proper-base does not enable Kitty rendering or change terminal image capabilitie
 
 A one-character deletion inside an intact marker removes the whole marker and its path entry. Path-to-marker replacement maps the pre-rewrite cursor offset onto the shorter marker, while marker deletion restores the marker's former start offset; neither rewrite leaves the cursor at prompt end. When history recall supplies an image path, replacement updates Pi's active history state in place instead of calling its public `setText()`, which would exit history browsing and make repeated Up presses recall the same entry. Submission preparation expands every intact marker back to its source path before recorder storage and Pi dispatch, so agent input never receives the display-only tag. Preview state survives an unprocessed early cancellation, then clears once assistant processing begins or a normal turn settles.
 
+## Model image context
+
+Images remain model-visible for the complete user turn that introduced them, then leave later outbound context without changing session history.
+
+Before each model call, proper-base finds the newest user message in Pi's copied context. Image blocks at or after that message remain unchanged, so the model can inspect user attachments and tool-result images across every tool loop in the active turn. Earlier image blocks become short text markers in place, preserving message order and tool-call/result structure without resending binary data.
+
+The `context` event supplies a deep copy, so persisted messages, transcript rendering, exports, resume, and branches keep the original image blocks. A later request that needs an old image must read or send it again.
+
 ## Autocomplete description pane
 
 The installed editor's `render()` is wrapped once per instance. Selected autocomplete descriptions render in a non-capturing pi-tui overlay immediately above the editor instead of adding lines to the editor itself.
@@ -89,6 +105,22 @@ History recall starts at the prompt beginning, while Home and End retain two-sta
 For Home, proper-base reuses Pi's current visual-line map and render width. The first press moves to the start column of the current soft-wrapped row; a second press from that boundary moves to line 0, column 0. The same two-stage rule applies across hard-newline paragraphs, and Home at the full prompt start is a no-op.
 
 When Up or a dedicated previous-history binding changes the prompt text, proper-base places the cursor at line 0, column 0 after native handling. End retains its existing behavior: native Pi handling reaches the current logical line end, then a second press moves to the final column of the final line. Autocomplete keeps native handling, custom editors without Pi's state keep their own behavior, and Ctrl+Shift+Home/End remain fullscreen transcript actions.
+
+## Settled transcript
+
+Completed processing detail collapses behind one expandable line so the transcript emphasizes user prompts and direct model replies.
+
+At `agent_start`, proper-base records the current end of Pi's chat container. Earlier turns stay in their settled compact form, while incomplete components appended for the active run use Pi's native renderer unchanged. An assistant component becomes compact on its own `message_end`, matched by message identity or timestamp; each tool component becomes compact on its matching `tool_execution_end`, so parallel tools settle independently while unfinished siblings keep streaming. `agent_settled` clears the run boundary, restores collapsed global tool state, and requests the final redraw.
+
+Idle rendering walks components in their original transcript order. Assistant text from a tool-free model message remains visible as the direct reply, after that message's thinking summaries. Components present when proper-base installs, plus components appended inside an `agent_start` through `agent_settled` boundary, are agent-owned. Every owned non-response item becomes its own one-line summary at the position where the component occurred: thinking blocks use their first text, tool cards show the tool name plus a primary path, command, pattern, query, task, URL, or action argument, tool-calling commentary becomes an update, and errors or status components carry their first rendered line. Later assistant responses therefore never precede the intermediary rows that produced them.
+
+Components appended while Pi is idle are not agent-owned and keep native rendering. This preserves output from slash commands such as `/session`, extension notifications, and other command UI instead of relabeling them as model updates.
+
+Each detail summary is an OSC 8 link with a private proper-base target and independent expansion state. Type remains explicit in text and also receives a stable semantic color: thoughts use `thinkingHigh`, tools use `mdLink`, updates use `accent`, and failures use `error`. The same color carries onto that item's bottom collapse control, while labels and disclosure markers keep meaning available without color.
+
+In fullscreen mode, a mouse listener reads the link under a left click from Pi's rendered screen, toggles only that item, fully expands a selected tool card, and consumes the press and release before Pi begins text selection or opens the private URL. Expanded detail ends with a compact left-aligned inverse-video `collapse` link using the same target, so long items can close without returning to their header. Pi's configured `app.tools.expand` binding remains a global expand/collapse fallback and resets per-item overrides when used.
+
+The transformation is display-only. Session messages and component order remain unchanged, active rendering never loses live output, and unloading proper-base restores Pi's original chat-container renderer. The wrapper installs only when Pi's current document/chat container shape is present; an incompatible custom renderer keeps its native transcript.
 
 ## Pinned transcript scrolling
 

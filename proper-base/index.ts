@@ -32,11 +32,16 @@ import {
 	WRAPPED,
 } from "./src/history.ts";
 import { type HistoryGuard, installHistoryGuard } from "./src/history-guard.ts";
+import { omitPriorTurnImages } from "./src/image-context.ts";
 import {
 	type ImagePreviewController,
 	installImagePreview,
 } from "./src/image-preview.ts";
 import { installJumpToBottom } from "./src/jump-to-bottom.ts";
+import {
+	createPromptDisplay,
+	PROMPT_DISPLAY_ENTRY,
+} from "./src/prompt-display.ts";
 import { installRecorder } from "./src/recorder.ts";
 import {
 	appendPrompt,
@@ -44,6 +49,10 @@ import {
 	readPrompts,
 	storePath,
 } from "./src/store.ts";
+import {
+	installTranscriptCleanup,
+	type TranscriptCleanupController,
+} from "./src/transcript-cleanup.ts";
 import { normalizeCpaTransientError } from "./src/transient-retry.ts";
 
 /** Prompts seeded into the editor. Older prompts past this point are dropped. */
@@ -168,14 +177,19 @@ export default function (pi: ExtensionAPI) {
 	let removeJumpToBottom: (() => void) | undefined;
 	let imagePreview: ImagePreviewController | undefined;
 	let removeTerminalInput: (() => void) | undefined;
+	let transcriptCleanup: TranscriptCleanupController | undefined;
 	let activeEditor: PromptEditor | undefined;
 	let activeTui: EditorTui | undefined;
 	let submittedPrompt: string | undefined;
 	let pendingPrompt: PendingPrompt | undefined;
 	let restoreRequest: RestoreRequest | undefined;
 	let sessionTitlePending = false;
+	const promptDisplay = createPromptDisplay();
 
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Prompt display]]
 	pi.registerMarkdownTransformer?.((markdown, context) => {
+		if (context.messageType === "user")
+			return promptDisplay.transform(markdown);
 		if (context.messageType !== "assistant") return markdown;
 		return markdown.replace(SESSION_TITLE_DISPLAY_PATTERN, "");
 	});
@@ -216,6 +230,9 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("input", (event) => {
+		if (event.source === "interactive") {
+			promptDisplay.captureInput(event.text, pi.getCommands());
+		}
 		if (
 			event.source === "interactive" &&
 			event.streamingBehavior !== undefined
@@ -233,10 +250,15 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("message_start", (event) => {
-		if (!pendingPrompt) return;
 		if (event.message.role === "user") {
-			pendingPrompt.messageTimestamp = event.message.timestamp;
-		} else if (
+			promptDisplay.captureUser(event.message);
+			if (pendingPrompt) {
+				pendingPrompt.messageTimestamp = event.message.timestamp;
+			}
+			return;
+		}
+		if (!pendingPrompt) return;
+		if (
 			event.message.role === "assistant" &&
 			event.message.stopReason !== "aborted"
 		) {
@@ -247,6 +269,12 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("message_update", () => {
 		if (pendingPrompt) pendingPrompt.processed = true;
+	});
+
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Model image context]]
+	pi.on("context", (event) => {
+		const messages = omitPriorTurnImages(event.messages);
+		if (messages !== event.messages) return { messages };
 	});
 
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Automatic session title]]
@@ -261,6 +289,9 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("message_end", (event) => {
+		if (event.message.role === "assistant") {
+			transcriptCleanup?.completeAssistant(event.message);
+		}
 		const normalized = normalizeCpaTransientError(event.message);
 		if (normalized !== event.message) return { message: normalized };
 	});
@@ -295,11 +326,27 @@ export default function (pi: ExtensionAPI) {
 		pi.setSessionName?.(extracted);
 	});
 
+	pi.on("agent_start", () => {
+		transcriptCleanup?.start();
+	});
+
 	pi.on("tool_execution_start", () => {
 		if (pendingPrompt) pendingPrompt.processed = true;
 	});
 
+	pi.on("tool_execution_end", (event) => {
+		transcriptCleanup?.completeTool(event.toolCallId);
+	});
+
 	pi.on("agent_settled", (_event, ctx) => {
+		const prompts = promptDisplay.drain();
+		if (prompts.length) pi.appendEntry(PROMPT_DISPLAY_ENTRY, { prompts });
+		const ui = ctx.ui as ExtensionContext["ui"] & {
+			getToolsExpanded?(): boolean;
+			setToolsExpanded?(expanded: boolean): void;
+		};
+		if (ui.getToolsExpanded?.()) ui.setToolsExpanded?.(false);
+		transcriptCleanup?.settle();
 		submittedPrompt = undefined;
 		const candidate = pendingPrompt;
 		if (!candidate) return;
@@ -341,15 +388,19 @@ export default function (pi: ExtensionAPI) {
 		imagePreview = undefined;
 		removeTerminalInput?.();
 		removeTerminalInput = undefined;
+		transcriptCleanup?.uninstall();
+		transcriptCleanup = undefined;
 		activeEditor = undefined;
 		activeTui = undefined;
 		submittedPrompt = undefined;
 		pendingPrompt = undefined;
 		restoreRequest = undefined;
 		sessionTitlePending = false;
+		promptDisplay.clear();
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
+		promptDisplay.restore(ctx.sessionManager.getBranch());
 		sessionTitlePending =
 			!pi.getSessionName?.() &&
 			!ctx.sessionManager
@@ -424,6 +475,9 @@ export default function (pi: ExtensionAPI) {
 				new CustomEditor(tui, theme, keybindings);
 			activeEditor = editor as PromptEditor;
 			activeTui = tui;
+			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Settled transcript]]
+			transcriptCleanup?.uninstall();
+			transcriptCleanup = installTranscriptCleanup(tui, ctx, keybindings);
 			historyGuard = installHistoryGuard(editor);
 			removeJumpToBottom?.();
 			removeJumpToBottom = installJumpToBottom(editor, tui);

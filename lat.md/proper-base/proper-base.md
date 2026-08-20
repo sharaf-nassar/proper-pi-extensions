@@ -17,7 +17,10 @@ The runtime is split by responsibility.
 - `src/editor-navigation.ts` implements recalled-history cursor placement and two-stage Home/End behavior while preserving configured keybindings and custom editor fallback.
 - `src/footer-colors.ts` rearranges Pi's built-in footer statistics, applies model and effort colors, and owns the bounded maximum-effort animation timer.
 - `src/jump-to-bottom.ts` renders the scrolled-up jump-to-bottom button as an editor row and claims mouse input ahead of the alternate-screen renderer.
+- `src/image-context.ts` replaces prior-turn image blocks in outbound context while leaving current-turn and persisted session content intact.
 - `src/image-preview.ts` replaces clipboard paths with compact markers, renders their source paths in a text-only overlay, and expands markers before submission without enabling terminal image protocols.
+- `src/prompt-display.ts` hashes expanded prompt-template messages, maps them to raw slash invocations, and restores that display-only mapping from custom session entries.
+- `src/transcript-cleanup.ts` keeps the active run live, renders settled non-response detail behind per-item summaries, and claims clicks on those summaries ahead of fullscreen selection handling.
 - `src/history-guard.ts` blocks Pi's transformed session replay and admits only recorder-trusted prompts.
 - `src/history.ts` contains pure recall filtering, timestamp ordering, deduplication, and editor-factory unwrapping.
 - `src/recorder.ts` intercepts editor submission while preserving later handler assignments and repeated installation.
@@ -48,12 +51,15 @@ These rules preserve history and autocomplete details without destabilizing the 
 17. Up leaves a recalled prompt at line 0, column 0; Home then moves through the current visible-row and full-prompt starts, while End moves through logical-line and full-prompt ends without taking over Ctrl+Shift+Home/End.
 18. The jump-to-bottom button exists only for a viewport renderer that is not following output, occupies an editor row rather than an overlay so scrollbar dragging survives, and consumes only the mouse events landing on its own cells.
 19. Transient-error normalization touches only errored assistant messages matching the CPA `empty_stream` wording and never re-prefixes an already retryable message.
+20. Assistant steps compact on their own message completion, tools compact independently on their own execution completion, and every agent-owned thought, tool call, error, and update renders in original transcript order as its own labeled summary with a distinct semantic theme color; output appended while idle, including slash-command UI, remains native; fullscreen clicks on either an item's summary or repeated bottom collapse control toggle only that item, while the configured tool-output binding remains the global fallback.
+21. Prompt-template expansion remains model-facing: the user transcript shows the raw slash command live and after session restoration, using persisted hashes without duplicating expanded bodies or changing model context.
+22. Image blocks remain in model context through the user turn that introduced them; a later user message replaces older image blocks only in the outbound context copy, preserving current-turn tool loops, message order, tool-result structure, and persisted session history.
 
 ## Documentation map
 
 Each document owns one runtime concern.
 
-- [lifecycle](./lifecycle.md) — startup, prompt sources, cursor navigation, image previews, early-cancel recovery, editor composition, fullscreen key routing, the jump-to-bottom button, autocomplete details, footer decoration, and transient stream retry.
+- [lifecycle](./lifecycle.md) — startup, prompt sources, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, the jump-to-bottom button, autocomplete details, footer decoration, and transient stream retry.
 - [storage](./storage.md) — project paths, JSONL format, permissions, bounded reads, limits, and compaction.
 - [operations](./operations.md) — package identity, installation, runtime requirements, and data removal.
 - [tests](./tests.md) — deterministic history, recorder, autocomplete, fullscreen key routing, footer styling, and real-filesystem store coverage.

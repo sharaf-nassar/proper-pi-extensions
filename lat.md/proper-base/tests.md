@@ -1,6 +1,6 @@
 # Verification
 
-The package uses 65 `node:test` cases across session naming, history, editor, image markers, fullscreen, cancellation, footer, and filesystem behavior.
+The package uses 69 `node:test` cases across session naming, history, prompt display, editor, image markers, model context, transcript cleanup, fullscreen, cancellation, footer, and filesystem behavior.
 
 ## Session-title fixture
 
@@ -24,6 +24,18 @@ It starts with text-only capabilities, loads proper-base under `TERM_PROGRAM=Scr
 
 A focused cursor fixture uses a fake editor whose `setText()` moves to prompt end. It proves path-to-marker replacement restores the cursor after the marker and deleting one marker character removes the full marker while restoring its former start position. A history fixture recalls an image prompt followed by an older plain prompt and verifies marker replacement does not reset Pi's history index, so repeated Up presses keep moving backward.
 
+## Image context fixture
+
+A focused fixture verifies old image bytes leave outbound model context without changing the stored messages.
+
+It supplies user and tool-result images on both sides of a newer user message. Earlier image blocks become text markers while current-turn images retain their original objects, and assertions against the inputs prove the filter does not mutate session content. A context containing only the current user turn returns by reference as a no-op.
+
+## Prompt display fixture
+
+A focused fixture verifies prompt-template expansion remains model-facing rather than user-facing.
+
+It queues a plain prompt and `/implement-ready epic-1 4`, then supplies the expanded template body as Pi's user message. The display transformer leaves plain text unchanged, replaces both exact and whitespace-normalized expanded Markdown with the raw slash command, and drains one persistence record containing a hash plus raw command but not the template body. Restoring that custom-entry record reproduces the display mapping after reload, while clearing it restores native text.
+
 ## Recorder fixtures
 
 Recorder tests exercise pi's actual assignment shape through a class-field-style fake editor.
@@ -39,6 +51,12 @@ The rendering fixture proves the editor returns the same lines and height, the o
 A focused lifecycle fixture proves missing descriptions release the overlay immediately and unmounted editors release it after pi's current visibility pass. This guards the overlay-stack condition that otherwise prevents regular/fullscreen TUI mode changes.
 
 An inline-command fixture verifies slash completion receives only the active command segment after whitespace or on a later line, replaces only that segment, supports command arguments, and ignores URL or path-internal slashes. A model-completion fixture verifies the empty `/model ` list sorts descending, `opu` removes unrelated candidates and sorts Opus versions descending, `opus 4` requires both terms, non-model suggestions preserve provider order, and both Enter and Tab accept and submit the selected `provider/model` value.
+
+## Settled transcript fixture
+
+Transcript fixtures verify intermediary detail stays visible while Pi runs and becomes individually expandable after settlement.
+
+A component-tree fixture installs the wrapper around Pi's document/chat shape and first renders thinking, tool-call commentary, tool cards, errors, and status updates unchanged. It then completes one assistant message and one of two tools while the run remains active, proving those components compact immediately while the unfinished tool keeps its native live preview. The fully settled view retains tool-free assistant text and emits separate descriptive rows for every thought, update, successful tool, failed tool, and status component in original component order. Assertions prove a completed assistant's thought precedes its direct text and status/tool rows precede the later final response. The fixture records theme calls and proves thought, tool, update, and error rows use four distinct semantic colors while retaining text labels. Its fake fullscreen screen clicks one tool summary; the wrapper claims the event ahead of Pi's consuming listener, expands only that tool, leaves every sibling collapsed, and fully expands the selected card. The expanded item ends with a linked bottom collapse control that closes only that item. Global tool-output expansion remains available. Starting another run proves earlier item states remain stable while only newly appended components render live. A fake `/session` status appended after settlement remains native and is never relabeled as an update. A second user prompt proves grouping remains turn-local, repeated installation refreshes the live context without stacking, and uninstall restores the native renderer. A lifecycle fixture verifies `agent_settled` resets Pi's global tool-output state to collapsed before requesting the final redraw.
 
 ## Base keybinding fixture
 
