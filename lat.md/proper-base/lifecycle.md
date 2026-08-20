@@ -18,6 +18,16 @@ A markdown transformer hides the marker as soon as it appears during streaming. 
 
 Tool-use responses may defer the marker until the final response in the same agent run. An aborted or failed response leaves naming armed for a retry; a successful final response that omits the marker ends the attempt rather than adding the instruction to later user turns.
 
+## Model-preserving clear
+
+`/clear` follows Pi's native new-session replacement lifecycle, then restores the exact provider and model selected in the outgoing session.
+
+The command captures only the provider and model ID, then calls `ctx.newSession()` without copying messages, names, branch state, or parent metadata. This preserves `/new` guards, shutdown, rebinding, and `session_start` behavior.
+
+Pi invalidates the outgoing extension API during replacement. The old handler therefore uses `withSession` only to dispatch an encoded internal command through the replacement context. The newly bound proper-base instance resolves that exact model in the new registry and calls its own `pi.setModel()`. Extension-command dispatch finishes without creating a user message or starting an agent turn.
+
+The post-bind restore intentionally runs after every new-session hook. In particular, proper-llm-router may switch a new session to `llm-router/auto`; `/clear` then restores the outgoing model so the next prompt does not route again. A session with no selected model keeps Pi's normal `/new` result, while an unavailable model leaves that result in place and shows an error.
+
 ## Prompt sources
 
 History has one trusted source: the private recorder store for the current working directory.

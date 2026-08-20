@@ -50,8 +50,10 @@ You run ALL bd commands yourself — the user never touches the bd CLI.
      run in parallel; a bead without it is dispatched unguarded, so write your
      best list from the investigation rather than omitting it, and mark it
      `Files: unknown — <why>` only when the root cause genuinely does not name
-     them), Acceptance criteria (MUST include the regression test that fails
-     before / passes after, plus the original repro passing).
+     them). Put the done conditions in Beads' structured field with
+     `--acceptance="<criteria>"`, never only in the description. The criteria
+     MUST include the regression test that fails before / passes after, plus
+     the original repro passing.
    - Priority by user impact (P0 data loss/security, P1 broken flows, P2
      degraded, P3 cosmetic).
    - Multi-part fixes: separate beads wired with `bd dep add <dependent>
@@ -136,4 +138,4 @@ You run ALL bd commands yourself — the user never touches the bd CLI.
      off. Never absorb mid-run — exactly once, at the end; if some bd command
      must run after the absorb, repeat it.
    (If the user had you fix inline via step 4's exception, follow
-   /implement-ready's worker absorb step instead.)
+   /implement-ready's run-level absorb step instead.)

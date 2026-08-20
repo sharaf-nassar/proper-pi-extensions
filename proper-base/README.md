@@ -1,6 +1,6 @@
 # proper-base
 
-Baseline behavior for [pi](https://pi.dev): a quiet settled transcript, automatic session titles, cross-session prompt history, richer autocomplete, editable cancellation, fullscreen navigation, clipboard markers, and a compact color-coded footer.
+Baseline behavior for [pi](https://pi.dev): a quiet settled transcript, automatic session titles, model-preserving `/clear`, cross-session prompt history, richer autocomplete, editable cancellation, fullscreen navigation, clipboard markers, and a compact color-coded footer.
 
 pi's Up/Down history covers the current session only. Start a new session in a project you have worked in for weeks and the editor history is empty. This extension seeds it with the prompts you typed in the other sessions recorded for the same working directory.
 
@@ -29,6 +29,12 @@ This applies only to agent-owned output. Slash-command UI such as `/session`, ex
 For a fresh unnamed session, proper-base asks the model to include a concise 3–7 word title in hidden metadata at the end of its first completed response. The extension applies it with Pi's native session-name API, so the terminal tab changes from `π - <directory>` to `π - <title> - <directory>` and `/resume` shows the same name.
 
 The metadata is hidden while streaming. Existing names and sessions that already contain an assistant response are never renamed. If the first response is aborted or errors, the next completed response gets the same title request.
+
+### Model-preserving clear
+
+`/clear` starts a fresh session through Pi's native `/new` replacement flow, but restores the exact provider and model selected in the outgoing session. No messages, session name, or branch state carry over.
+
+This differs from `/new` when `proper-llm-router` is installed. That extension normally re-arms a new session on `llm-router/auto`; `/clear` restores the outgoing model after replacement, so the next prompt stays on it.
 
 ### Prompt editing
 

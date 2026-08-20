@@ -23,6 +23,12 @@ test("package exposes the four workflow prompts", async () => {
 	}
 });
 
+test("file stores acceptance criteria in the structured field", async () => {
+	const source = await readFile(new URL("prompts/file.md", root), "utf8");
+	assert.match(source, /--acceptance="<criteria>"/);
+	assert.match(source, /never only in the description/);
+});
+
 test("implement-ready accepts epic, task, or all scopes", async () => {
 	const source = await readFile(
 		new URL("prompts/implement-ready.md", root),
@@ -34,4 +40,25 @@ test("implement-ready accepts epic, task, or all scopes", async () => {
 		/Resolve a non-`all` scope before initializing the rail:/,
 	);
 	assert.match(source, /single-task mode/);
+});
+
+test("integration closes beads before cleanup", async () => {
+	const source = await readFile(
+		new URL("prompts/implement-ready.md", root),
+		"utf8",
+	);
+	assert.match(
+		source,
+		/verify-integration --gates →\n\s*`bd close` → cleanup → unlock/,
+	);
+	assert.match(
+		source,
+		/use `unlock --abort`[\s\S]*aborts the in-progress task rebase/,
+	);
+});
+
+test("file points inline fixes at run-level absorb", async () => {
+	const source = await readFile(new URL("prompts/file.md", root), "utf8");
+	assert.match(source, /\/implement-ready's run-level absorb step/);
+	assert.doesNotMatch(source, /worker absorb step/);
 });

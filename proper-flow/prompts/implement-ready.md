@@ -187,8 +187,8 @@ flow: `survey` is a rail command YOU run directly between waves.)
      and none are needed.
    - When the wave returns, integrate each result through the rail (result →
      verify-worker → prepare → your commit → verify-integration --gates →
-     cleanup → unlock), close each completed bead, then loop back to Survey —
-     completing a task may unblock others.
+     `bd close` → cleanup → unlock), then loop back to Survey — completing a
+     task may unblock others.
    - Track per-task attempt count AND the previous attempt's
      `error_signature` across waves (step 4 needs both). Stop when the
      frontier has no workable tasks or a wave makes no progress.
@@ -227,12 +227,15 @@ flow: `survey` is a rail command YOU run directly between waves.)
      proves the commit shape AND runs the gate on the integrated tree while
      the lock is held. Exit 10 = the gate failed on main: the breakage
      belongs to the task that just landed (its own worktree checks passed
-     against a main that no longer exists). Keep the lock, fix forward with
-     a fresh worker branched from current main — or revert the squash
-     commit — and do not `prepare` the next task until main is green again.
+     against a main that no longer exists). Keep the lock, fix forward with a
+     fresh worker in the preserved task worktree — or revert the squash commit.
+     The next same-task `prepare` archives the failed preparation and rebases
+     the fix onto current main. Do not prepare another task until main is green.
+   - Close the completed bead under the run actor with `bd close <task>`.
    - `cleanup` → `unlock`. On a rebase conflict (exit 5) the lock is retained
      deliberately: preserve the evidence, report, and use `unlock --abort`
-     only when recovering.
+     when recovering; it aborts the in-progress task rebase before releasing
+     the lock.
 
    Each dispatched worker's task string must be self-contained and contains NO
    git protocol — the rail owns that:

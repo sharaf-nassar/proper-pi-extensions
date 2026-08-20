@@ -5,6 +5,8 @@ argument-hint: <bug report, feature idea, task description, or issue reference>
 
 Route this request to the right flow: $ARGUMENTS
 
+You run every `bd` command yourself; the user never touches the Beads CLI.
+
 Classify the request, announce the route in ONE line ("Routing: <tier> —
 <reason>"), then follow that flow. If genuinely borderline, ask one question
 with labeled A/B options instead of guessing.

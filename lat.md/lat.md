@@ -1,6 +1,6 @@
 # proper-pi-extensions
 
-proper-pi-extensions is a repository of independently installable local pi extension packages.
+proper-pi-extensions is a repository of independently installable local pi extension packages and their workflow support bundles.
 
 ## Repository layout
 
@@ -14,10 +14,17 @@ Current packages:
 - [proper-base](../proper-base/) — provides baseline history, prompt editing, cancellation, fullscreen navigation, image previews, and footer layout.
 - [proper-flow](../proper-flow/) — packages triage, bug investigation, specification, and implementation workflow prompts.
 
+## Support bundles
+
+Repository-owned support bundles remain separate from Pi package discovery.
+
+- [beads-flow](../beads-flow/) — versions and installs the Beads formulas and implementation rail used by proper-flow.
+
 <!-- lat-index
 - [[proper-llm-router]] — repository index entry
 - [[proper-base]] — repository index entry
 - [[proper-flow]] — repository index entry
+- [[beads-flow]] — Beads workflow support
 -->
 
 ## Installation model

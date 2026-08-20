@@ -18,7 +18,7 @@ After registration, same-named files are removed from `~/.pi/agent/prompts/` so 
 
 Prompt execution depends on user-level workflow tools rather than npm dependencies.
 
-The commands expect `bd`, formulas under `~/.beads/formulas/`, and the implementation rail at `~/.beads/rail/implement-ready.sh`. `/implement-ready` can use pi-subagents, while proper-llm-router independently supplies command pins and worker model routing.
+The commands expect `bd`, formulas under `~/.beads/formulas/`, and the implementation rail at `~/.beads/rail/implement-ready.sh`. [[beads-flow]] owns those resources and links them into the user registry. Hook-free worktrees use the empty `~/.beads/no-hooks/` directory. `/implement-ready` can use pi-subagents, while proper-llm-router supplies command pins and worker model routing.
 
 `/implement-ready` accepts an epic id, a task id or unique title, or `all`. Task titles resolve through Beads search. Single-task mode initializes the descendant-oriented rail with `all`, then filters every survey, dispatch, and report to the resolved task id.
 

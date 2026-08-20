@@ -1,12 +1,18 @@
 # Verification
 
-The package uses 69 `node:test` cases across session naming, history, prompt display, editor, image markers, model context, transcript cleanup, fullscreen, cancellation, footer, and filesystem behavior.
+The package uses 70 `node:test` cases across session naming, model-preserving clearing, history, prompt display, editor, image markers, model context, transcript cleanup, fullscreen, cancellation, footer, and filesystem behavior.
 
 ## Session-title fixture
 
 A session integration fixture verifies first-response naming without a second model request.
 
 It proves a fresh unnamed branch receives the title instruction, the streamed metadata marker stays hidden, terminal control characters are removed before `pi.setSessionName()`, and later turns stop receiving the instruction. Separate phases keep naming armed after an aborted response, stop after completed output omits metadata, and prove explicit names or branches with prior assistant output are never renamed.
+
+## Model-preserving clear fixture
+
+A command fixture verifies `/clear` replaces the session before restoring the outgoing provider and model.
+
+It proves the command passes no copied session state into `ctx.newSession()`, uses the replacement context to dispatch only the encoded internal restore command, resolves the exact provider/model pair in the new registry, and selects it through the replacement extension instance. Malformed restore data reports an error, and an absent outgoing model keeps native `/new` behavior.
 
 ## History fixtures
 

@@ -12,7 +12,7 @@ The four commands form a pipeline. Triage selects the entry point, file investig
 
 proper-flow contains prompt templates only. Pi discovers `prompts/` through the package manifest; there is no runtime extension entrypoint, dependency graph, or custom command handler.
 
-Beads formulas, the implementation rail, pi-subagents, and model routing remain external services or packages. The separate `/constitution` governance prompt remains global and outside this workflow bundle.
+Beads formulas and the implementation rail remain outside the Pi package but are versioned and installed by [[beads-flow]]. pi-subagents and model routing remain external packages. The separate `/constitution` governance prompt remains global and outside this workflow bundle.
 
 ## Core invariants
 

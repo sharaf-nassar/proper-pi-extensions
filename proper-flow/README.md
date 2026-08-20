@@ -25,7 +25,7 @@ The package uses Pi's `prompts/` resource type only; it installs no runtime exte
 
 ## Runtime assumptions
 
-The prompts expect the Beads CLI (`bd`) and the user's shared formulas under `~/.beads/formulas/`. `/implement-ready` also uses `~/.beads/rail/implement-ready.sh` and pi-subagents when available. Model routing remains owned by proper-llm-router's command pins.
+The prompts expect the Beads CLI (`bd`) and the resources installed by [`beads-flow`](../beads-flow/): shared formulas under `~/.beads/formulas/` and the rail at `~/.beads/rail/implement-ready.sh`. Hook-free worktrees point `core.hooksPath` at the empty `~/.beads/no-hooks/` directory. `/implement-ready` uses pi-subagents when available, while model routing remains owned by proper-llm-router.
 
 ## Development
 

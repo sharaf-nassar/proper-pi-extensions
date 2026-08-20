@@ -59,6 +59,7 @@ import { normalizeCpaTransientError } from "./src/transient-retry.ts";
 const MAX_ENTRIES = 200;
 const CANCEL_PROMPT_COMMAND = "__proper-cancel-prompt";
 const CANCEL_ANCHOR = "proper-cancel-anchor";
+const RESTORE_MODEL_COMMAND = "__proper-restore-model";
 const SESSION_TITLE_INSTRUCTION = `At the end of your first assistant response, add exactly one line in this format: <session_title>concise 3-7 word task title</session_title>. Use plain text without quotes or terminal control characters. This is hidden session metadata; do not mention it.`;
 const SESSION_TITLE_PATTERN = /\s*<session_title>([^<]*)<\/session_title>\s*$/i;
 const SESSION_TITLE_DISPLAY_PATTERN = /\s*<session_title>[\s\S]*$/i;
@@ -172,6 +173,33 @@ function extractSessionTitle(text: string): string | undefined {
 	);
 }
 
+type ModelReference = { provider: string; id: string };
+
+function encodeModelReference(model: ModelReference): string {
+	return encodeURIComponent(
+		JSON.stringify({ provider: model.provider, id: model.id }),
+	);
+}
+
+function decodeModelReference(value: string): ModelReference | undefined {
+	try {
+		const parsed = JSON.parse(
+			decodeURIComponent(value.trim()),
+		) as Partial<ModelReference> | null;
+		if (
+			!parsed ||
+			typeof parsed.provider !== "string" ||
+			!parsed.provider ||
+			typeof parsed.id !== "string" ||
+			!parsed.id
+		)
+			return undefined;
+		return { provider: parsed.provider, id: parsed.id };
+	} catch {
+		return undefined;
+	}
+}
+
 export default function (pi: ExtensionAPI) {
 	let removeFooterColors: (() => void) | undefined;
 	let removeJumpToBottom: (() => void) | undefined;
@@ -205,6 +233,45 @@ export default function (pi: ExtensionAPI) {
 					entry.message.timestamp === pendingPrompt?.messageTimestamp,
 			);
 	};
+
+	pi.registerCommand?.(RESTORE_MODEL_COMMAND, {
+		description: "Internal: restore the model after /clear",
+		handler: async (args, ctx) => {
+			const reference = decodeModelReference(args);
+			if (!reference) {
+				ctx.ui.notify("Could not restore model after /clear", "error");
+				return;
+			}
+			const model = ctx.modelRegistry.find(reference.provider, reference.id);
+			if (!model || !(await pi.setModel(model))) {
+				ctx.ui.notify(
+					`Could not restore model ${reference.provider}/${reference.id}`,
+					"error",
+				);
+			}
+		},
+	});
+
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Model-preserving clear]]
+	pi.registerCommand?.("clear", {
+		description: "Start a new session with the current model",
+		handler: async (_args, ctx) => {
+			const restoreCommand = ctx.model
+				? `/${RESTORE_MODEL_COMMAND} ${encodeModelReference(ctx.model)}`
+				: undefined;
+			await ctx.newSession(
+				restoreCommand
+					? {
+							withSession: async (replacementCtx) => {
+								await replacementCtx.sendUserMessage(restoreCommand, {
+									expandPromptTemplates: true,
+								});
+							},
+						}
+					: undefined,
+			);
+		},
+	});
 
 	pi.registerCommand?.(CANCEL_PROMPT_COMMAND, {
 		description: "Internal: remove an unprocessed cancelled prompt",

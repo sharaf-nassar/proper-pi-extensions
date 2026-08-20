@@ -1,0 +1,958 @@
+formula = "speckit"
+description = """
+Spec-driven feature pipeline for plain beads + Claude Code (no Gas Town runtime).
+
+Turns a raw idea, existing epic, or P4 backlog issue into dependency-wired
+P0-P3 task beads through a disciplined sequence: constitution check, spec,
+parallel spec review, human clarification gate, plan, one auto-fix alignment
+round, a human analyze/approval gate, and finally bead creation.
+Implementation is NOT part of this formula — once the beads exist you work
+them normally with `bd ready`.
+
+## Lifecycle (ephemeral wisp)
+
+This is `phase = "vapor"` — pipeline beads are operational scaffolding, not
+the durable record. Instantiate it as a wisp, not a persistent mol:
+
+```
+bd mol wisp speckit --var feature=<slug> --var problem="<problem>"
+```
+
+The durable record is the feature epic plus (full depth) one `specs/` file in
+git; quick depth records everything on the epic itself.
+The wisp steps exist only to drive the run; when `create-beads` finishes you
+squash the wisp into a single digest bead (`bd mol squash <root>`), leaving one
+permanent summary while the ephemeral step beads auto-clean. Wisps resume the
+same way mols do — `bd ready --mol <root>` / `bd mol ready --gated`.
+
+## Distill from practice
+
+v1 was designed upfront; v2 folded in the first rounds of practice
+(single-file artifact, quick depth, base-10 NNN arithmetic); v3 restricted
+clarify-gate questions to product decisions — technical-approach questions
+are now self-resolved via best-practice research and presented as a
+veto-able decision log (distilled from ~20 runs where the human accepted
+"all recommended" nearly every time); v4 made the plan extract shared
+primitives into foundational beads and gave align-autofix the symmetric
+missing-serialization check (combined run diffs kept showing parallel
+workers writing the same helper twice); v5 grounded specify and plan in
+the repo's learnings store (`docs/solutions/`, `CONCEPTS.md`) so recorded
+root causes and failed approaches inform new designs; v6 moved the global
+workflow resources under repository control and clarified the missing-
+constitution soft pause. Keep revising the step runbooks after runs based on
+what actually happened (the `bd mol distill` direction) — treat friction as a
+bug in the formula, not in the run. Bump `version` whenever the runbooks change
+so squash digests can be traced to the formula revision that produced them.
+
+## Pipeline
+
+```
+constitution-check → specify → spec-review → [clarify: HUMAN GATE]
+  → plan → align-autofix → [analyze: HUMAN GATE] → create-beads
+```
+
+## Human gates (2)
+
+1. clarify  — you answer the review's PRODUCT-decision questions before
+   planning. Technical-approach questions are not asked: the pipeline
+   resolves them itself via codebase investigation and standard/best-practice
+   research, and presents them at the gate as a veto-able decision log.
+2. analyze  — you approve the analysis (GO / GO-WITH-FIXES / NO-GO) before beads.
+
+## Artifacts
+
+Full depth: ONE file — `{{specs_dir}}/NNN-{{feature}}.md` (NNN = next
+sequential 3-digit number). Spec sections first, plan sections appended as the
+pipeline advances. No per-feature directory, no separate plan or analysis
+files; analysis is presented in chat at the analyze gate only.
+
+Quick depth: NO file. Sections are drafted in chat and mirrored into the wisp
+root's notes (`bd update <root-id> --append-notes="..."`) so an interrupted
+run can resume; create-beads lands the condensed spec on the epic description
+and the condensed plan in the epic's native design field.
+
+## Execution model
+
+This is a plain-beads workflow — no gt, polecats, convoys, mayor, or mail.
+Every step description is a complete runbook the executing Claude Code agent
+reads and follows in-session. "Parallel review" means dispatching Claude Code
+subagents (the Agent/Task tool) in parallel; if that mechanism is unavailable,
+perform each pass sequentially yourself.
+
+**Never write artifact file content via the shell.** Create, append to, or edit
+the spec file with the agent's own Write/Edit file tools — never shell heredocs
+(`cat >> file << 'EOF'`) or echo-append, which false-trigger commit hooks and
+mangle quoting. The `ls` and `bd` bash commands in these runbooks stay as
+shown; the rule is only about writing file CONTENT.
+
+## Variables
+
+| Variable   | Required | Description                                   |
+|------------|----------|-----------------------------------------------|
+| feature    | yes      | Short feature name / slug                     |
+| problem    | yes      | The raw idea / problem statement              |
+| context    | no       | Extra context, links, constraints             |
+| specs_dir  | no       | Artifact root (default: specs)                |
+| epic       | no       | Existing epic id to spec out (else new epic)  |
+| epic_candidates | no  | Ambiguous provenance-derived epic ids         |
+| source_backlog | no   | Direct P4 issue being refined                 |
+| backlog    | no       | Comma-separated required P4 source issue ids  |
+| depth      | no       | `full` (default) or `quick` — pipeline depth  |
+
+## Depth
+
+`depth` tunes how heavy the review passes are; the step DAG is identical either
+way and BOTH human gates always fire. bd's enum is advisory-only, so treat any
+`{{depth}}` value other than exactly `quick` as `full`.
+
+- `full` (default) — 6-dimension parallel spec review via subagents, a separate
+  2-subagent auto-fix alignment round, a full chat analysis report, and the
+  single `{{specs_dir}}/NNN-{{feature}}.md` artifact file.
+- `quick` — for plainly small features: single-pass self-review across the same
+  6 dimensions in brief (≤4 product questions; same triage rule — technical
+  questions are self-resolved and listed as decisions), a merged single-pass
+  alignment+quality self-check, an abbreviated chat analysis, and NO artifact
+  file — the epic carries the condensed spec and plan. Gates are NOT skipped.
+"""
+version = 6
+type = "workflow"
+phase = "vapor"
+
+[vars.feature]
+description = "Short feature name / slug (used in the artifact file NNN-<feature>.md)"
+required = true
+
+[vars.problem]
+description = "The raw idea / problem statement to turn into a spec"
+required = true
+
+[vars.context]
+description = "Extra context, links, or constraints to feed the spec and plan"
+required = false
+default = ""
+
+[vars.specs_dir]
+description = "Artifact root directory"
+required = false
+default = "specs"
+
+[vars.epic]
+description = "Existing epic id to spec out (e.g. cue-v35). If set, its title and description seed the spec, and task beads are created under THIS epic instead of a new one."
+required = false
+default = ""
+
+[vars.epic_candidates]
+description = "Comma-separated epic ids inferred from ambiguous discovered-from origins. The clarify gate must select one."
+required = false
+default = ""
+
+[vars.source_backlog]
+description = "Existing non-epic P4 issue supplied directly for refinement. Its full record is required source context."
+required = false
+default = ""
+
+[vars.backlog]
+description = "Comma-separated ids of open P4 backlog inputs discovered before the wisp starts. The pipeline must disposition every id."
+required = false
+default = ""
+
+[vars.depth]
+description = "Pipeline depth: 'full' (6-dimension parallel spec review, separate auto-fix round) or 'quick' (single-pass self-review, merged alignment+analysis) for small features"
+required = false
+default = "full"
+enum = ["full", "quick"]
+
+# ============================================================================
+# 1. CONSTITUTION CHECK
+# ============================================================================
+
+[[steps]]
+id = "constitution-check"
+title = "Check for project constitution"
+description = """
+Establish whether this repo has a constitution that governs the later gates.
+
+**Do this:**
+```bash
+ls -la constitution.md 2>/dev/null || echo "NO CONSTITUTION FOUND"
+```
+
+- If `constitution.md` EXISTS at the repo root: read it fully. Its numbered
+  principles govern every later gate (spec review, plan, analyze). Keep them in
+  mind and cite them by number when they apply.
+- If `constitution.md` is ABSENT: this is a soft pause, not a hard gate. Warn
+  the human prominently in chat, e.g.:
+
+  > No `constitution.md` found at the repo root. This project has no recorded
+  > engineering principles to check the spec and plan against. I recommend
+  > running the `constitution` formula first (`bd mol wisp constitution`) to
+  > create one. I'll continue the pipeline without it for now and resurface this
+  > at the clarify gate so you can decide.
+
+  Do NOT create the file here. Warn once, then CONTINUE with the pipeline in the
+  same turn because this step is informational rather than a gate. Resurface the
+  missing-constitution note inside the clarify-gate message (see the `clarify`
+  step), where the human is already answering questions and can decide whether
+  to pause for constitution work.
+
+**Exit criteria:** You know whether a constitution exists, have read it if so,
+and (if absent) have warned the human once and flagged that it will resurface at
+the clarify gate.
+"""
+
+# ============================================================================
+# 2. SPECIFY
+# ============================================================================
+
+[[steps]]
+id = "specify"
+title = "Draft the spec from the problem statement"
+needs = ["constitution-check"]
+description = """
+Turn `{{problem}}` (plus `{{context}}`) into a first-draft specification.
+Favor breadth over polish — expose uncertainty rather than hiding it.
+
+**Load backlog inputs before drafting.**
+
+- If `{{source_backlog}}` is set, inspect its structural parent chain first.
+  When it has no epic ancestor, run
+  `bd dep list {{source_backlog}} --direction=down
+  --type=discovered-from --json`; inspect each origin itself and walk its
+  structural parent chain to the nearest epic. One distinct epic is the
+  inferred target. Multiple distinct epics are an ambiguity: merge them with
+  `{{epic_candidates}}`, record every candidate, and require the clarify gate
+  to select one. Never guess. If there is no candidate, a new epic may be
+  created later.
+- If `{{epic}}` is set, run `bd show {{epic}} --json`; its title,
+  description, and design notes are primary input alongside `{{problem}}`.
+  Compute the full hierarchy-plus-provenance closure:
+  1. Seed SCOPE with the epic and recursively add structural descendants using
+     `bd list --parent <id> --all --limit=0 --json`.
+  2. Run `bd dep list <scope ids...> --direction=up
+     --type=discovered-from --json` and add every dependent discovered from a
+     SCOPE issue.
+  3. Add structural descendants of newly discovered issues, query provenance
+     for those new ids, and repeat until no ids are added.
+  This closure—not only parent-child descendants—is the feature scope.
+- If the clarify gate later selects one of `{{epic_candidates}}`, compute the
+  same closure for the selected epic before planning continues.
+- From SCOPE, collect every issue whose stored status is `open` and priority is
+  `4`.
+- Merge those ids with `{{backlog}}` and `{{source_backlog}}`, de-duplicate
+  them, and read every record with `bd show <id> --json`. Treat their title,
+  description, design, notes, acceptance criteria, and dependency context as
+  required source material—not optional future work.
+- Record the resulting id set for every later step. A P4 source may only leave
+  this pipeline refined in place to P0-P3, superseded after replacement
+  coverage exists, or retired after the human explicitly approves it as a
+  non-goal. If it was already retired, preserve that state and produce
+  actionable replacement coverage. Never silently drop or duplicate one.
+
+**Ground in recorded knowledge.** If the repo has a learnings store
+(`docs/solutions/`) or a `CONCEPTS.md` glossary, grep the store's
+titles/tags/components for this feature's area and read the hits — prior
+root causes, failed approaches, and conventions recorded there are required
+context, and `CONCEPTS.md` terms are the canonical vocabulary for the spec.
+lat.md/ remains the design-intent source; the learnings store carries what
+bit us before, which design docs do not record. Absent stores are simply
+skipped — never create one from this pipeline.
+
+**Depth branch — if `{{depth}}` is `quick`:** create NO file and compute no
+NNN. Draft the same spec sections below directly in chat, then mirror them
+into the wisp root's notes (`bd update <root-id> --append-notes="<sections>"`)
+so an interrupted run can resume. Skip straight to the section structure.
+
+**1. Determine the artifact file (full depth). Compute NNN — do NOT use the
+literal letters `NNN`.** List existing entries (legacy per-feature directories
+count too), take the highest 3-digit prefix, add 1:
+```bash
+ls {{specs_dir}}/ 2>/dev/null | sort
+```
+Read the highest numeric prefix from that listing (call it `last`), then compute
+the next number, zero-padded to 3 digits (start at `001` if the listing is
+empty):
+```bash
+NNN=$(printf '%03d' $((10#$last + 1)))
+```
+Worked example: if `{{specs_dir}}/006-candidates-page/` is the highest existing
+entry, then `last=6` and the new file is `007-{{feature}}.md`.
+**Warning:** never name a file literally `NNN-{{feature}}.md` — `NNN` is a
+placeholder for the computed number, not a real name. Use this same computed
+`{{specs_dir}}/$NNN-{{feature}}.md` path in every later step.
+
+**2. Write `{{specs_dir}}/NNN-{{feature}}.md`** (quick: draft in chat + mirror
+to root notes) using this structure — plan sections are appended to this same
+file later, so keep every section at the flat `##` level:
+```markdown
+# {{feature}}
+
+## Problem Statement
+(What problem are we solving? For whom? Why now? From: {{problem}})
+
+## Goals
+(What success looks like — specific and measurable where possible)
+
+## Non-Goals
+(Explicitly out of scope — prevents scope creep)
+
+## Backlog Inputs
+(For every collected P4 source: id, current intent, missing decisions or
+acceptance detail, and expected refinement. Write "None" when there are no
+sources.)
+
+## Target Epic
+(Record `{{epic}}` when fixed. If provenance yielded multiple
+`{{epic_candidates}}`, list all candidates and mark the target unresolved for
+the clarify gate. If neither exists, state that this run will create an epic.)
+
+## User Stories
+(For each: "As a <actor>, I want <capability>, so that <benefit>."
+ Each story MUST have Acceptance Criteria — concrete, verifiable conditions.)
+
+## Constraints
+(Technical, business, timeline, or resource constraints. Fold in {{context}}.)
+
+## Open Questions
+(Known unknowns — the review phase will find more.)
+```
+
+Do not polish. A draft that surfaces uncertainty is more useful than one that
+hides it.
+
+**Exit criteria:** the spec draft covers all eight sections (full:
+`{{specs_dir}}/NNN-{{feature}}.md` exists and is readable; quick: sections in
+chat and mirrored to root notes), accounts for every P4 source found across
+structural and provenance closure, and records the target epic or its
+ambiguity.
+"""
+
+# ============================================================================
+# 3. SPEC REVIEW (parallel subagents)
+# ============================================================================
+
+[[steps]]
+id = "spec-review"
+title = "Parallel spec review across 6 dimensions"
+needs = ["specify"]
+description = """
+Stress-test the spec draft from six angles and distill the results into a prioritized
+"Critical Questions" list for the human.
+
+**Depth branch — if `{{depth}}` is `quick`:** do NOT dispatch subagents. Do one
+careful self-review pass that covers the same 6 dimensions below in brief, and
+produce a tight list of ≤4 critical questions. Then jump straight to
+**Synthesize**. Otherwise (any `{{depth}}` other than exactly `quick` is treated
+as `full`) proceed with the parallel dispatch below.
+
+**Dispatch 6 review passes in parallel** using your environment's subagent
+mechanism (Claude Code Agent/Task tool — one subagent per dimension). If no
+subagent mechanism is available, perform each pass sequentially yourself.
+
+Give each pass the spec path `{{specs_dir}}/NNN-{{feature}}.md` and the
+constitution (if it exists). Each pass returns findings classified as
+must-answer-before-build vs non-blocking.
+
+**The 6 dimensions:**
+1. **requirements** — Are success criteria and acceptance conditions complete?
+   Can someone write a test from this? Is "done" verifiable? Non-functional
+   requirements (performance, scale, reliability, error states) present? Does
+   every Backlog Input have enough information to become concrete P0-P3 work?
+2. **gaps** — What is completely absent? Auth/z, migrations, backwards
+   compatibility, empty/null states, concurrency, rate limiting, audit logging,
+   i18n, accessibility, admin/support tooling, deprecation/cleanup.
+3. **ambiguity** — Vague words ("fast", "simple", "reasonable"), undefined
+   terms, contradictions, implicit assumptions, "should" vs "must", undefined
+   ordering. What would two engineers implement differently?
+4. **feasibility** — Hardest technical problem? Requirements that are very
+   expensive or assume capabilities the system lacks? Unstated prerequisites?
+   What would double the effort if discovered mid-build?
+5. **scope** — What is the MVP? What is phase-2 in disguise? Missing explicit
+   out-of-scope statements? What will stakeholders ask for the day after launch?
+6. **stakeholders** — Who is affected but unmentioned (ops, support, security,
+   compliance, integrators)? Where do user needs conflict?
+
+**Triage before synthesizing — the gate carries PRODUCT decisions only.**
+Sort every candidate question:
+
+- PRODUCT (ask the human): scope and MVP cuts, priorities, user-visible
+  behavior/UX, risk acceptance, spend/cost, data egress/privacy, external
+  accounts/credentials, irreversible or hard-to-reverse choices, and any
+  approval the constitution explicitly reserves for the human.
+- TECHNICAL (resolve yourself, never ask): implementation approach,
+  library/pattern/schema choice, migration and rollout mechanics, numeric
+  defaults (timeouts, caps, debounce values), sequencing, testing mechanics.
+  Resolve by investigating the codebase first and, where the answer is not
+  in-repo, researching current standard/best practice (docs/web search).
+  Adopt the standard; record each as a one-line decision + rationale in the
+  Technical Decisions list below. If the reviews already converged on a
+  recommendation, that IS the decision — take it, don't ask.
+  Escalate a technical question to the human ONLY if research finds no clear
+  standard AND the choice is hard to reverse, or the options materially
+  change product behavior, cost, or risk posture — and then present it with
+  a researched recommendation. If a question needs a quick prototype or live
+  probe to resolve, run it yourself instead of asking whether to run it.
+
+**Synthesize:** Merge overlapping findings (cross-dimension hits are
+higher-confidence). Append a review section to the spec artifact (full: the
+file; quick: chat, mirrored to root notes):
+```markdown
+## Spec Review
+
+### Critical Questions (answer before planning)
+1. <question> — why it matters; flagged by: <dimensions>
+...
+
+### Technical Decisions (self-resolved — veto at the gate to override)
+- <decision> — <one-line rationale / standard followed>
+
+### Non-Blocking Observations
+- ...
+```
+Aim for a tight, prioritized list — no more than ~7 product questions.
+Any backlog input lacking a concrete, testable outcome is a critical question,
+not a non-blocking observation. Never defer its criteria with a TBD marker.
+If Target Epic lists multiple candidates, choosing exactly one is also a
+critical question. Do not infer the answer from proximity or title similarity.
+
+**Exit criteria:** the spec artifact has a `## Spec Review` section with a
+prioritized Critical Questions list (≤7) and non-blocking observations.
+"""
+
+# ============================================================================
+# 4. CLARIFY (human gate)
+# ============================================================================
+
+[[steps]]
+id = "clarify"
+title = "Human clarification gate"
+needs = ["spec-review"]
+description = """
+Get the human's answers to the critical questions before any planning starts.
+This is a HUMAN GATE — the molecule pauses here until the questions are answered.
+
+**1. Present the questions in chat.** Take the (≤7) Critical Questions from the
+spec review, keep them prioritized, and post them directly in the conversation:
+```
+## Clarifications needed: {{feature}}
+Spec: {{specs_dir}}/NNN-{{feature}}.md (quick depth: drafted above in chat)
+
+<numbered PRODUCT questions, most important first>
+
+Technical decisions taken (standard/best practice — object to override):
+- <decision — one-line rationale>
+
+Reply with numbered answers and I'll fold them into the spec, then plan.
+```
+Do not smuggle technical-approach questions back in here — if one surfaces
+while preparing the gate, resolve it per the spec-review triage (codebase
+investigation, then standard/best-practice research) and add it to the
+decision list instead. Silence on the decision list is consent; the numbered
+questions still require real answers.
+If the `constitution-check` step found NO `constitution.md`, repeat that note
+here (the human is already answering, so this is their real decision point):
+append a line such as "Also: no constitution.md exists — reply 'stop' if you
+want to create one first, otherwise I'll proceed without it."
+
+**2. Wait** for the human to answer in chat. Do not proceed on silence — this
+is a real gate.
+
+**3. Incorporate** the answers into the spec artifact under a new section:
+```markdown
+## Clarifications
+
+**Q1: <question>**
+A: <human's answer — reflected in Goals/Constraints/Acceptance as needed>
+...
+```
+Also update any Goals, Non-Goals, Constraints, or Acceptance Criteria the
+answers change.
+
+For every Backlog Input, obtain enough direction to produce verifiable
+acceptance criteria or get explicit human approval to classify it as a
+Non-Goal. Do not let an unresolved backlog item pass this gate.
+
+If Target Epic is ambiguous, present every candidate id and its title/context,
+ask the human to select exactly one target epic (or explicitly choose a new
+epic), and record the answer in the spec's Target Epic section. After selection,
+compute that epic's full hierarchy-plus-`discovered-from` closure and merge any
+new open P4 inputs before this gate exits. Never select an epic yourself.
+
+**Exit criteria:** Human has answered; the spec artifact has a
+`## Clarifications` section and the body reflects the answers.
+"""
+[steps.gate]
+type = "human"
+
+# ============================================================================
+# 5. PLAN
+# ============================================================================
+
+[[steps]]
+id = "plan"
+title = "Append the plan to the spec"
+needs = ["clarify"]
+description = """
+Design the implementation from the clarified spec.
+
+**Append these plan sections to `{{specs_dir}}/NNN-{{feature}}.md`** (quick:
+draft in chat + mirror to root notes) — same flat `##` level as the spec
+sections; every name is unique so anchors stay stable:
+```markdown
+## Architecture Approach
+(High-level approach and why. Note alternatives considered and rejected.)
+
+## Affected Components
+(Existing modules/files/services this touches, and how.)
+
+## Data Model
+(New/changed entities, schema, storage, migrations.)
+
+## API / Interface Changes
+(Endpoints, function signatures, CLI/UI surfaces, events. Note breaking changes.)
+
+## Testing Strategy
+(Unit, integration, e2e. What proves each requirement? Regression coverage.)
+
+## Risks
+(Technical, dependency, knowledge, rollback risks + mitigations / spikes.)
+
+## Sequencing
+(Ordered phases/work items with dependencies. This becomes the bead DAG —
+ make ordering explicit: which items block which. Express order via the
+ dependency edges and priorities, NOT numbered title prefixes — do not mint
+ `S0.1`/`A1:` step codes here; they leak into bead titles and rot on reorder.
+ Before wiring order, hunt SHARED PRIMITIVES: any NEW helper, constant, type,
+ schema, or interface that more than one work item needs. Extract each into
+ its own foundational work item (P0/P1) that blocks its consumers — parallel
+ workers branch from main and cannot see each other's unlanded code, so an
+ unextracted shared primitive gets written twice, divergently. Leave two
+ items unordered against each other only when their Files are disjoint AND
+ they share no new primitive.)
+
+## Backlog Refinement
+(Map every Backlog Input id to its plan work item(s), concrete acceptance
+criteria, target P0-P3 priority, and one disposition:
+`refine-in-place`, `split-and-supersede`, `already-retired-covered`, or
+`approved-non-goal`.
+Use `refine-in-place` for a one-to-one task; use `split-and-supersede` only
+when multiple replacement tasks are needed. Use `already-retired-covered` for
+a closed/superseded source and create P0-P3 work without reopening it. A
+non-goal requires explicit human approval and remains artifact-only.)
+```
+
+Do not add a second `## Target Epic` section — resolve the spec's existing
+Target Epic section in place instead; it may not remain ambiguous.
+
+**Check against the constitution** if `constitution.md` exists: verify the
+approach honors each principle; note any tension explicitly in the relevant
+section. Check the learnings store (`docs/solutions/`, when present) the same
+way: a plan that re-attempts an approach a learning documents as failed must
+say explicitly what changed to make it viable now.
+
+Every spec requirement, user story, backlog input, and clarification answer
+must be traceable to something in this plan. Every implementation work item
+must be concrete enough to become a P0-P3 task with verifiable acceptance
+criteria. P3 means low-priority but implement-ready; P4 is forbidden.
+
+**Exit criteria:** all eight plan sections are appended to the spec artifact,
+Target Epic is resolved in place, every backlog source has a disposition, and
+(if present)
+constitution principles are checked.
+"""
+
+# ============================================================================
+# 6. ALIGN AUTOFIX (one auto-fix round, parallel subagents)
+# ============================================================================
+
+[[steps]]
+id = "align-autofix"
+title = "One auto-fix alignment round on the plan"
+needs = ["plan"]
+description = """
+Run ONE automatic fix round on the plan sections. No human gate — apply
+must-fix findings directly.
+
+**Depth branch — if `{{depth}}` is `quick`:** skip the 2-subagent dispatch. Do a
+single self-check pass covering both spec↔plan coverage (every requirement,
+goal, non-goal, user story, backlog input, and clarification answer is covered;
+no Non-Goal scope creep) and plan quality (completeness, sequencing,
+testability). Apply the obvious must-fixes directly, then still append the
+`## Alignment fixes applied` log below (it may say "quick pass"). Otherwise
+(any `{{depth}}` other than exactly `quick` is treated as `full`) proceed with
+the parallel dispatch below.
+
+**Dispatch 2 subagents in parallel** (Claude Code Agent/Task tool; if
+unavailable, run both passes sequentially yourself):
+
+**Subagent A — spec↔plan alignment.** Input: `{{specs_dir}}/NNN-{{feature}}.md`.
+Walk every requirement, goal, non-goal, user story, backlog input, and
+clarification answer in the spec sections and verify the plan sections cover
+it. Report each as
+COVERED / GAP / PARTIAL with a suggested fix, classified must-fix or
+should-fix. Also flag any plan work that violates a Non-Goal (scope creep).
+
+**Subagent B — plan quality.** Input: the same file's plan sections. Check completeness (missing
+migrations, tests, infra, rollback, docs), sequencing (wrong order, hidden or
+circular dependencies, false serialization — AND the symmetric miss: two
+unordered work items that both create or modify the same new primitive
+(helper, constant, type, schema) or the same file; parallel workers cannot
+see each other's unlanded work, so that is a must-fix — extract a shared
+foundational item or add a dependency edge), and testability (does each work
+item have verifiable acceptance criteria?). Report findings as must-fix or
+should-fix with concrete suggestions.
+
+**Apply fixes:** Read both reports. Apply every must-fix finding (and clear
+should-fix wins) directly to the plan sections — add missing work items, fix ordering,
+cut scope creep, tighten acceptance criteria, and ensure every backlog source
+has a complete disposition. Confirm Target Epic is resolved and all provenance
+closure inputs are covered. Never add a P4 work item or placeholder criteria.
+
+**Log what changed** by appending to the end of the spec artifact (quick:
+chat + root notes):
+```markdown
+## Alignment fixes applied
+- <fix 1 — from A/B, must/should>
+- <fix 2 ...>
+(If nothing needed fixing, say so explicitly.)
+```
+
+**Exit criteria:** Both passes done, must-fix items applied to the plan
+sections, and an `## Alignment fixes applied` log appended.
+"""
+
+# ============================================================================
+# 7. ANALYZE (report-only + human gate)
+# ============================================================================
+
+[[steps]]
+id = "analyze"
+title = "Analysis report and human approval gate"
+needs = ["align-autofix"]
+description = """
+Produce a report-only analysis and get human approval before any beads are
+created. This is a HUMAN GATE — the molecule pauses until the human approves.
+The gate fires in BOTH depths — never skip it.
+
+**Depth branch — if `{{depth}}` is `quick`** (any value other than exactly
+`quick` is treated as `full`)**:** the report may be abbreviated — the
+Coverage Table and Recommendation are required; include Remaining Risks and
+Unresolved Questions sections only if they are non-empty. The approval gate
+below is unchanged.
+
+**1. Compose the analysis directly in chat** (report only — NO file; do NOT
+change the spec artifact here except to apply explicit human fix requests in
+step 4):
+```markdown
+# Analysis: {{feature}}
+
+## Coverage Table
+| User story / requirement | Covered by (plan section) | Status |
+|--------------------------|---------------------------|--------|
+| ...                      | ...                       | full / partial / none |
+
+## Backlog Disposition
+| Source P4 id | Plan work item(s) / non-goal | Disposition | Ready to resolve? |
+|--------------|-------------------------------|-------------|-------------------|
+| ...          | ...                           | ...         | yes / no          |
+
+## Target Epic
+(Resolved existing epic id, or "new epic". Ambiguity is not approvable.)
+
+## Remaining Risks
+(Open technical/dependency/rollback risks and their mitigations.)
+
+## Unresolved Questions
+(Anything still open after clarification.)
+
+## Constitution Check
+(If constitution.md exists: list each principle and pass/tension/violation.
+ If absent: "No constitution.md — skipped.")
+
+## Recommendation
+**GO / GO-WITH-FIXES / NO-GO** — one paragraph rationale.
+(GO-WITH-FIXES: list the specific fixes required.)
+```
+
+**2. Lead the report with the summary:** coverage headline, backlog
+dispositions, top risks, unresolved questions, any constitution violations,
+and the GO / GO-WITH-FIXES / NO-GO recommendation. If any backlog
+source lacks concrete acceptance criteria or an explicit non-goal decision,
+the recommendation must be NO-GO or GO-WITH-FIXES; do not ask for approval to
+create beads yet. Apply the same rule when Target Epic remains ambiguous.
+This gate asks for the GO decision plus product-level ratifications only —
+a technical question still open at this point follows the clarify triage:
+research it (codebase, then standard/best practice), fold the decision into
+the plan with rationale, and list it under Remaining Risks or the analysis
+if veto-worthy. Do not append technical multiple-choice questions here.
+
+**3. Wait** for the human's decision. Do not proceed on silence.
+
+**4. Handle the response:**
+- Approved → proceed to bead creation.
+- Fix requests → apply them to the spec artifact, re-present the updated
+  analysis, and wait again.
+- NO-GO → stop; report what needs to change before re-running.
+
+**Exit criteria:** the chat analysis included coverage and backlog disposition
+tables, Target Epic is resolved, no backlog input is unresolved, and the human
+has explicitly approved proceeding to beads.
+"""
+[steps.gate]
+type = "human"
+
+# ============================================================================
+# 8. CREATE BEADS
+# ============================================================================
+
+[[steps]]
+id = "create-beads"
+title = "Convert the approved plan into dependency-wired task beads"
+needs = ["analyze"]
+description = """
+Turn the approved plan into task beads under a feature epic, wired only
+where sequence genuinely matters. Resolve every source backlog item and enforce
+a zero-ready-P4 invariant before completing.
+
+**1. Establish the feature epic.**
+
+Resolve EPIC in this order:
+1. Use `{{epic}}` when set.
+2. Otherwise read the approved plan's Target Epic. If it names an existing
+   epic selected from `{{epic_candidates}}`, use that id.
+3. If Target Epic explicitly says to create a new epic, follow the creation
+   path below.
+
+If multiple candidates remain or the artifacts disagree, STOP and return to
+the human clarify path. Never choose by proximity.
+
+For a resolved existing epic, use that id as EPIC — do NOT create a new one.
+Full depth — set its native spec link: `--spec-id` records this run's spec
+file (it overwrites any prior run's value), `--append-notes` keeps the
+multi-run history without touching existing notes:
+```bash
+bd update EPIC --spec-id="{{specs_dir}}/$NNN-{{feature}}.md" --append-notes="Spec: {{specs_dir}}/$NNN-{{feature}}.md"
+```
+Quick depth — no file exists; carry the approved content on the epic without
+clobbering its existing description or design:
+```bash
+bd update EPIC --append-notes="Quick spec+plan ({{feature}}):
+<condensed spec: goals, non-goals, key acceptance criteria>
+<condensed plan: approach, key decisions, sequencing>"
+```
+
+For an explicitly new epic, the title is a short noun-phrase slug (the
+`{{feature}}` slug as-is is fine). Full depth:
+```bash
+bd create "{{feature}}" --type=epic --spec-id="{{specs_dir}}/$NNN-{{feature}}.md" \
+  --description="Implementation of {{feature}}.
+
+Problem: {{problem}}"
+```
+Quick depth — the epic IS the durable record: condensed spec in the
+description, condensed plan in the native design field:
+```bash
+bd create "{{feature}}" --type=epic --description="Implementation of {{feature}}.
+
+Problem: {{problem}}
+<condensed spec: goals, non-goals, key acceptance criteria>" \
+  --design="<condensed plan: approach, key decisions, sequencing>"
+```
+Note the returned epic id (referred to below as EPIC).
+
+**2. Refresh the required backlog set before changing issues.**
+
+Immediately before materialization, recompute scope from current Beads data:
+1. Seed SCOPE with EPIC and recursively add structural descendants using
+   `bd list --parent <id> --all --limit=0 --json`.
+2. Run `bd dep list <scope ids...> --direction=up
+   --type=discovered-from --json`. Add each dependent discovered from a SCOPE
+   issue plus its structural descendants.
+3. Repeat the provenance query for newly added ids until no ids are added.
+   De-duplicate after each round. This is the hierarchy-plus-provenance
+   closure.
+4. Add `{{source_backlog}}`, every `{{backlog}}` id, and every id recorded in
+   the spec's Backlog Inputs to the working set even if outside the closure.
+
+Collect every working-set issue whose stored status is `open` and priority is
+`4`, read each with `bd show <id> --json`, and match it to the approved plan's
+Backlog Refinement table. This refresh catches P4 provenance dependents added
+while the wisp was running; parent-only discovery is insufficient.
+
+If any source has no concrete P0-P3 work item with verifiable acceptance
+criteria and is not an explicitly human-approved non-goal, STOP. Do not create
+a placeholder bead and do not close this step. Present the missing decision to
+the human, update the artifacts after they answer, then continue.
+
+**3. Materialize each plan work item exactly once.**
+
+Every bead uses beads' native linkage fields, and the description holds only
+Why/What. Full depth: `--spec-id` names the feature's spec file (uniform
+across the feature, so `bd list --spec {{specs_dir}}/NNN-{{feature}}` returns
+the whole feature) and `--design` carries the plan-section anchor. Quick
+depth: omit `--spec-id`; `--design` carries a 1-3 line inline design note for
+the task instead of a pointer.
+
+For a work item with no backlog source, create a new task:
+```bash
+bd create "<task title>" --type=task --parent=EPIC -p <P0-P3> \
+  --spec-id="{{specs_dir}}/NNN-{{feature}}.md" \
+  --design="{{specs_dir}}/NNN-{{feature}}.md#<plan-section>" \
+  --description="Why: <what this delivers and the goal it serves>
+What: <concrete work to do>
+Files: <comma-separated repo-relative paths this work item touches>" \
+  --acceptance="<concrete, verifiable conditions>"
+```
+
+`Files:` is required on every materialized task. It is the input
+/implement-ready's semantic overlap guard reads to decide which tasks may run
+in parallel; tasks without it are dispatched unguarded against each other. Take
+the paths from the plan's `## Affected Components` section — if that section
+does not name files concretely enough to fill this line, the plan is not
+implementable yet, so fix the plan rather than filing a task with a guess.
+
+For a one-to-one `refine-in-place` mapping, reuse the source id instead of
+creating a duplicate. Rewrite it as the planned task, attach it to EPIC, clear
+any deferral, and promote it to P0-P3:
+```bash
+bd update <source-id> --type=task --parent=EPIC -p <P0-P3> \
+  --title="<task title>" \
+  --spec-id="{{specs_dir}}/NNN-{{feature}}.md" \
+  --design="{{specs_dir}}/NNN-{{feature}}.md#<plan-section>" \
+  --description="Why: <goal>
+What: <concrete work>
+Files: <comma-separated repo-relative paths this work item touches>" \
+  --acceptance="<concrete, verifiable conditions>" --defer="" --status=open
+```
+
+For a `split-and-supersede` mapping, create every P0-P3 replacement first and
+verify that their combined acceptance criteria cover the source. Only after
+that coverage exists, retire the P4 source using the primary replacement:
+```bash
+bd supersede <source-id> --with <primary-replacement-id>
+```
+Reference the source id in every replacement's description. Never supersede
+first, and never leave both the original and replacement actionable.
+
+For an `already-retired-covered` source, create the approved P0-P3 replacement
+work and verify its acceptance criteria cover the source. Preserve the source's
+closed/superseded state; never reopen or supersede it again.
+
+For an `approved-non-goal`, create no task. Confirm the analyze gate records
+the human's explicit approval, then retire the source with a specific reason:
+```bash
+bd close <source-id> --reason="Approved non-goal; recorded in the {{feature}} spec Non-Goals"
+```
+
+**Title rule (every bead):** verb-first imperative, ≤60 chars, no trailing
+period (`Port admin loans to unified primitives`). No status/type/priority
+prefixes, no step-number codes (`S0.1`, `A1:`), no `[bracket]` badges — bd
+renders type/status/priority itself, so a title that repeats them just wastes
+scannable width. Group with `-l` labels, order with `bd dep` + `-p`, and carry
+plan traceability in the `spec_id`/`design` fields above — never in the title
+or the description.
+
+**Set `-p` per plan criticality.** New or refined implementation tasks may only
+be P0-P3:
+- **P0/P1** — critical-path or foundational items (schema/migrations, shared
+  primitives, anything many other beads depend on).
+- **P2** — normal work (the default).
+- **P3** — low-priority, polish, or phase-2 work that is still fully
+  implement-ready.
+
+P4 is forbidden in this pipeline. Every task needs concrete, verifiable
+acceptance criteria in the issue's acceptance field. If criteria cannot be made
+concrete, return to the human decision path above or keep the idea only as an
+explicit artifact Non-Goal. Never emit a stub, TBD marker, or vague
+"defined when worked" criterion.
+
+**4. Wire ordering ONLY where sequence genuinely matters.** Dependent-first
+argument order (the dependent is blocked by the blocker):
+```bash
+bd dep add <dependent-id> <blocker-id>
+```
+Do not over-constrain — items that can proceed independently must stay
+unblocked. Verify no accidental chains:
+```bash
+bd blocked --parent EPIC
+```
+
+**5. Verify coverage and enforce the backlog invariants.**
+
+Re-read the plan sections against the resulting issues. For every work item
+confirm exactly one new or refined task exists with why, what, a `design`
+reference (plus `spec_id` in full depth), a P0-P3 priority, and concrete
+acceptance criteria. Confirm every source backlog id was refined, superseded
+only after replacement coverage, covered while already retired, or retired as
+an approved non-goal.
+Full depth — verify native linkage in one query; it must return EPIC and every
+task bead:
+```bash
+bd list --spec "{{specs_dir}}/NNN-{{feature}}" --limit=0 --json
+```
+Quick depth — no spec_id; confirm instead that EPIC carries the condensed
+spec/plan and every task's design field holds its inline note.
+
+Immediately before the invariant checks, recompute the entire
+hierarchy-plus-`discovered-from` closure from EPIC using the exact fixed-point
+procedure in step 2. Add `{{source_backlog}}`, `{{backlog}}`, and all recorded
+Backlog Input ids. Call the de-duplicated union SCOPE_IDS. Do not reuse the
+pre-materialization snapshot.
+
+Then run the structural check and full-closure checks:
+```bash
+bd ready --parent EPIC --priority=4 --limit=0 --json
+bd list --id "<comma-separated SCOPE_IDS>" --status=open --priority=4 --limit=0 --json
+bd list --id "<comma-separated SCOPE_IDS>" --ready --priority=4 --limit=0 --json
+```
+All three JSON arrays must be empty. The first explicitly verifies structural
+`bd ready`; the second prevents an open P4 anywhere in the full closure from
+surviving merely because dependency edges currently keep it out of the ready
+queue; the third applies ready semantics across hierarchy, provenance
+dependents, and any outside direct source.
+
+If any check returns an item, do not warn and continue. Add it to the backlog
+set, resolve it by refinement, coverage-first supersession, or approved
+non-goal retirement, recompute the fixed-point closure again, then rerun every
+check. Do not close this step or squash the wisp until all checks are empty.
+
+Count dispatchable ready work separately:
+```bash
+bd list --id "<comma-separated SCOPE_IDS>" --ready --priority-max=3 --limit=0 --json
+bd blocked --json
+```
+Intersect the `bd blocked --json` result with SCOPE_IDS for the scoped blocked
+count; provenance dependents are not necessarily structural descendants.
+
+**6. Final report in chat:**
+```
+## Beads created: {{feature}}
+Epic: EPIC
+Task beads: <count>
+Dispatchable ready (P0-P3): <scoped count>
+Blocked: <scoped count>
+Backlog dispositions: <source id → refined/superseded/already-retired/non-goal>
+Ready P4: 0
+
+Work it with: $implement-ready EPIC
+```
+
+**7. Squash the wisp (cleanup).** After you close this step, the pipeline is
+done and its beads are spent scaffolding — collapse them into one durable
+digest. Squash the molecule root:
+```bash
+bd mol squash <molecule-root> --summary "<2-4 sentence digest: feature, epic id, task-bead count, both gate outcomes (clarify + analyze), and the spec file path (quick: 'epic-carried')>"
+```
+This leaves a single permanent digest bead and auto-cleans the ephemeral step
+beads. The feature epic and (full depth) the spec file remain the durable
+record — the digest just points at them. Sweep any stragglers with
+`bd mol wisp gc`.
+
+**Exit criteria:** Feature epic exists; every plan work item has exactly one
+P0-P3 task with why/what, `design` linkage (plus `spec_id` in full depth),
+and acceptance criteria; every backlog source has a
+recorded disposition; the freshly recomputed hierarchy-plus-provenance closure
+(plus any outside direct source) has no open or ready P4; structural
+`bd ready --parent EPIC --priority=4` is empty; the human has the epic id,
+dispatchable/blocked counts, dispositions, and `Ready P4: 0`; and the wisp has
+been squashed into a single digest bead.
+"""

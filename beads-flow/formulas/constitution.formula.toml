@@ -1,0 +1,172 @@
+formula = "constitution"
+description = """
+Create or revise a repo's `constitution.md` — the numbered engineering
+principles that the `speckit` formula's gates check spec and plan against.
+
+Small 3-step workflow for plain beads + Claude Code (no Gas Town runtime):
+gather the repo's real conventions, confirm the draft with the human at a
+gate, then write the final file at the repo root.
+
+## Lifecycle (ephemeral wisp)
+
+This is `phase = "vapor"` — the workflow beads are scaffolding; the durable
+record is `constitution.md` in git. Run it as a wisp, not a persistent mol:
+
+```
+bd mol wisp constitution
+```
+
+When the `write` step finishes, squash the wisp into a single digest bead
+(`bd mol squash <root>`), leaving one permanent summary while the ephemeral step
+beads auto-clean. Wisps resume the same way mols do — `bd ready --mol <root>`.
+
+## v1 caveat (distill from practice)
+
+This formula was designed upfront, not distilled from practice. After each of
+the first few runs, revise the step runbooks based on what actually happened
+(the `bd mol distill` direction) — treat friction as a bug in the formula, not
+in the run.
+
+## Pipeline
+
+```
+gather → [human-review: HUMAN GATE] → write
+```
+
+## Execution model
+
+**Never write artifact file content via the shell.** Write `constitution.md`
+with the agent's own Write/Edit file tools — never shell heredocs
+(`cat >> file << 'EOF'`) or echo-append, which false-trigger commit hooks and
+mangle quoting. The `ls`/`cat`/`bd` bash commands in the runbooks stay as shown;
+the rule is only about writing file CONTENT.
+
+## Variables
+
+| Variable | Required | Description                        |
+|----------|----------|------------------------------------|
+| context  | no       | Extra context, priorities, links   |
+"""
+version = 1
+type = "workflow"
+phase = "vapor"
+
+[vars.context]
+description = "Extra context, priorities, or links to steer the principles"
+required = false
+default = ""
+
+# ============================================================================
+# 1. GATHER
+# ============================================================================
+
+[[steps]]
+id = "gather"
+title = "Inventory conventions and draft candidate principles"
+description = """
+Discover what this repo actually values and draft candidate principles from it.
+
+**1. Read the evidence:**
+```bash
+ls -la
+cat CLAUDE.md 2>/dev/null
+ls .github/workflows/ 2>/dev/null && cat .github/workflows/*.y*ml 2>/dev/null
+cat .eslintrc* .prettierrc* pyproject.toml .ruff.toml tsconfig*.json 2>/dev/null
+ls docs/ 2>/dev/null
+```
+Also skim READMEs and any existing `constitution.md`. Fold in `{{context}}`.
+
+**2. Draft candidate principles** across these areas (only those that apply):
+- Technology choices (languages, frameworks, key libraries, versions)
+- Quality bars (types, lint, formatting, coverage expectations)
+- Testing policy (what must be tested, when tests are written, what "done" means)
+- Style / architecture rules (module boundaries, immutability, error handling)
+- Delivery (review, commits, CI gates)
+
+For each candidate, clearly mark its basis:
+- **[observed]** — evidenced by config/CI/code you just read (cite the source).
+- **[aspirational]** — a proposed norm not yet enforced anywhere.
+
+Keep each principle to one crisp sentence plus a one-line rationale.
+
+**Exit criteria:** A draft list of candidate principles, each tagged
+[observed] or [aspirational] with a rationale, ready to show the human.
+"""
+
+# ============================================================================
+# 2. HUMAN REVIEW (gate)
+# ============================================================================
+
+[[steps]]
+id = "human-review"
+title = "Human review of draft principles"
+needs = ["gather"]
+description = """
+Confirm which principles to keep before writing the file. HUMAN GATE — the
+molecule pauses here until the human responds.
+
+**1. Present the draft in chat**, grouped by area, each tagged [observed] /
+[aspirational] with its rationale. Ask directly:
+```
+## Draft constitution principles
+<numbered principles, grouped, tagged observed/aspirational>
+
+For each: keep as-is, amend (how?), or drop? Anything missing?
+```
+
+**2. Wait** for the human's response. Do not proceed on silence.
+
+**3. Incorporate** their decisions — drop rejected principles, apply amendments,
+add anything they raise. Produce the final principle list to be written.
+
+**Exit criteria:** Human has responded; you hold a finalized, agreed principle
+list.
+"""
+[steps.gate]
+type = "human"
+
+# ============================================================================
+# 3. WRITE
+# ============================================================================
+
+[[steps]]
+id = "write"
+title = "Write constitution.md at the repo root"
+needs = ["human-review"]
+description = """
+Write the agreed principles to `constitution.md` at the repo root.
+
+**Structure:**
+```markdown
+# Constitution
+
+The engineering principles governing this repository. Read by the `speckit`
+formula's spec-review, plan, and analyze gates — every feature is checked
+against these.
+
+## Principles
+
+1. **<Principle name>** — <one-sentence rule>.
+   _Rationale:_ <one line why>.
+2. ...
+```
+
+Keep it concise: numbered, one rule per principle, each with a one-line
+rationale. Use only the principles the human agreed in the previous step.
+Do not reintroduce dropped items.
+
+**Confirm in chat:** report the path (`constitution.md`), the principle count,
+and note that `speckit`'s gates will now check specs and plans against it.
+
+**Squash the wisp (cleanup):** after you close this step, collapse the spent
+scaffolding into one durable digest:
+```bash
+bd mol squash <molecule-root> --summary "<1-2 sentence digest: principle count and that constitution.md is written at the repo root>"
+```
+This leaves a single permanent digest bead and auto-cleans the ephemeral step
+beads; `constitution.md` in git is the durable record.
+
+**Exit criteria:** `constitution.md` exists at the repo root with numbered
+principles + rationales, matching the human-approved list, the human has been
+told it is in place, and the wisp has been squashed into a single digest bead.
+"""
