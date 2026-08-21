@@ -23,7 +23,12 @@ import {
 	installModelAutocompleteSubmit,
 	sortModelAutocompleteDescending,
 } from "./src/autocomplete-details.ts";
-import { installEditorNavigation } from "./src/editor-navigation.ts";
+import {
+	installEditorNavigation,
+	installPromptClear,
+	installReverseHistorySearch,
+	type ReverseHistorySearchController,
+} from "./src/editor-navigation.ts";
 import { installFooterColors } from "./src/footer-colors.ts";
 import {
 	isRecallable,
@@ -43,6 +48,7 @@ import {
 	PROMPT_DISPLAY_ENTRY,
 } from "./src/prompt-display.ts";
 import { installRecorder } from "./src/recorder.ts";
+import { installSmartSelection } from "./src/smart-selection.ts";
 import {
 	appendPrompt,
 	compactIfNeeded,
@@ -203,6 +209,8 @@ function decodeModelReference(value: string): ModelReference | undefined {
 export default function (pi: ExtensionAPI) {
 	let removeFooterColors: (() => void) | undefined;
 	let removeJumpToBottom: (() => void) | undefined;
+	let removePromptClear: (() => void) | undefined;
+	let removeSmartSelection: (() => void) | undefined;
 	let imagePreview: ImagePreviewController | undefined;
 	let removeTerminalInput: (() => void) | undefined;
 	let transcriptCleanup: TranscriptCleanupController | undefined;
@@ -451,6 +459,10 @@ export default function (pi: ExtensionAPI) {
 		removeFooterColors = undefined;
 		removeJumpToBottom?.();
 		removeJumpToBottom = undefined;
+		removePromptClear?.();
+		removePromptClear = undefined;
+		removeSmartSelection?.();
+		removeSmartSelection = undefined;
 		imagePreview?.dispose();
 		imagePreview = undefined;
 		removeTerminalInput?.();
@@ -519,10 +531,12 @@ export default function (pi: ExtensionAPI) {
 			(text) => isRecallable(text, commands),
 		);
 		let historyGuard: HistoryGuard | undefined;
+		let historySearch: ReverseHistorySearchController | undefined;
 		const record = (text: string, sourceText: string) => {
 			if (isRecallable(text, pi.getCommands())) {
 				appendPrompt(store, text);
 				historyGuard?.add(text);
+				historySearch?.add(text);
 			}
 			if (
 				!sourceText.trimStart().startsWith("/") &&
@@ -545,6 +559,8 @@ export default function (pi: ExtensionAPI) {
 			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Settled transcript]]
 			transcriptCleanup?.uninstall();
 			transcriptCleanup = installTranscriptCleanup(tui, ctx, keybindings);
+			removeSmartSelection?.();
+			removeSmartSelection = installSmartSelection(tui);
 			historyGuard = installHistoryGuard(editor);
 			removeJumpToBottom?.();
 			removeJumpToBottom = installJumpToBottom(editor, tui);
@@ -558,6 +574,15 @@ export default function (pi: ExtensionAPI) {
 				(text) => imagePreview?.prepare(text) ?? text,
 			);
 			installModelAutocompleteSubmit(editor, keybindings);
+			removePromptClear?.();
+			removePromptClear = installPromptClear(editor, tui, keybindings, ctx);
+			historySearch = installReverseHistorySearch(
+				editor,
+				tui,
+				keybindings,
+				seeded,
+				MAX_ENTRIES,
+			);
 			installAutocompleteDetails(editor, tui, theme);
 			removeFooterColors?.();
 			removeFooterColors = installFooterColors(tui, ctx);

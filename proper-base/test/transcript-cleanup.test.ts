@@ -109,7 +109,7 @@ test("agent settlement restores the collapsed process-detail default", async () 
 });
 
 // @lat: [[lat.md/proper-base/tests#Verification#Settled transcript fixture]]
-test("settled transcript keeps only direct replies until process details expand", () => {
+test("settled transcript keeps thoughts and updates visible", () => {
 	let idle = false;
 	let expanded = false;
 	const rowColors = new Map<string, string>();
@@ -137,7 +137,7 @@ test("settled transcript keeps only direct replies until process details expand"
 			getToolsExpanded: () => expanded,
 			theme: {
 				fg: (color: string, text: string) => {
-					const kind = /^(?:▸|▾) (thought|tool|update|error)\b/.exec(text)?.[1];
+					const kind = /^(?:▸|▾) (tool|error)\b/.exec(text)?.[1];
 					if (kind) rowColors.set(kind, color);
 					return text;
 				},
@@ -174,16 +174,15 @@ test("settled transcript keeps only direct replies until process details expand"
 		}),
 	);
 	chat.addChild(new UserMessageComponent("fix it"));
-	chat.addChild(
-		new AssistantMessageComponent({
-			content: [
-				{ type: "thinking", thinking: "inspect files" },
-				{ type: "text", text: "I will inspect." },
-				{ type: "toolCall" },
-			],
-			stopReason: "toolUse",
-		}),
-	);
+	const progressAssistant = new AssistantMessageComponent({
+		content: [
+			{ type: "thinking", thinking: "inspect files" },
+			{ type: "text", text: "I will inspect.\nSecond line." },
+			{ type: "toolCall" },
+		],
+		stopReason: "toolUse",
+	});
+	chat.addChild(progressAssistant);
 	chat.addChild(new ToolExecutionComponent("tool-1"));
 	chat.addChild(new ToolExecutionComponent("tool-2", true));
 	chat.addChild(new StatusComponent());
@@ -209,14 +208,29 @@ test("settled transcript keeps only direct replies until process details expand"
 	assert.match(live, /I will inspect/);
 	assert.match(live, /tool preview/);
 
+	controller.completeAssistant(progressAssistant.lastMessage);
+	const progressDoneLines = chat.render(100).map(stripTerminalSequences);
+	const progressRow = progressDoneLines.findIndex((line) =>
+		line.includes("assistant: I will inspect."),
+	);
+	assert.ok(progressRow > 0);
+	assert.equal(progressDoneLines[progressRow - 1]?.trim(), "");
+	assert.equal(progressDoneLines[progressRow + 1]?.trim(), "");
+	assert.match(progressDoneLines[progressRow] ?? "", /Second line\./);
+	assert.match(progressDoneLines.join("\n"), /thinking: inspect files/);
+	assert.doesNotMatch(
+		progressDoneLines.join("\n"),
+		/thought · inspect files|update · I will inspect/,
+	);
+
 	controller.completeAssistant(finalAssistant.lastMessage);
 	const assistantDone = chat.render(100).map(stripTerminalSequences).join("\n");
-	assert.match(assistantDone, /thought · verify result/);
+	assert.match(assistantDone, /thinking: verify result/);
 	assert.ok(
-		assistantDone.indexOf("thought · verify result") <
+		assistantDone.indexOf("thinking: verify result") <
 			assistantDone.indexOf("assistant: Fixed."),
 	);
-	assert.doesNotMatch(assistantDone, /thinking: verify result/);
+	assert.doesNotMatch(assistantDone, /thought · verify result/);
 	assert.equal(assistantDone.match(/tool preview/g)?.length, 2);
 
 	controller.completeTool("tool-1");
@@ -226,27 +240,33 @@ test("settled transcript keeps only direct replies until process details expand"
 
 	idle = true;
 	controller.settle();
-	const collapsed = chat.render(100).map(stripTerminalSequences).join("\n");
+	const collapsedLines = chat.render(100).map(stripTerminalSequences);
+	const collapsed = collapsedLines.join("\n");
 	assert.match(collapsed, /assistant: Image reply\./);
-	assert.match(collapsed, /thought · inspect image/);
+	assert.match(collapsed, /thinking: inspect image/);
 	assert.match(collapsed, /assistant: Fixed\./);
-	assert.match(collapsed, /thought · inspect files/);
-	assert.match(collapsed, /update · I will inspect/);
+	assert.match(collapsed, /thinking: inspect files/);
+	assert.match(collapsed, /assistant: I will inspect\.\nSecond line\./);
+	assert.doesNotMatch(collapsed, /update · I will inspect/);
 	assert.match(collapsed, /tool · read · src\/example\.ts/);
 	assert.match(collapsed, /error · read · src\/example\.ts/);
-	assert.match(collapsed, /update · status: checking/);
-	assert.match(collapsed, /thought · verify result/);
+	assert.match(collapsed, /status: checking/);
+	assert.doesNotMatch(collapsed, /update · status: checking/);
+	const statusRow = collapsedLines.indexOf("status: checking");
+	assert.ok(statusRow > 0);
+	assert.equal(collapsedLines[statusRow - 1]?.trim(), "");
+	assert.equal(collapsedLines[statusRow + 1]?.trim(), "");
+	assert.match(collapsed, /thinking: verify result/);
+	assert.doesNotMatch(collapsed, /thought ·/);
 	assert.ok(
-		collapsed.indexOf("update · status: checking") <
+		collapsed.indexOf("status: checking") <
 			collapsed.indexOf("assistant: Fixed."),
 	);
 	assert.deepEqual(Object.fromEntries(rowColors), {
-		thought: "thinkingHigh",
-		update: "accent",
 		tool: "mdLink",
 		error: "error",
 	});
-	assert.equal(new Set(rowColors.values()).size, 4);
+	assert.equal(new Set(rowColors.values()).size, 2);
 	assert.match(collapsed, /user: follow up\nassistant: Done again\./);
 	chat.addChild(new Spacer(1));
 	chat.addChild(new StatusComponent("Session: 12 messages, 4 tools"));
@@ -261,10 +281,7 @@ test("settled transcript keeps only direct replies until process details expand"
 	);
 	const continued = chat.render(100).map(stripTerminalSequences).join("\n");
 	assert.match(continued, /assistant: Continued\./);
-	assert.doesNotMatch(
-		collapsed,
-		/thinking: inspect files|assistant: I will inspect|thinking: verify result|tool preview/,
-	);
+	assert.doesNotMatch(collapsed, /thought ·|tool preview/);
 	tui.previousScreen = chat.render(100);
 	const targetRow = tui.previousScreen.findIndex((line) =>
 		stripTerminalSequences(line).startsWith("▸ tool · read"),
@@ -282,10 +299,9 @@ test("settled transcript keeps only direct replies until process details expand"
 	const clicked = chat.render(100).map(stripTerminalSequences).join("\n");
 	assert.equal(clicked.match(/tool output/g)?.length, 1);
 	assert.match(clicked, / collapse /);
-	assert.doesNotMatch(
-		clicked,
-		/thinking: inspect files|thinking: inspect image/,
-	);
+	assert.match(clicked, /thinking: inspect files/);
+	assert.match(clicked, /thinking: inspect image/);
+	assert.doesNotMatch(clicked, /thought ·/);
 	tui.previousScreen = chat.render(100);
 	const collapseRow = tui.previousScreen.findIndex((line) =>
 		stripTerminalSequences(line).startsWith(" collapse "),
@@ -306,23 +322,50 @@ test("settled transcript keeps only direct replies until process details expand"
 	controller.start();
 	chat.addChild(new Spacer(1));
 	chat.addChild(new UserMessageComponent("active prompt"));
-	chat.addChild(
-		new AssistantMessageComponent({
-			content: [
-				{ type: "thinking", thinking: "active thinking" },
-				{ type: "toolCall" },
-			],
-			stopReason: "toolUse",
-		}),
-	);
-	chat.addChild(new ToolExecutionComponent("tool-active"));
+	const activeAssistant = new AssistantMessageComponent({
+		content: [
+			{ type: "thinking", thinking: "active thinking" },
+			{ type: "toolCall" },
+		],
+		stopReason: "toolUse",
+	});
+	chat.addChild(activeAssistant);
+	const activeTool = new ToolExecutionComponent("tool-active");
+	activeTool.args = { path: "src/active.ts" };
+	chat.addChild(activeTool);
 	const runningAgain = chat.render(100).map(stripTerminalSequences).join("\n");
-	assert.doesNotMatch(
-		runningAgain,
-		/thinking: inspect image|thinking: inspect files|thinking: verify result/,
-	);
+	assert.match(runningAgain, /thinking: inspect image/);
+	assert.match(runningAgain, /thinking: inspect files/);
+	assert.match(runningAgain, /thinking: verify result/);
 	assert.match(runningAgain, /active thinking/);
 	assert.match(runningAgain, /tool preview/);
+
+	controller.completeAssistant(activeAssistant.lastMessage);
+	const activeAssistantDone = chat
+		.render(100)
+		.map(stripTerminalSequences)
+		.join("\n");
+	assert.match(activeAssistantDone, /thinking: active thinking/);
+	assert.doesNotMatch(activeAssistantDone, /thought · active thinking/);
+	controller.completeTool("tool-active");
+	const working = new StatusComponent("Working...");
+	const nextAssistant = new AssistantMessageComponent({
+		content: [],
+		stopReason: "stop",
+	});
+	chat.addChild(working);
+	chat.addChild(nextAssistant);
+	const waiting = chat.render(100).map(stripTerminalSequences).join("\n");
+	assert.match(waiting, /tool preview/);
+	assert.doesNotMatch(waiting, /tool · read · src\/active\.ts/);
+	nextAssistant.updateContent({
+		content: [{ type: "thinking", thinking: "next section" }],
+		stopReason: "stop",
+	});
+	const advanced = chat.render(100).map(stripTerminalSequences).join("\n");
+	assert.match(advanced, /tool · read · src\/active\.ts/);
+	assert.match(advanced, /thinking: next section/);
+	chat.removeChild(working);
 	idle = true;
 	controller.settle();
 
@@ -336,6 +379,7 @@ test("settled transcript keeps only direct replies until process details expand"
 	assert.match(expandedOutput, /verify result/);
 	assert.match(expandedOutput, /tool output/);
 	assert.match(expandedOutput, /status: checking/);
+	assert.doesNotMatch(expandedOutput, /thought ·/);
 
 	controller.uninstall();
 	controller.uninstall();

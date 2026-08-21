@@ -25,11 +25,13 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 		cursorLine: 1,
 		cursorCol: 1,
 	};
+	let shutdowns = 0;
 	const editor = {
 		state: editorState,
 		onSubmit: undefined,
 		addToHistory() {},
 		getLines: () => [...editorState.lines],
+		getText: () => editorState.lines.join("\n"),
 		getCursor: () => ({
 			line: editorState.cursorLine,
 			col: editorState.cursorCol,
@@ -40,6 +42,11 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 				editorState.cursorCol =
 					editorState.lines[editorState.cursorLine]?.length ?? 0;
 			}
+		},
+		setText(text: string) {
+			editorState.lines = text.split("\n");
+			editorState.cursorLine = editorState.lines.length - 1;
+			editorState.cursorCol = editorState.lines.at(-1)?.length ?? 0;
 		},
 		buildVisualLineMap() {
 			return editorState.lines.flatMap((line, logicalLine) =>
@@ -62,7 +69,7 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 				);
 			});
 		},
-		render: () => ["editor"],
+		render: (_width: number) => ["editor"],
 	};
 	const keybindings = new KeybindingsManager({
 		"app.model.select": "alt+l",
@@ -97,12 +104,18 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 			{},
 			{
 				cwd,
+				shutdown() {
+					shutdowns++;
+				},
 				sessionManager: {
 					getBranch: () => [],
 					getSessionFile: () => undefined,
 				},
 				ui: {
 					getEditorComponent: () => () => editor,
+					theme: {
+						fg: (_color: "warning", value: string) => `warning:${value}`,
+					},
 					setEditorComponent: (factory: typeof installedFactory) => {
 						installedFactory = factory;
 					},
@@ -110,7 +123,7 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 			},
 		);
 		installedFactory?.(
-			{ children: [], terminal },
+			{ children: [], requestRender() {}, terminal },
 			{
 				borderColor: (text: string) => text,
 				selectList: { description: (text: string) => text },
@@ -191,6 +204,22 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 		);
 		assert.deepEqual(keybindings.getKeys("app.model.select"), ["alt+l"]);
 
+		editor.setText("draft prompt");
+		editor.handleInput("\x03");
+		assert.equal(editor.getText(), "");
+		assert.deepEqual(editor.render(80), ["editor"]);
+		editor.handleInput("\x03");
+		assert.deepEqual(editor.render(80), [
+			"warning: Press Ctrl+C again to exit",
+			"editor",
+		]);
+		editor.handleInput("\x03");
+		assert.equal(shutdowns, 1);
+		assert.deepEqual(editor.render(80), ["editor"]);
+
+		editorState.lines = ["one", "two", "three"];
+		editorState.cursorLine = 1;
+		editorState.cursorCol = 1;
 		editor.handleInput("\x1b[F");
 		assert.deepEqual(editor.getCursor(), { line: 1, col: 3 });
 		editor.handleInput("\x1b[F");
@@ -231,7 +260,7 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 
 		const firstInstall = keybindings.getUserBindings();
 		installedFactory?.(
-			{ children: [], terminal },
+			{ children: [], requestRender() {}, terminal },
 			{
 				borderColor: (text: string) => text,
 				selectList: { description: (text: string) => text },

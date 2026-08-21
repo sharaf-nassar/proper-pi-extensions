@@ -1,6 +1,6 @@
 # proper-base
 
-proper-base combines cross-session history with focused editor, fullscreen, cancellation, and footer customizations.
+proper-base combines cross-session history and reverse search with focused editor, fullscreen, cancellation, and footer customizations.
 
 ## Purpose
 
@@ -14,13 +14,14 @@ The runtime is split by responsibility.
 
 - `index.ts` wires `session_start`, first-response session naming, model-preserving `/clear`, editor replacement, early-cancel branch recovery, base keybinding overrides, `ask_user_question` cancellation, and the package entry point.
 - `src/autocomplete-details.ts` owns overlay lifecycle, boxed rendering, terminal positioning, selected-description updates, descending `/model` argument ordering, and immediate submission of selected model completions.
-- `src/editor-navigation.ts` implements recalled-history cursor placement and two-stage Home/End behavior while preserving configured keybindings and custom editor fallback.
+- `src/editor-navigation.ts` implements three-stage Ctrl+C clearing and exit, terminal-style Ctrl+R reverse history search, recalled-history cursor placement, and two-stage Home/End behavior while preserving configured keybindings and custom editor fallback.
 - `src/footer-colors.ts` rearranges Pi's built-in footer statistics, applies model and effort colors, and owns the bounded maximum-effort animation timer.
 - `src/jump-to-bottom.ts` renders the scrolled-up jump-to-bottom button as an editor row and claims mouse input ahead of the alternate-screen renderer.
 - `src/image-context.ts` replaces prior-turn image blocks in outbound context while leaving current-turn and persisted session content intact.
 - `src/image-preview.ts` replaces clipboard paths with compact markers, renders their source paths in a text-only overlay, and expands markers before submission without enabling terminal image protocols.
 - `src/prompt-display.ts` hashes expanded prompt-template messages, maps them to raw slash invocations, and restores that display-only mapping from custom session entries.
-- `src/transcript-cleanup.ts` keeps the active run live, renders settled non-response detail behind per-item summaries, and claims clicks on those summaries ahead of fullscreen selection handling.
+- `src/smart-selection.ts` extends Pi's fullscreen double-click range for common single-line terminal tokens while preserving native fallback and selection mechanics.
+- `src/transcript-cleanup.ts` keeps the active run live, leaves thoughts and settled updates fully rendered, compacts tools and errors behind per-item summaries, and claims clicks on those summaries ahead of fullscreen selection handling.
 - `src/history-guard.ts` blocks Pi's transformed session replay and admits only recorder-trusted prompts.
 - `src/history.ts` contains pure recall filtering, timestamp ordering, deduplication, and editor-factory unwrapping.
 - `src/recorder.ts` intercepts editor submission while preserving later handler assignments and repeated installation.
@@ -52,15 +53,18 @@ These rules preserve history and autocomplete details without destabilizing the 
 18. Up leaves a recalled prompt at line 0, column 0; Home then moves through the current visible-row and full-prompt starts, while End moves through logical-line and full-prompt ends without taking over Ctrl+Shift+Home/End.
 19. The jump-to-bottom button exists only for a viewport renderer that is not following output, occupies an editor row rather than an overlay so scrollbar dragging survives, and consumes only the mouse events landing on its own cells.
 20. Transient-error normalization touches only errored assistant messages matching the CPA `empty_stream` wording and never re-prefixes an already retryable message.
-21. Assistant steps compact on their own message completion, tools compact independently on their own execution completion, and every agent-owned thought, tool call, error, and update renders in original transcript order as its own labeled summary with a distinct semantic theme color; output appended while idle, including slash-command UI, remains native; fullscreen clicks on either an item's summary or repeated bottom collapse control toggle only that item, while the configured tool-output binding remains the global fallback.
+21. Assistant and tool completion only makes errors and tools eligible to compact; they stay native until a later transcript component contains non-empty text other than `Working...`, then each renders in original order as its own labeled summary with a distinct semantic theme color; thoughts, tool-calling text, and owned status updates remain fully rendered, with a blank row above and below updates; settlement compacts eligible items in the completed run; output appended while idle, including slash-command UI, remains native; fullscreen clicks on either a compact item's summary or repeated bottom collapse control toggle only that item, while the configured tool-output binding remains the global fallback.
 22. Prompt-template expansion remains model-facing: the user transcript shows the raw slash command live and after session restoration, using persisted hashes without duplicating expanded bodies or changing model context.
 23. Image blocks remain in model context through the user turn that introduced them; a later user message replaces older image blocks only in the outbound context copy, preserving current-turn tool loops, message order, tool-result structure, and persisted session history.
+24. Ctrl+R searches recorder-trusted prompts newest-first by incremental substring; repeated Ctrl+R walks older matches, Ctrl+G restores the draft and cursor, Esc accepts for editing, Enter submits, and modal controls outside the prompt editor keep their native shortcuts.
+25. Ctrl+C on non-empty text only clears and disarms exit; the first empty-prompt press shows the exit warning, and only a second empty-prompt press within 500 ms shuts down, making a non-empty prompt require three quick presses.
+26. Fullscreen double-click selection expands recognized one-row URLs, paths, flags, qualified identifiers, and quoted values only inside transcript scroll views; every unknown token or incompatible renderer falls back to Pi's native selection unchanged.
 
 ## Documentation map
 
 Each document owns one runtime concern.
 
-- [lifecycle](./lifecycle.md) — startup, prompt sources, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, the jump-to-bottom button, autocomplete details, footer decoration, and transient stream retry.
+- [lifecycle](./lifecycle.md) — startup, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, smart selection, the jump-to-bottom button, autocomplete details, footer decoration, and transient stream retry.
 - [storage](./storage.md) — project paths, JSONL format, permissions, bounded reads, limits, and compaction.
 - [operations](./operations.md) — package identity, installation, runtime requirements, and data removal.
 - [tests](./tests.md) — deterministic history, recorder, autocomplete, fullscreen key routing, footer styling, and real-filesystem store coverage.

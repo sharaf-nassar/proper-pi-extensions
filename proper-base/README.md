@@ -18,9 +18,9 @@ This package was renamed from the local `proper-customs` directory and the unpub
 
 ### Quiet settled transcript
 
-While the model is working, earlier turns remain compact and each current action uses Pi's normal live output only until that action finishes. Assistant steps compact on message completion, and each tool compacts on its own completion, so parallel tools remain visible independently while they run. Completed rows stay at the action's original position, before any later assistant response.
+While the model is working, earlier turns remain compact and each current action uses Pi's normal live output until that action finishes. Completed errors and tools compact only after a later transcript section contains real text; the `Working...` indicator does not count. This prevents a completed section from shrinking while the next response is still empty. Thoughts and tool-calling commentary stay fully rendered, and completed output stays at its original position before any later assistant response.
 
-After processing settles, proper-base leaves only direct tool-free model replies visible. Every thought, tool call, error, and update becomes its own descriptive one-line row, such as `tool · read · src/index.ts` or `thought · inspect the renderer`. Thoughts are violet, tools blue, updates teal, and errors red; labels preserve the distinction without relying on color. Click any row to expand or collapse only that item. Expanded items also end with a compact left-aligned `collapse` button. Pi's normal tool-output shortcut, Ctrl+O by default, remains the global expand/collapse control.
+After processing settles, thoughts, direct replies, tool-calling commentary, and agent-owned status updates remain fully visible. Updates keep their complete multiline rendering with a blank row above and below, separating them from large runs of compact detail. Every tool call and error becomes its own descriptive one-line row, such as `tool · read · src/index.ts`. Tools are blue and errors red; labels preserve the distinction without relying on color. Click any compact row to expand or collapse only that item. Expanded items also end with a compact left-aligned `collapse` button. Pi's normal tool-output shortcut, Ctrl+O by default, remains the global expand/collapse control.
 
 This applies only to agent-owned output. Slash-command UI such as `/session`, extension notifications, and other text produced while Pi is idle keep their native rendering. Session history and model context keep the original messages, and removing the extension restores Pi's native transcript renderer.
 
@@ -42,6 +42,8 @@ Shift+Enter and Alt+Enter both insert a new line in the prompt; Ctrl+J remains a
 
 Home uses two-stage navigation in multiline or soft-wrapped prompts: the first press moves to the beginning of the current visible row, and the second moves to the beginning of the entire prompt. End first reaches the current logical line end, then the full prompt end. Either key at its full-prompt boundary is a no-op.
 
+Ctrl+C clears a non-empty prompt without counting toward exit. Once the prompt is empty, the first Ctrl+C shows a warning-colored `Press Ctrl+C again to exit` row above the editor; press it again within 500 ms to quit. The row disappears when that window expires or other input cancels it, and never enters transcript history. Starting from text therefore takes three quick presses: clear, arm, exit. Starting empty still takes two.
+
 ### Pinned scrolling
 
 Pi's native `fullscreen` TUI keeps queued messages, status, widgets, the prompt, and the footer pinned to the bottom while the transcript scrolls above them. Enable **TUI mode → fullscreen** in `/settings`, or set `"tuiMode": "fullscreen"` in `~/.pi/agent/settings.json`.
@@ -49,6 +51,8 @@ Pi's native `fullscreen` TUI keeps queued messages, status, widgets, the prompt,
 proper-base does not duplicate Pi's transcript renderer. It removes inactive autocomplete detail overlays from Pi's overlay stack so switching between regular and fullscreen modes remains available.
 
 In fullscreen mode, Home, End, PageUp, and PageDown move within the prompt editor. Hold Ctrl+Shift with those keys to move the transcript above it: Ctrl+Shift+Home/End jump to the top/bottom, and Ctrl+Shift+PageUp/PageDown scroll by a page. Unrelated custom keybindings are preserved. Mouse selection, wheel scrolling, scrollbar dragging, and link clicks remain Pi's native behavior.
+
+Double-clicking transcript text selects complete single-line terminal tokens when possible: URLs, file paths, command flags, qualified identifiers, and matching quoted values. Ordinary prose keeps Pi's native word selection, triple-click still selects the visual line, and drag, highlighting, scrolling, and clipboard copying remain native. Tokens wrapped onto another rendered row stay separate, and clickable compact tool/error rows keep their expansion action.
 
 Scrolling the transcript away from its end reveals a `↓ jump to bottom` button on the row directly above the prompt, right-aligned and drawn in inverse video. Clicking it returns the viewport to the newest output; it disappears again once the transcript follows output. The button is a rendered editor row rather than an overlay, so scrollbar dragging keeps working while it is visible.
 
@@ -113,6 +117,8 @@ The display mapping persists as a small hash-to-command custom entry, so reload,
 Every recallable prompt is recorded when you submit it. On `session_start`, the editor is seeded only from the private raw-input store at `~/.pi/agent/proper-history/--<cwd>--.jsonl`.
 
 Pi session messages are deliberately never used as history. Pi persists expanded skill bodies and prompt-template bodies there, not the slash command the user typed. proper-base also blocks Pi's startup replay from adding those transformed messages to the editor. The first press of Up therefore returns raw user input, with the cursor at its beginning.
+
+Press Ctrl+R for terminal-style reverse incremental search. Type a substring to narrow the result, press Ctrl+R again to continue to an older match, and use Backspace to broaden the query. Enter submits the match, Esc keeps it in the prompt for editing, and Ctrl+G cancels the search and restores the original draft and cursor. The editor border shows the active query and marks failed searches without discarding the last match.
 
 ### Why a store is needed
 

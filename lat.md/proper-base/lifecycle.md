@@ -62,6 +62,16 @@ Recorded prompts order by timestamp before reaching the editor.
 
 A duplicate collapses onto its newest timestamp. Same-timestamp entries retain encounter order, the newest 200 survive the limit, and the result is returned oldest first to the guard's trusted append method.
 
+## Reverse history search
+
+Ctrl+R runs terminal-style reverse incremental search over the same trusted, project-scoped prompts used by Up/Down recall.
+
+The first Ctrl+R saves the current draft and cursor, exits Pi's native history-browsing state, and shows the newest recorded prompt. Typing adds a case-sensitive substring query, Backspace removes query characters, and repeated Ctrl+R moves to the next older match. New recorder-approved submissions join the searchable list immediately, which stays bounded by the same 200-entry lifecycle limit.
+
+While searching, the editor's bottom border becomes `(reverse-i-search)\`query':`; a failed lookup keeps the last match visible and changes the label to `failing reverse-i-search`. Enter accepts and submits the match, Esc accepts it for editing, and Ctrl+G restores the original draft and cursor. Other control or navigation input accepts the match before delegating to the editor.
+
+The wrapper owns Ctrl+R only while the main prompt editor is focused, so session-picker rename and other modal controls keep their native shortcuts. Starting search closes active autocomplete, repeated editor-factory installation refreshes the bounded prompt list without stacking wrappers, and compatible custom editors retain their own submission and rendering behavior beneath the search layer.
+
 ## Submission interception
 
 Recording wraps the editor instance's `onSubmit` property rather than relying on pi's input event.
@@ -108,6 +118,16 @@ Shift+Enter and Alt+Enter insert new lines in the prompt.
 
 proper-base ensures both chords belong to `tui.input.newLine` while preserving other newline aliases such as Ctrl+J. Alt+Enter is removed from `app.message.followUp`, whose application-level handling would otherwise consume the chord before the editor can insert a line. The bindings are reapplied after native keybinding reloads.
 
+## Prompt clearing and exit
+
+Ctrl+C clears a non-empty prompt without arming Pi's quick double-press exit, so exiting from text requires three presses.
+
+proper-base intercepts the configured `app.clear` action at the main editor. When text exists, it clears the editor, redraws, and resets its empty-prompt exit timer without invoking Pi's native handler. The next Ctrl+C on the now-empty prompt shows `Press Ctrl+C again to exit`; only another press within 500 ms calls the public shutdown API. An initially empty prompt therefore keeps the familiar two-press exit sequence.
+
+The warning is a temporary editor row rendered with the theme's `warning` color, not an extension notification or persisted transcript component. It disappears when the 500 ms exit window closes, any other input cancels the sequence, the second Ctrl+C requests shutdown, or the session tears down.
+
+The timer belongs to the editor wrapper rather than Pi's private `lastSigintTime`, so typing after a warning and then clearing text cannot inherit a stale armed exit. Repeated factory installation refreshes the live TUI, keybinding manager, and extension context without stacking input wrappers or leaving stale timers.
+
 ## Prompt cursor navigation
 
 History recall starts at the prompt beginning, while Home and End retain two-stage row and prompt boundaries.
@@ -118,15 +138,15 @@ When Up or a dedicated previous-history binding changes the prompt text, proper-
 
 ## Settled transcript
 
-Completed processing detail collapses behind one expandable line so the transcript emphasizes user prompts and direct model replies.
+Completed tools and errors collapse behind expandable lines, while thoughts and updates stay fully visible beside direct model replies.
 
-At `agent_start`, proper-base records the current end of Pi's chat container. Earlier turns stay in their settled compact form, while incomplete components appended for the active run use Pi's native renderer unchanged. An assistant component becomes compact on its own `message_end`, matched by message identity or timestamp; each tool component becomes compact on its matching `tool_execution_end`, so parallel tools settle independently while unfinished siblings keep streaming. `agent_settled` clears the run boundary, restores collapsed global tool state, and requests the final redraw.
+At `agent_start`, proper-base records the current end of Pi's chat container. Earlier turns stay in their settled compact form, while incomplete components appended for the active run use Pi's native renderer unchanged. `message_end` and `tool_execution_end` mark matching assistant and tool components complete, but active rendering compacts eligible errors and tools only after a later transcript component renders non-empty text. Blank components and the `Working...` indicator do not count, so a finished section does not shrink while Pi waits for the next response token. Thinking and tool-calling text stay fully rendered, and parallel tools settle independently once later output exists. `agent_settled` clears the run boundary, restores collapsed global tool state, compacts eligible items in the completed run, and requests the final redraw.
 
-Idle rendering walks components in their original transcript order. Assistant text from a tool-free model message remains visible as the direct reply, after that message's thinking summaries. Components present when proper-base installs, plus components appended inside an `agent_start` through `agent_settled` boundary, are agent-owned. Every owned non-response item becomes its own one-line summary at the position where the component occurred: thinking blocks use their first text, tool cards show the tool name plus a primary path, command, pattern, query, task, URL, or action argument, tool-calling commentary becomes an update, and errors or status components carry their first rendered line. Later assistant responses therefore never precede the intermediary rows that produced them.
+Idle rendering walks components in their original transcript order. Thinking blocks and assistant text from tool-free model messages keep their native rendering. Tool-calling text and agent-owned status components also remain complete, with one blank row above and below updates so they stay legible inside long runs of compact entries. Components present when proper-base installs, plus components appended inside an `agent_start` through `agent_settled` boundary, are agent-owned. Every owned tool and error becomes its own one-line summary at the position where the component occurred; tool cards show the tool name plus a primary path, command, pattern, query, task, URL, or action argument. Later assistant responses therefore never precede the intermediary output that produced them.
 
 Components appended while Pi is idle are not agent-owned and keep native rendering. This preserves output from slash commands such as `/session`, extension notifications, and other command UI instead of relabeling them as model updates.
 
-Each detail summary is an OSC 8 link with a private proper-base target and independent expansion state. Type remains explicit in text and also receives a stable semantic color: thoughts use `thinkingHigh`, tools use `mdLink`, updates use `accent`, and failures use `error`. The same color carries onto that item's bottom collapse control, while labels and disclosure markers keep meaning available without color.
+Each detail summary is an OSC 8 link with a private proper-base target and independent expansion state. Type remains explicit in text and also receives a stable semantic color: tools use `mdLink`, and failures use `error`. The same color carries onto that item's bottom collapse control, while labels and disclosure markers keep meaning available without color.
 
 In fullscreen mode, a mouse listener reads the link under a left click from Pi's rendered screen, toggles only that item, fully expands a selected tool card, and consumes the press and release before Pi begins text selection or opens the private URL. Expanded detail ends with a compact left-aligned inverse-video `collapse` link using the same target, so long items can close without returning to their header. Pi's configured `app.tools.expand` binding remains a global expand/collapse fallback and resets per-item overrides when used.
 
@@ -141,6 +161,16 @@ With `tuiMode` set to `fullscreen`, pi owns transcript scrolling while queued me
 Pi normally gives fullscreen transcript actions priority on unmodified Home, End, PageUp, and PageDown. The editor factory rewrites those four `tui.altScreen` action bindings on pi's shared keybinding manager to Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown. The unmodified and Shift-only keys therefore remain available to the terminal and pi's native editor actions.
 
 Pi reloads `keybindings.json` after extension `session_start` handlers, so proper-base wraps the manager's `reload()` method once and reapplies its four overrides after the native file load. The wrapper delegates through a symbol-stored mutable controller: hot reload replaces the controller's apply callback, preventing a closure from an older extension version from restoring obsolete bindings after the new `session_start`. A legacy boolean marker is upgraded by wrapping its stale reload handler so the newest apply pass runs last. Unrelated user bindings are preserved, repeated factory installation cannot stack current wrappers or drift values, and these four transcript bindings intentionally override user values while proper-base is active.
+
+## Smart fullscreen selection
+
+Double-clicking transcript text expands common terminal tokens while retaining Pi's native selection, drag, highlight, viewport, and clipboard behavior.
+
+Pi's fullscreen renderer already maps mouse coordinates into scroll-view content, detects double clicks, and asks its internal word-range resolver for a selection. proper-base wraps only that resolver. For points inside a scroll view above the prompt, one visual-line URL, file path, command flag, dotted or qualified identifier, or matching quoted value becomes the range. ANSI and OSC sequences do not affect visible columns.
+
+Unrecognized text, prompt and footer rows, regular TUI mode, and renderer shapes without both internal selection methods use Pi's native word selection unchanged. The wrapper restores the original method during session shutdown and refuses to stack on repeated editor-factory installation.
+
+This is deliberately a guarded compatibility layer over private pi-tui methods because the extension API exposes no selection-range hook. A future rename disables token expansion rather than mouse selection. Tokens split across rendered rows remain separate, and proper-base's clickable compact tool and error rows keep their single-click expansion behavior instead of participating in double-click selection.
 
 ## Jump-to-bottom button
 

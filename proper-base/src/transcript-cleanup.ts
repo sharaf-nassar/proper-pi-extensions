@@ -41,11 +41,10 @@ type State = {
 	expanded: Map<object, boolean>;
 	groups: Map<string, object>;
 	ids: WeakMap<object, string>;
-	detailOwners: WeakMap<object, Map<string, object>>;
 	nextId: number;
 	globalExpanded: boolean;
 };
-type DetailKind = "thought" | "tool" | "update" | "error";
+type DetailKind = "tool" | "error";
 type Detail = {
 	owner: object;
 	kind: DetailKind;
@@ -95,7 +94,6 @@ export function installTranscriptCleanup(
 		expanded: new Map(),
 		groups: new Map(),
 		ids: new WeakMap(),
-		detailOwners: new WeakMap(),
 		nextId: 0,
 		globalExpanded: ctx.ui.getToolsExpanded(),
 	};
@@ -195,11 +193,19 @@ function renderActive(
 	width: number,
 	state: State,
 ): string[] {
-	return children.flatMap((child) =>
-		state.completed.has(child)
-			? renderGroup([child], width, state)
-			: child.render(width),
-	);
+	const output: string[][] = Array.from({ length: children.length });
+	let hasTextBelow = false;
+	for (let index = children.length - 1; index >= 0; index--) {
+		const child = children[index];
+		if (!child) continue;
+		const native = child.render(width);
+		output[index] =
+			state.completed.has(child) && hasTextBelow
+				? renderGroup([child], width, state)
+				: native;
+		if (hasSectionText(native)) hasTextBelow = true;
+	}
+	return output.flat();
 }
 
 function renderCollapsed(
@@ -260,7 +266,6 @@ function renderGroup(
 			continue;
 		}
 		if (name === "AssistantMessageComponent") {
-			const details: Detail[] = [];
 			const assistant = child as AssistantComponent;
 			const message = assistant.lastMessage;
 			if (!message || !assistant.updateContent) {
@@ -270,30 +275,18 @@ function renderGroup(
 			const hasToolCall = message.content.some(
 				(part) => part.type === "toolCall",
 			);
-			message.content.forEach((part, index) => {
+			message.content.forEach((part) => {
 				if (part.type === "thinking" && part.thinking?.trim()) {
-					const thinking = part.thinking.trim();
-					details.push({
-						owner: detailOwner(state, child, `thinking:${index}`),
-						kind: "thought",
-						label: `thought · ${oneLine(thinking)}`,
-						component: new Text(
-							state.ctx.ui.theme.italic(
-								state.ctx.ui.theme.fg("thinkingText", thinking),
-							),
-							1,
-							0,
-						),
-					});
+					lines.push(
+						...renderAssistantContent(assistant, message, [part], width),
+					);
 				}
 				if (hasToolCall && part.type === "text" && part.text?.trim()) {
-					const text = part.text.trim();
-					details.push({
-						owner: detailOwner(state, child, `text:${index}`),
-						kind: "update",
-						label: `update · ${oneLine(text)}`,
-						component: new Text(text, 1, 0),
-					});
+					lines.push(
+						...withVerticalSpacing(
+							renderAssistantContent(assistant, message, [part], width),
+						),
+					);
 				}
 			});
 			if (["aborted", "error", "length"].includes(message.stopReason ?? "")) {
@@ -302,31 +295,27 @@ function renderGroup(
 					(message.stopReason === "length"
 						? "Response was truncated before completion."
 						: "Operation aborted");
-				details.push({
-					owner: detailOwner(state, child, "error"),
-					kind: "error",
-					label: `error · ${oneLine(error)}`,
-					component: new Text(state.ctx.ui.theme.fg("error", error), 1, 0),
-				});
-			}
-			for (const detail of details) {
-				lines.push(...renderDetail(detail, width, state));
+				lines.push(
+					...renderDetail(
+						{
+							owner: child,
+							kind: "error",
+							label: `error · ${oneLine(error)}`,
+							component: new Text(state.ctx.ui.theme.fg("error", error), 1, 0),
+						},
+						width,
+						state,
+					),
+				);
 			}
 			if (!hasToolCall) {
 				const direct = message.content.filter(
 					(part) => part.type === "text" && part.text?.trim(),
 				);
 				if (direct.length) {
-					const { errorMessage: _errorMessage, ...rest } = message;
-					assistant.updateContent(
-						{ ...rest, content: direct, stopReason: "stop" },
-						false,
+					lines.push(
+						...renderAssistantContent(assistant, message, direct, width),
 					);
-					try {
-						lines.push(...assistant.render(width));
-					} finally {
-						assistant.updateContent(message, false);
-					}
 				}
 			}
 			continue;
@@ -352,20 +341,39 @@ function renderGroup(
 			lines.push(...child.render(width));
 			continue;
 		}
-		lines.push(
-			...renderDetail(
-				{
-					owner: child,
-					kind: "update",
-					label: `update · ${describeComponent(child, width)}`,
-					component: child,
-				},
-				width,
-				state,
-			),
-		);
+		lines.push(...withVerticalSpacing(child.render(width)));
 	}
 	return lines;
+}
+
+function renderAssistantContent(
+	assistant: AssistantComponent,
+	message: AssistantMessage,
+	content: AssistantMessage["content"],
+	width: number,
+): string[] {
+	if (!assistant.updateContent) return assistant.render(width);
+	const { errorMessage: _errorMessage, ...rest } = message;
+	assistant.updateContent({ ...rest, content, stopReason: "stop" }, false);
+	try {
+		return assistant.render(width);
+	} finally {
+		assistant.updateContent(message, false);
+	}
+}
+
+function withVerticalSpacing(lines: string[]): string[] {
+	return lines.length ? ["", ...lines, ""] : [];
+}
+
+function hasSectionText(lines: string[]): boolean {
+	return lines.some((line) => {
+		const text = stripTerminalSequences(line).trim();
+		return (
+			text.length > 0 &&
+			!/(?:^|\s)Working(?:\.\.\.|…)(?:\s+\([^)]*\))?$/.test(text)
+		);
+	});
 }
 
 function renderDetail(detail: Detail, width: number, state: State): string[] {
@@ -409,29 +417,11 @@ function detailColor(
 	kind: DetailKind,
 ): Parameters<ExtensionContext["ui"]["theme"]["fg"]>[0] {
 	switch (kind) {
-		case "thought":
-			return "thinkingHigh";
 		case "tool":
 			return "mdLink";
-		case "update":
-			return "accent";
 		case "error":
 			return "error";
 	}
-}
-
-function detailOwner(state: State, base: object, key: string): object {
-	let owners = state.detailOwners.get(base);
-	if (!owners) {
-		owners = new Map();
-		state.detailOwners.set(base, owners);
-	}
-	let owner = owners.get(key);
-	if (!owner) {
-		owner = {};
-		owners.set(key, owner);
-	}
-	return owner;
 }
 
 function describeTool(tool: ToolComponent, error: boolean): string {
@@ -442,14 +432,6 @@ function describeTool(tool: ToolComponent, error: boolean): string {
 		.find((candidate): candidate is string => typeof candidate === "string");
 	const target = value ? ` · ${oneLine(value)}` : "";
 	return `${error ? "error" : "tool"} · ${name}${target}`;
-}
-
-function describeComponent(component: Component, width: number): string {
-	const rendered = component
-		.render(width)
-		.map((line) => oneLine(line))
-		.find(Boolean);
-	return rendered || componentName(component) || "update";
 }
 
 function oneLine(text: string): string {

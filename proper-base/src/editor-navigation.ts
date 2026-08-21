@@ -1,16 +1,48 @@
-import type { Component } from "@earendil-works/pi-tui";
+import {
+	type Component,
+	decodeKittyPrintable,
+	matchesKey,
+	type TUI,
+	truncateToWidth,
+	visibleWidth,
+} from "@earendil-works/pi-tui";
 
 const INSTALLED = Symbol.for("pi-proper-base.editor-navigation");
+const REVERSE_SEARCH_INSTALLED = Symbol.for(
+	"pi-proper-base.reverse-history-search",
+);
+const PROMPT_CLEAR_INSTALLED = Symbol.for("pi-proper-base.prompt-clear");
+const CLEAR_EXIT_WINDOW_MS = 500;
 
 type Keybindings = {
 	matches(data: string, action: string): boolean;
 };
 
+type PromptClearContext = {
+	shutdown(): void;
+	ui: {
+		theme: { fg(color: "warning", text: string): string };
+	};
+};
+
+type PromptClearController = {
+	cleanup(): void;
+	update(
+		tui: Pick<TUI, "requestRender">,
+		keybindings: Keybindings,
+		ctx: PromptClearContext,
+	): void;
+};
+
 type NavigableEditor = Component & {
+	borderColor?(text: string): string;
 	handleInput?(data: string): void;
 	getCursor?(): { line: number; col: number };
 	getLines?(): string[];
+	getText?(): string;
 	isShowingAutocomplete?(): boolean;
+	onChange?(text: string): void;
+	setText?(text: string): void;
 	state?: {
 		lines: string[];
 		cursorLine: number;
@@ -31,6 +63,13 @@ type NavigableEditor = Component & {
 		}>,
 	): number;
 	[INSTALLED]?: boolean;
+	[REVERSE_SEARCH_INSTALLED]?: ReverseHistorySearchController;
+	[PROMPT_CLEAR_INSTALLED]?: PromptClearController;
+};
+
+export type ReverseHistorySearchController = {
+	add(text: string): void;
+	reset(prompts: readonly string[]): void;
 };
 
 export function installEditorNavigation(
@@ -142,4 +181,271 @@ export function installEditorNavigation(
 		handleInput(data);
 	};
 	target[INSTALLED] = true;
+}
+
+// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Prompt clearing and exit]]
+export function installPromptClear(
+	editor: Component,
+	tui: Pick<TUI, "requestRender">,
+	keybindings: Keybindings,
+	ctx: PromptClearContext,
+): (() => void) | undefined {
+	const target = editor as NavigableEditor;
+	const installed = target[PROMPT_CLEAR_INSTALLED];
+	if (installed) {
+		installed.update(tui, keybindings, ctx);
+		return installed.cleanup;
+	}
+	if (!target.handleInput || !target.getText || !target.setText) return;
+
+	let active = { tui, keybindings, ctx };
+	let lastEmptyClear = 0;
+	let warningVisible = false;
+	let warningTimer: NodeJS.Timeout | undefined;
+	const handleInput = target.handleInput.bind(target);
+	const render = target.render.bind(target);
+	const clearWarning = (requestRender: boolean) => {
+		if (warningTimer) clearTimeout(warningTimer);
+		warningTimer = undefined;
+		if (!warningVisible) return;
+		warningVisible = false;
+		if (requestRender) active.tui.requestRender();
+	};
+	const showWarning = () => {
+		clearWarning(false);
+		warningVisible = true;
+		warningTimer = setTimeout(() => {
+			warningTimer = undefined;
+			warningVisible = false;
+			active.tui.requestRender();
+		}, CLEAR_EXIT_WINDOW_MS);
+		warningTimer.unref?.();
+		active.tui.requestRender();
+	};
+	const controller: PromptClearController = {
+		cleanup() {
+			lastEmptyClear = 0;
+			clearWarning(false);
+		},
+		update(nextTui, nextKeybindings, nextCtx) {
+			controller.cleanup();
+			active = {
+				tui: nextTui,
+				keybindings: nextKeybindings,
+				ctx: nextCtx,
+			};
+		},
+	};
+
+	target.handleInput = (data: string) => {
+		if (!active.keybindings.matches(data, "app.clear")) {
+			if (warningVisible) {
+				lastEmptyClear = 0;
+				clearWarning(true);
+			}
+			handleInput(data);
+			return;
+		}
+		if (target.getText?.()) {
+			lastEmptyClear = 0;
+			clearWarning(false);
+			target.setText?.("");
+			active.tui.requestRender();
+			return;
+		}
+
+		const now = Date.now();
+		if (now - lastEmptyClear < CLEAR_EXIT_WINDOW_MS) {
+			lastEmptyClear = 0;
+			clearWarning(true);
+			active.ctx.shutdown();
+			return;
+		}
+		lastEmptyClear = now;
+		showWarning();
+	};
+	target.render = (width: number) => {
+		const lines = render(width);
+		if (!warningVisible) return lines;
+		const warning = truncateToWidth(" Press Ctrl+C again to exit", width, "");
+		return [active.ctx.ui.theme.fg("warning", warning), ...lines];
+	};
+	target[PROMPT_CLEAR_INSTALLED] = controller;
+	return controller.cleanup;
+}
+
+// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Reverse history search]]
+export function installReverseHistorySearch(
+	editor: Component,
+	tui: Pick<TUI, "requestRender">,
+	keybindings: Keybindings,
+	prompts: readonly string[],
+	limit: number,
+): ReverseHistorySearchController | undefined {
+	const target = editor as NavigableEditor;
+	const installed = target[REVERSE_SEARCH_INSTALLED];
+	if (installed) {
+		installed.reset(prompts);
+		return installed;
+	}
+	if (
+		!target.handleInput ||
+		!target.getText ||
+		(!target.state && !target.setText)
+	)
+		return undefined;
+
+	let entries: string[] = [];
+	let search:
+		| {
+				draft: string;
+				cursor: { line: number; col: number } | undefined;
+				query: string;
+				index: number;
+				failed: boolean;
+		  }
+		| undefined;
+	const handleInput = target.handleInput.bind(target);
+	const render = target.render.bind(target);
+
+	const replaceText = (
+		text: string,
+		cursor?: { line: number; col: number },
+	) => {
+		const state = target.state;
+		if (!state) {
+			target.setText?.(text);
+			return;
+		}
+		state.lines = text.split("\n");
+		state.cursorLine = Math.max(
+			0,
+			Math.min(cursor?.line ?? state.lines.length - 1, state.lines.length - 1),
+		);
+		const line = state.lines[state.cursorLine] ?? "";
+		state.cursorCol = Math.max(
+			0,
+			Math.min(cursor?.col ?? line.length, line.length),
+		);
+		target.onChange?.(text);
+	};
+	const findMatch = (startExclusive: number) => {
+		if (!search) return;
+		for (
+			let index = Math.min(startExclusive, entries.length) - 1;
+			index >= 0;
+			index--
+		) {
+			const entry = entries[index];
+			if (entry?.includes(search.query)) {
+				search.index = index;
+				search.failed = false;
+				replaceText(entry);
+				tui.requestRender();
+				return;
+			}
+		}
+		search.failed = true;
+		tui.requestRender();
+	};
+	const finish = (restoreDraft: boolean) => {
+		const active = search;
+		search = undefined;
+		if (restoreDraft && active) replaceText(active.draft, active.cursor);
+		tui.requestRender();
+	};
+	const start = () => {
+		const draft = target.getText?.();
+		if (draft === undefined) return;
+		if (target.isShowingAutocomplete?.()) handleInput("\x1b");
+		const cursor = target.getCursor?.();
+		// Exit Pi's native Up/Down history mode without adding an undo entry.
+		target.setText?.(draft);
+		search = {
+			draft,
+			cursor,
+			query: "",
+			index: -1,
+			failed: false,
+		};
+		findMatch(entries.length);
+	};
+	const normalize = (values: readonly string[]) => {
+		const next: string[] = [];
+		for (const value of values) {
+			const prompt = value.trim();
+			if (prompt && next.at(-1) !== prompt) next.push(prompt);
+		}
+		return next.slice(-limit);
+	};
+
+	const controller: ReverseHistorySearchController = {
+		add(text) {
+			const prompt = text.trim();
+			if (!prompt || entries.at(-1) === prompt) return;
+			entries.push(prompt);
+			if (entries.length > limit) entries.shift();
+		},
+		reset(next) {
+			finish(true);
+			entries = normalize(next);
+		},
+	};
+
+	target.handleInput = (data: string) => {
+		if (matchesKey(data, "ctrl+r")) {
+			if (!search) start();
+			else findMatch(search.index < 0 ? entries.length : search.index);
+			return;
+		}
+		if (!search) {
+			handleInput(data);
+			return;
+		}
+		if (matchesKey(data, "ctrl+g")) {
+			finish(true);
+			return;
+		}
+		if (
+			keybindings.matches(data, "tui.editor.deleteCharBackward") ||
+			matchesKey(data, "shift+backspace")
+		) {
+			search.query = [...search.query].slice(0, -1).join("");
+			findMatch(search.index < 0 ? entries.length : search.index + 1);
+			return;
+		}
+		if (keybindings.matches(data, "tui.input.submit")) {
+			finish(false);
+			handleInput(data);
+			return;
+		}
+		if (matchesKey(data, "escape")) {
+			finish(false);
+			return;
+		}
+
+		const printable =
+			decodeKittyPrintable(data) ??
+			(/^[^\p{Cc}]+$/u.test(data) ? data : undefined);
+		if (printable !== undefined) {
+			search.query += printable;
+			findMatch(search.index < 0 ? entries.length : search.index + 1);
+			return;
+		}
+
+		finish(false);
+		handleInput(data);
+	};
+	target.render = (width: number) => {
+		const lines = [...render(width)];
+		if (!search || lines.length === 0) return lines;
+		const label = `(${search.failed ? "failing " : ""}reverse-i-search)\`${search.query}':`;
+		const clipped = truncateToWidth(label, width, "");
+		const border = `${clipped}${"─".repeat(Math.max(0, width - visibleWidth(clipped)))}`;
+		lines[lines.length - 1] = target.borderColor?.(border) ?? border;
+		return lines;
+	};
+	target[REVERSE_SEARCH_INSTALLED] = controller;
+	controller.reset(prompts);
+	return controller;
 }

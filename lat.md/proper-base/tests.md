@@ -1,6 +1,6 @@
 # Verification
 
-The package uses 70 `node:test` cases across session naming, model-preserving clearing, history, prompt display, editor, image markers, model context, transcript cleanup, fullscreen, cancellation, footer, and filesystem behavior.
+The package uses 75 `node:test` cases across session naming, model-preserving clearing, history, prompt display, editor, image markers, model context, transcript cleanup, fullscreen, cancellation, footer, and filesystem behavior.
 
 ## Session-title fixture
 
@@ -21,6 +21,18 @@ History tests cover timestamp ordering, newest-timestamp deduplication, stable t
 The recall filter keeps plain text, prompt templates, and skills while excluding `/model <provider>/<id>`, `/new`, `/reload`, and extension commands. A guard fixture proves arbitrary session-replay text is rejected unless the recorder explicitly admits it.
 
 A session integration fixture seeds a raw `/skill:unslop` invocation from the store, attempts to replay its expanded `<skill>` body, and verifies only the raw command enters history. It then submits another skill invocation and proves the recorder adds that exact slash command immediately.
+
+## Reverse history search fixture
+
+Reverse-search fixtures verify Ctrl+R follows terminal incremental-search conventions without losing the prompt draft.
+
+They prove the first Ctrl+R selects the newest prompt, typed characters narrow by substring, repeated Ctrl+R moves to older matches, Backspace recovers from a failed query, and the border reports active and failing search states. Ctrl+G restores the exact draft cursor, Esc keeps the match for editing, Enter submits it through the wrapped editor, and newly recorded prompts become searchable immediately.
+
+## Prompt clear fixture
+
+Prompt-clear coverage verifies non-empty text does not count as the first press of Pi's empty-prompt exit sequence.
+
+A focused wrapper fixture starts with draft text and proves the first Ctrl+C only clears it, the second renders `Press Ctrl+C again to exit` in the theme warning color, and the third requests shutdown and removes the row. It also waits past the 500 ms window and proves the warning disappears without entering transcript output. The base keybinding integration fixture repeats the three-press path through `session_start`, the installed editor factory, and Pi's real keybinding manager.
 
 ## Clipboard image fixture
 
@@ -60,15 +72,21 @@ An inline-command fixture verifies slash completion receives only the active com
 
 ## Settled transcript fixture
 
-Transcript fixtures verify intermediary detail stays visible while Pi runs and becomes individually expandable after settlement.
+Transcript fixtures verify thoughts and updates remain fully rendered after settlement, while tools and errors compact and expand independently.
 
-A component-tree fixture installs the wrapper around Pi's document/chat shape and first renders thinking, tool-call commentary, tool cards, errors, and status updates unchanged. It then completes one assistant message and one of two tools while the run remains active, proving those components compact immediately while the unfinished tool keeps its native live preview. The fully settled view retains tool-free assistant text and emits separate descriptive rows for every thought, update, successful tool, failed tool, and status component in original component order. Assertions prove a completed assistant's thought precedes its direct text and status/tool rows precede the later final response. The fixture records theme calls and proves thought, tool, update, and error rows use four distinct semantic colors while retaining text labels. Its fake fullscreen screen clicks one tool summary; the wrapper claims the event ahead of Pi's consuming listener, expands only that tool, leaves every sibling collapsed, and fully expands the selected card. The expanded item ends with a linked bottom collapse control that closes only that item. Global tool-output expansion remains available. Starting another run proves earlier item states remain stable while only newly appended components render live. A fake `/session` status appended after settlement remains native and is never relabeled as an update. A second user prompt proves grouping remains turn-local, repeated installation refreshes the live context without stacking, and uninstall restores the native renderer. A lifecycle fixture verifies `agent_settled` resets Pi's global tool-output state to collapsed before requesting the final redraw.
+A component-tree fixture installs the wrapper around Pi's document/chat shape and first renders thinking, tool-call commentary, tool cards, errors, and status updates unchanged. It then completes a tool-calling assistant message and one of two tools while the run remains active, proving the assistant's thinking and multiline commentary remain fully visible, updates keep blank rows around them, and the unfinished tool keeps its native live preview. A later phase completes the final active tool above `Working...` and an empty assistant component, proving the tool stays native until that assistant receives text, then compacts on the same render. The fully settled view retains thinking, direct assistant text, and agent-owned status updates while emitting separate descriptive rows for successful tools, failed tools, and errors in original component order. Assertions prove thoughts never receive `thought` summary labels, updates never receive `update` summary labels, and tool and error rows use distinct semantic colors while retaining text labels. Its fake fullscreen screen clicks one tool summary; the wrapper claims the event ahead of Pi's consuming listener, expands only that tool, leaves every sibling collapsed, and fully expands the selected card without changing visible thoughts. The expanded item ends with a linked bottom collapse control that closes only that item. Global tool-output expansion remains available. Starting another run proves earlier item states remain stable while only newly appended components render live. A fake `/session` status appended after settlement remains native. A second user prompt proves grouping remains turn-local, repeated installation refreshes the live context without stacking, and uninstall restores the native renderer. A lifecycle fixture verifies `agent_settled` resets Pi's global tool-output state to collapsed before requesting the final redraw.
 
 ## Base keybinding fixture
 
 A session integration fixture applies the real Pi 0.84.2 `KeybindingsManager` to the installed editor factory.
 
 It verifies Ctrl+V and Ctrl+Shift+V both match Pi's clipboard paste action without removing an existing Alt+V alias. Shift+Enter and Alt+Enter both match prompt newline while other newline aliases survive, and Alt+Enter no longer matches follow-up queueing. Fullscreen transcript actions claim Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown instead of unmodified or Shift-only keys; the editor retains its native unmodified bindings; and modern modifier sequences match the intended actions. Navigation fixtures verify a recalled prompt ends at line 0, column 0; Home first reaches a soft-wrapped visible-row start and then the full prompt start, including across a hard newline; and End reaches the logical line end and then the full prompt end. They also prove native reload reapplies current bindings without losing unrelated user values, repeated installation remains idempotent, and the terminal writer stays untouched for Pi's native mouse handling.
+
+## Smart selection fixture
+
+Smart-selection fixtures verify token-aware ranges extend Pi's native fullscreen word selection without replacing it.
+
+Pure cases cover wrapped URLs, source paths with line and column suffixes, command flags, qualified identifiers, quoted values, ANSI-styled paths, ordinary prose fallback, and fraction rejection. A fake fullscreen renderer proves only scroll-view points receive smart ranges, native selection handles other rows, and disposal restores the original resolver.
 
 ## Jump-to-bottom fixture
 
