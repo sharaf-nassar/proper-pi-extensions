@@ -31,3 +31,12 @@ They verify hard repeated-signature denial, the overridable cumulative ceiling, 
 The absorb test uses a temporary tracked `.beads/interactions.jsonl` file.
 
 It verifies clean detection, staged-index refusal, staging only tracked Beads JSONL files, and final clean verification.
+
+## Speckit normative coverage contract
+
+The formula regression test replays the Flow-only plan against the normative
+A2/A3 mock inventory without invoking `bd`.
+
+It verifies the missing A2 collapsed, drawer, pinned, and drag owners fail the
+pre-materialization gate, a fully owned map passes, both depths retain the
+gate, and squash instructions record coverage totals.

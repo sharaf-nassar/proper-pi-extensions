@@ -24,6 +24,8 @@ The installation model preserves Beads ownership of its user directory.
 4. Existing different regular files are never overwritten automatically.
 5. Tests execute the repository rail directly, not the installed symlink.
 6. Formula checks verify Beads resolves each user formula from its managed path.
+7. Speckit inventories normative visual rows in both depths and refuses Beads
+   mutations until every row has implementation and verification ownership.
 
 ## Documentation map
 

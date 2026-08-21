@@ -39,10 +39,12 @@ workers writing the same helper twice); v5 grounded specify and plan in
 the repo's learnings store (`docs/solutions/`, `CONCEPTS.md`) so recorded
 root causes and failed approaches inform new designs; v6 moved the global
 workflow resources under repository control and clarified the missing-
-constitution soft pause. Keep revising the step runbooks after runs based on
-what actually happened (the `bd mol distill` direction) — treat friction as a
-bug in the formula, not in the run. Bump `version` whenever the runbooks change
-so squash digests can be traced to the formula revision that produced them.
+constitution soft pause; v7 added row-level ownership gates for normative
+visual artifacts after an A2 replacement design was omitted from a Flow-only
+materialization. Keep revising the step runbooks after runs based on what
+actually happened (the `bd mol distill` direction) — treat friction as a bug
+in the formula, not in the run. Bump `version` whenever the runbooks change so
+squash digests can be traced to the formula revision that produced them.
 
 ## Pipeline
 
@@ -114,7 +116,7 @@ way and BOTH human gates always fire. bd's enum is advisory-only, so treat any
   alignment+quality self-check, an abbreviated chat analysis, and NO artifact
   file — the epic carries the condensed spec and plan. Gates are NOT skipped.
 """
-version = 6
+version = 7
 type = "workflow"
 phase = "vapor"
 
@@ -257,6 +259,16 @@ lat.md/ remains the design-intent source; the learnings store carries what
 bit us before, which design docs do not record. Absent stores are simply
 skipped — never create one from this pipeline.
 
+**Inventory visual source authority before drafting.** Read every visual
+artifact referenced by `{{problem}}`, `{{context}}`, the target epic, backlog
+inputs, or linked specs (for example HTML mocks, screenshots, prototypes, and
+design files). Record each artifact's path or URL, the statement that grants
+or limits its authority, and exactly which sections are normative,
+reference-only, or unresolved. A section-scoped declaration does not make the
+whole artifact normative. Do not infer authority from a link alone. Put an
+unresolved or contradictory authority statement in Open Questions for the
+human; the plan may not resolve it by silently narrowing scope.
+
 **Depth branch — if `{{depth}}` is `quick`:** create NO file and compute no
 NNN. Draft the same spec sections below directly in chat, then mirror them
 into the wisp root's notes (`bd update <root-id> --append-notes="<sections>"`)
@@ -305,6 +317,11 @@ sources.)
 `{{epic_candidates}}`, list all candidates and mark the target unresolved for
 the clarify gate. If neither exists, state that this run will create an epic.)
 
+## Source Authority
+(For every referenced visual artifact: path/URL, authority declaration, and
+normative/reference-only/unresolved sections. Write "None" when no visual
+artifact is referenced.)
+
 ## User Stories
 (For each: "As a <actor>, I want <capability>, so that <benefit>."
  Each story MUST have Acceptance Criteria — concrete, verifiable conditions.)
@@ -319,11 +336,11 @@ the clarify gate. If neither exists, state that this run will create an epic.)
 Do not polish. A draft that surfaces uncertainty is more useful than one that
 hides it.
 
-**Exit criteria:** the spec draft covers all eight sections (full:
+**Exit criteria:** the spec draft covers all nine sections (full:
 `{{specs_dir}}/NNN-{{feature}}.md` exists and is readable; quick: sections in
 chat and mirrored to root notes), accounts for every P4 source found across
-structural and provenance closure, and records the target epic or its
-ambiguity.
+structural and provenance closure, records the target epic or its ambiguity,
+and classifies every referenced visual artifact's source authority.
 """
 
 # ============================================================================
@@ -371,6 +388,12 @@ must-answer-before-build vs non-blocking.
 6. **stakeholders** — Who is affected but unmentioned (ops, support, security,
    compliance, integrators)? Where do user needs conflict?
 
+When Source Authority names a normative visual artifact, inspect that artifact
+directly during this review. Inventory every normative section, named state,
+and described interaction. Flag contradictions between that inventory and the
+Goals, Non-Goals, user stories, or acceptance criteria as must-answer scope
+questions. Comparing the prose spec only against itself is insufficient.
+
 **Triage before synthesizing — the gate carries PRODUCT decisions only.**
 Sort every candidate question:
 
@@ -412,7 +435,10 @@ Aim for a tight, prioritized list — no more than ~7 product questions.
 Any backlog input lacking a concrete, testable outcome is a critical question,
 not a non-blocking observation. Never defer its criteria with a TBD marker.
 If Target Epic lists multiple candidates, choosing exactly one is also a
-critical question. Do not infer the answer from proximity or title similarity.
+critical question. If visual source authority is unresolved or conflicts with
+a Goal or Non-Goal, resolving that authority/scope conflict is also a critical
+question. Do not infer either answer from proximity, title similarity, or the
+plan's preferred implementation.
 
 **Exit criteria:** the spec artifact has a `## Spec Review` section with a
 prioritized Critical Questions list (≤7) and non-blocking observations.
@@ -464,8 +490,10 @@ is a real gate.
 A: <human's answer — reflected in Goals/Constraints/Acceptance as needed>
 ...
 ```
-Also update any Goals, Non-Goals, Constraints, or Acceptance Criteria the
-answers change.
+Also update any Goals, Non-Goals, Source Authority, Constraints, or Acceptance
+Criteria the answers change. A human scope cut affecting a normative artifact
+must change the recorded authority classification explicitly; adding the row
+to Non-Goals alone does not make it non-normative.
 
 For every Backlog Input, obtain enough direction to produce verifiable
 acceptance criteria or get explicit human approval to classify it as a
@@ -478,7 +506,8 @@ compute that epic's full hierarchy-plus-`discovered-from` closure and merge any
 new open P4 inputs before this gate exits. Never select an epic yourself.
 
 **Exit criteria:** Human has answered; the spec artifact has a
-`## Clarifications` section and the body reflects the answers.
+`## Clarifications` section, the body reflects the answers, and Source
+Authority has no unresolved normative/reference-only classification.
 """
 [steps.gate]
 type = "human"
@@ -529,6 +558,18 @@ sections; every name is unique so anchors stay stable:
  items unordered against each other only when their Files are disjoint AND
  they share no new primitive.)
 
+## Normative Visual Coverage
+(Required when Source Authority names a normative visual artifact. Make one
+row for every normative section, named state, and described interaction. Use a
+stable artifact locator; split requirements when their owners or oracle differ.
+Implementation and verification owners must name concrete Sequencing work
+items whose acceptance criteria cite the row. Write "None (0 rows)" only when
+Source Authority has no normative visual artifact.)
+
+| Row / artifact locator | Normative requirement | Goal / Non-Goal alignment | Implementation work item | Verification work item + oracle | Status |
+|------------------------|-----------------------|---------------------------|--------------------------|---------------------------------|--------|
+| ...                    | ...                   | aligned / contradiction   | ...                      | ...                             | full / gap |
+
 ## Backlog Refinement
 (Map every Backlog Input id to its plan work item(s), concrete acceptance
 criteria, target P0-P3 priority, and one disposition:
@@ -554,9 +595,29 @@ must be traceable to something in this plan. Every implementation work item
 must be concrete enough to become a P0-P3 task with verifiable acceptance
 criteria. P3 means low-priority but implement-ready; P4 is forbidden.
 
-**Exit criteria:** all eight plan sections are appended to the spec artifact,
-Target Epic is resolved in place, every backlog source has a disposition, and
-(if present)
+Build Normative Visual Coverage from Source Authority and the artifact itself,
+not from the plan's chosen scope. For every normative section, enumerate its
+named states and interactions even when another section is sequenced first or
+described as a replacement. Each row needs both an implementation owner and a
+verification owner; they may name the same work item only when that work item's
+acceptance criteria explicitly own both implementation and the stated oracle.
+A row is `full` only when both owner work items exist in Sequencing and their
+acceptance criteria cover the row. A normative row placed in Non-Goals, omitted
+from Sequencing, or contradicted by task acceptance is a blocker until the
+human explicitly changes Source Authority or the plan restores coverage.
+
+**Regression evidence — A2/A3 omission.** For
+`specs/026-beads-flow-view.md` plus
+`.impeccable/mocks/beads-board-directions.html`, the mock declares both
+**A2 · Ledger + rail** and **A3 · Flow** normative. A Flow-only 17-task plan
+leaves A2's **Collapsed — real state**, hover drawer, pinned lane, and drag
+state without implementation or verification owners. That plan is incomplete;
+it must not become beads. A complete replay maps every A2/A3 state and
+interaction to both owners.
+
+**Exit criteria:** all nine plan sections are appended to the spec artifact,
+Target Epic is resolved in place, every backlog source has a disposition,
+Normative Visual Coverage has no gap or contradiction, and (if present)
 constitution principles are checked.
 """
 
@@ -573,10 +634,11 @@ Run ONE automatic fix round on the plan sections. No human gate — apply
 must-fix findings directly.
 
 **Depth branch — if `{{depth}}` is `quick`:** skip the 2-subagent dispatch. Do a
-single self-check pass covering both spec↔plan coverage (every requirement,
-goal, non-goal, user story, backlog input, and clarification answer is covered;
-no Non-Goal scope creep) and plan quality (completeness, sequencing,
-testability). Apply the obvious must-fixes directly, then still append the
+single self-check pass covering both source/spec↔plan coverage (every
+requirement, goal, non-goal, user story, backlog input, clarification answer,
+and normative visual row is covered; no Non-Goal scope creep or authority
+contradiction) and plan quality (completeness, sequencing, testability). Apply
+the obvious must-fixes directly, then still append the
 `## Alignment fixes applied` log below (it may say "quick pass"). Otherwise
 (any `{{depth}}` other than exactly `quick` is treated as `full`) proceed with
 the parallel dispatch below.
@@ -584,12 +646,16 @@ the parallel dispatch below.
 **Dispatch 2 subagents in parallel** (Claude Code Agent/Task tool; if
 unavailable, run both passes sequentially yourself):
 
-**Subagent A — spec↔plan alignment.** Input: `{{specs_dir}}/NNN-{{feature}}.md`.
-Walk every requirement, goal, non-goal, user story, backlog input, and
-clarification answer in the spec sections and verify the plan sections cover
-it. Report each as
-COVERED / GAP / PARTIAL with a suggested fix, classified must-fix or
-should-fix. Also flag any plan work that violates a Non-Goal (scope creep).
+**Subagent A — source/spec↔plan alignment.** Input:
+`{{specs_dir}}/NNN-{{feature}}.md` plus every artifact classified normative in
+Source Authority. Walk every requirement, goal, non-goal, user story, backlog
+input, clarification answer, normative section, named state, and interaction;
+verify the plan sections cover it. Rebuild the normative inventory from the
+artifact and compare it with Normative Visual Coverage rather than trusting
+the table alone. Report each as COVERED / GAP / PARTIAL with a suggested fix,
+classified must-fix or should-fix. Flag plan work that violates a Non-Goal and
+any Source Authority, Goal, Non-Goal, Sequencing, or task-acceptance
+contradiction.
 
 **Subagent B — plan quality.** Input: the same file's plan sections. Check completeness (missing
 migrations, tests, infra, rollback, docs), sequencing (wrong order, hidden or
@@ -603,9 +669,13 @@ should-fix with concrete suggestions.
 
 **Apply fixes:** Read both reports. Apply every must-fix finding (and clear
 should-fix wins) directly to the plan sections — add missing work items, fix ordering,
-cut scope creep, tighten acceptance criteria, and ensure every backlog source
-has a complete disposition. Confirm Target Epic is resolved and all provenance
-closure inputs are covered. Never add a P4 work item or placeholder criteria.
+cut scope creep, tighten acceptance criteria, fill every missing normative
+visual row and owner, and ensure every backlog source has a complete
+disposition. Confirm Target Epic is resolved and all provenance closure inputs
+are covered. Never demote a normative row to a Non-Goal to make the table pass,
+and never add a P4 work item or placeholder criteria. If a contradiction needs
+a human authority/scope change, leave it as an explicit blocker for analyze
+instead of inventing the decision.
 
 **Log what changed** by appending to the end of the spec artifact (quick:
 chat + root notes):
@@ -616,8 +686,10 @@ chat + root notes):
 (If nothing needed fixing, say so explicitly.)
 ```
 
-**Exit criteria:** Both passes done, must-fix items applied to the plan
-sections, and an `## Alignment fixes applied` log appended.
+**Exit criteria:** Both passes done, automatic must-fixes applied to the plan
+sections, any human-only authority/scope blocker is explicit, Normative Visual
+Coverage has been rebuilt from the source artifact, and an
+`## Alignment fixes applied` log appended.
 """
 
 # ============================================================================
@@ -634,10 +706,12 @@ created. This is a HUMAN GATE — the molecule pauses until the human approves.
 The gate fires in BOTH depths — never skip it.
 
 **Depth branch — if `{{depth}}` is `quick`** (any value other than exactly
-`quick` is treated as `full`)**:** the report may be abbreviated — the
-Coverage Table and Recommendation are required; include Remaining Risks and
-Unresolved Questions sections only if they are non-empty. The approval gate
-below is unchanged.
+`quick` is treated as `full`)**:** the report may be abbreviated, but
+Requirement Coverage, Backlog Disposition, Target Epic, Recommendation, and
+the authority/coverage checks below remain required. When Source Authority
+names a normative visual artifact, Normative Visual Coverage and Authority /
+Scope Contradictions are mandatory in full. The coverage check and approval
+gate run in BOTH depths.
 
 **1. Compose the analysis directly in chat** (report only — NO file; do NOT
 change the spec artifact here except to apply explicit human fix requests in
@@ -645,10 +719,24 @@ step 4):
 ```markdown
 # Analysis: {{feature}}
 
-## Coverage Table
+## Requirement Coverage
 | User story / requirement | Covered by (plan section) | Status |
 |--------------------------|---------------------------|--------|
 | ...                      | ...                       | full / partial / none |
+
+## Normative Visual Coverage
+| Row / artifact locator | Implementation owner work item | Verification owner work item + oracle | Acceptance trace | Status |
+|------------------------|--------------------------------|---------------------------------------|------------------|--------|
+| ...                    | ...                            | ...                                   | ...              | full / gap |
+Totals: <total> normative; <n>/<total> implementation-owned;
+<n>/<total> verification-owned; <n>/<total> fully owned.
+(When Source Authority has no normative visual artifact: "0 normative rows".)
+
+## Authority / Scope Contradictions
+| Normative source statement | Conflicts with Goal / Non-Goal / Sequencing / task acceptance | Resolution |
+|----------------------------|---------------------------------------------------------------|------------|
+| ...                        | ...                                                           | resolved / blocker |
+(Write "None" only after comparing the source artifacts directly.)
 
 ## Backlog Disposition
 | Source P4 id | Plan work item(s) / non-goal | Disposition | Ready to resolve? |
@@ -673,12 +761,25 @@ step 4):
 (GO-WITH-FIXES: list the specific fixes required.)
 ```
 
-**2. Lead the report with the summary:** coverage headline, backlog
-dispositions, top risks, unresolved questions, any constitution violations,
-and the GO / GO-WITH-FIXES / NO-GO recommendation. If any backlog
-source lacks concrete acceptance criteria or an explicit non-goal decision,
-the recommendation must be NO-GO or GO-WITH-FIXES; do not ask for approval to
-create beads yet. Apply the same rule when Target Epic remains ambiguous.
+**2. Rebuild normative coverage from source, then lead with the summary.** Do
+not copy the plan's coverage table without checking it. Re-read Source
+Authority and each normative artifact; independently enumerate every normative
+section, named state, and interaction, then compare that inventory with Goals,
+Non-Goals, Sequencing, work-item acceptance, and Normative Visual Coverage.
+Report the four totals exactly. A plan that scopes only one rendering while the
+same normative mock contains another replacement rendering has an authority
+and Non-Goal contradiction even if the plan is internally consistent.
+
+Lead with the requirement/normative coverage headline, backlog dispositions,
+top risks, unresolved questions, contradictions, constitution violations, and
+the GO / GO-WITH-FIXES / NO-GO recommendation. If any normative row lacks an
+implementation owner, verification owner/oracle, or acceptance trace, or any
+authority/scope contradiction remains, the recommendation MUST be NO-GO. Do
+not ask for approval to create beads until the table is fully owned and every
+contradiction is resolved. The same blocking rule applies when a backlog source
+lacks concrete acceptance criteria or an explicit non-goal decision, or Target
+Epic remains ambiguous.
+
 This gate asks for the GO decision plus product-level ratifications only —
 a technical question still open at this point follows the clarify triage:
 research it (codebase, then standard/best practice), fold the decision into
@@ -688,14 +789,17 @@ if veto-worthy. Do not append technical multiple-choice questions here.
 **3. Wait** for the human's decision. Do not proceed on silence.
 
 **4. Handle the response:**
-- Approved → proceed to bead creation.
-- Fix requests → apply them to the spec artifact, re-present the updated
-  analysis, and wait again.
+- Approved → proceed only when the current recommendation is GO and the
+  normative totals are fully owned; human approval cannot waive a missing row.
+- Fix requests → apply them to the spec artifact, rebuild coverage from the
+  source artifacts, re-present the updated analysis, and wait again.
 - NO-GO → stop; report what needs to change before re-running.
 
-**Exit criteria:** the chat analysis included coverage and backlog disposition
-tables, Target Epic is resolved, no backlog input is unresolved, and the human
-has explicitly approved proceeding to beads.
+**Exit criteria:** the chat analysis included requirement coverage, normative
+coverage totals, authority/scope contradictions, and backlog disposition;
+Target Epic is resolved; no backlog input, normative row, or contradiction is
+unresolved; recommendation is GO; and the human has explicitly approved
+proceeding to beads.
 """
 [steps.gate]
 type = "human"
@@ -712,6 +816,30 @@ description = """
 Turn the approved plan into task beads under a feature epic, wired only
 where sequence genuinely matters. Resolve every source backlog item and enforce
 a zero-ready-P4 invariant before completing.
+
+**0. Run the no-mutation normative coverage preflight.** This runs in BOTH
+quick and full depth before any `bd create`, `bd update`, `bd close`,
+`bd supersede`, or dependency mutation — including creation or update of EPIC.
+
+Re-read Source Authority and every normative visual artifact. Independently
+rebuild the inventory of normative sections, named states, and interactions;
+do not trust the plan's inventory by itself. Compare it with Normative Visual
+Coverage, Goals, Non-Goals, Sequencing, and every referenced work item's
+acceptance criteria. Count total normative rows, rows with an implementation
+owner, rows with a verification owner and concrete oracle, and rows with both.
+Every owner must name a real Sequencing work item that will materialize as a
+bead, and its acceptance criteria must cite the row or stable artifact locator.
+
+If the four counts differ, any row is missing, any owner work item is absent,
+or an authority/Goal/Non-Goal/Sequencing/task-acceptance contradiction remains,
+STOP before the first Beads mutation and return to analyze. Human GO cannot
+waive this preflight. When no normative visual artifact exists, record all
+four counts as zero and continue.
+
+Regression replay: with `specs/026-beads-flow-view.md` and
+`.impeccable/mocks/beads-board-directions.html`, A2 and A3 are normative. A
+Flow-only 17-task plan has no owners for A2 Collapsed, hover drawer, pinned, or
+drag states, so this preflight must fail before EPIC or any task is changed.
 
 **1. Establish the feature epic.**
 
@@ -736,8 +864,8 @@ Quick depth — no file exists; carry the approved content on the epic without
 clobbering its existing description or design:
 ```bash
 bd update EPIC --append-notes="Quick spec+plan ({{feature}}):
-<condensed spec: goals, non-goals, key acceptance criteria>
-<condensed plan: approach, key decisions, sequencing>"
+<condensed spec: goals, non-goals, source authority, key acceptance criteria>
+<condensed plan: approach, key decisions, sequencing, normative coverage map>"
 ```
 
 For an explicitly new epic, the title is a short noun-phrase slug (the
@@ -754,8 +882,8 @@ description, condensed plan in the native design field:
 bd create "{{feature}}" --type=epic --description="Implementation of {{feature}}.
 
 Problem: {{problem}}
-<condensed spec: goals, non-goals, key acceptance criteria>" \
-  --design="<condensed plan: approach, key decisions, sequencing>"
+<condensed spec: goals, non-goals, source authority, key acceptance criteria>" \
+  --design="<condensed plan: approach, key decisions, sequencing, normative coverage map>"
 ```
 Note the returned epic id (referred to below as EPIC).
 
@@ -809,6 +937,13 @@ in parallel; tasks without it are dispatched unguarded against each other. Take
 the paths from the plan's `## Affected Components` section — if that section
 does not name files concretely enough to fill this line, the plan is not
 implementable yet, so fix the plan rather than filing a task with a guess.
+
+Record the resulting bead id for every Sequencing work item. When a work item
+owns normative visual rows, its acceptance field must name those row ids or
+stable artifact locators and state whether it owns implementation,
+verification, or both. A shared implementation/verification bead is valid only
+when its acceptance criteria explicitly cover both responsibilities and the
+concrete oracle.
 
 For a one-to-one `refine-in-place` mapping, reuse the source id instead of
 creating a duplicate. Rewrite it as the planned task, attach it to EPIC, clear
@@ -884,6 +1019,17 @@ reference (plus `spec_id` in full depth), a P0-P3 priority, and concrete
 acceptance criteria. Confirm every source backlog id was refined, superseded
 only after replacement coverage, covered while already retired, or retired as
 an approved non-goal.
+
+Resolve every Normative Visual Coverage owner work item to its materialized
+bead id and build the durable materialized map: row/artifact locator,
+implementation bead id, verification bead id + oracle, and status. Re-read the
+normative artifacts once more and require total = implementation-owned =
+verification-owned = fully materialized. Full depth: update the artifact's
+Normative Visual Coverage table with the bead ids using the agent's Edit tool.
+Quick depth: append the materialized map and totals to EPIC notes without
+clobbering the quick spec/plan. If any row cannot resolve to both bead ids,
+STOP; do not report completion or squash the wisp.
+
 Full depth — verify native linkage in one query; it must return EPIC and every
 task bead:
 ```bash
@@ -931,6 +1077,9 @@ Task beads: <count>
 Dispatchable ready (P0-P3): <scoped count>
 Blocked: <scoped count>
 Backlog dispositions: <source id → refined/superseded/already-retired/non-goal>
+Normative visual coverage: <fully materialized>/<total> rows
+Implementation owners: <count>/<total>
+Verification owners: <count>/<total>
 Ready P4: 0
 
 Work it with: $implement-ready EPIC
@@ -940,7 +1089,7 @@ Work it with: $implement-ready EPIC
 done and its beads are spent scaffolding — collapse them into one durable
 digest. Squash the molecule root:
 ```bash
-bd mol squash <molecule-root> --summary "<2-4 sentence digest: feature, epic id, task-bead count, both gate outcomes (clarify + analyze), and the spec file path (quick: 'epic-carried')>"
+bd mol squash <molecule-root> --summary "<2-4 sentence digest: feature, epic id, task-bead count, both gate outcomes (clarify + analyze), normative coverage totals as fully-owned/total with implementation and verification owner counts, and the spec file path (quick: 'epic-carried')>"
 ```
 This leaves a single permanent digest bead and auto-cleans the ephemeral step
 beads. The feature epic and (full depth) the spec file remain the durable
@@ -949,10 +1098,12 @@ record — the digest just points at them. Sweep any stragglers with
 
 **Exit criteria:** Feature epic exists; every plan work item has exactly one
 P0-P3 task with why/what, `design` linkage (plus `spec_id` in full depth),
-and acceptance criteria; every backlog source has a
-recorded disposition; the freshly recomputed hierarchy-plus-provenance closure
-(plus any outside direct source) has no open or ready P4; structural
+and acceptance criteria; every normative visual row maps to materialized
+implementation and verification bead ids and the durable map records equal
+fully-owned/total counts; every backlog source has a recorded disposition; the
+freshly recomputed hierarchy-plus-provenance closure (plus any outside direct
+source) has no open or ready P4; structural
 `bd ready --parent EPIC --priority=4` is empty; the human has the epic id,
-dispatchable/blocked counts, dispositions, and `Ready P4: 0`; and the wisp has
-been squashed into a single digest bead.
+dispatchable/blocked counts, dispositions, normative coverage totals, and
+`Ready P4: 0`; and the wisp has been squashed into a single digest bead.
 """
