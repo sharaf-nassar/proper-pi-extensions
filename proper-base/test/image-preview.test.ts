@@ -64,7 +64,7 @@ test("image marker rewrites preserve the cursor location", async () => {
 	};
 
 	try {
-		installImagePreview(editor, tui as never, {} as never);
+		installImagePreview(editor, tui as never);
 		editor.insertTextAtCursor(imagePath);
 		assert.equal(text, "before [image 1] after");
 		assert.deepEqual(editor.getCursor(), { line: 0, col: 16 });
@@ -107,7 +107,7 @@ test("recalled image prompts keep history browsing active", async () => {
 	const keybindings = new KeybindingsManager();
 
 	try {
-		installImagePreview(editor, tui as never, {} as never);
+		installImagePreview(editor, tui as never);
 		installEditorNavigation(editor, keybindings);
 
 		editor.handleInput("\x1b[A");

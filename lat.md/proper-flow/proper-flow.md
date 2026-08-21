@@ -24,6 +24,8 @@ The package keeps command identity and ownership predictable.
 4. Prompt responsibilities stay separate: routing, bug investigation, specification, then implementation.
 5. proper-llm-router owns command model pins; proper-flow does not duplicate routing configuration.
 6. `/implement-ready` resolves a task id or unique title to one exact bead and never refills that run with sibling board work.
+7. Every workflow uses `ask_user_question` when it needs user input, grouping related questions into one call and falling back to plain text only when the tool is unavailable or fails before displaying its UI.
+8. `/implement-ready` caps its rolling pool at 12 workers and refills capacity after terminal workers are reconciled, without waiting for unrelated active workers.
 
 ## Documentation map
 

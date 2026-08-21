@@ -20,12 +20,10 @@ When the `write` step finishes, squash the wisp into a single digest bead
 (`bd mol squash <root>`), leaving one permanent summary while the ephemeral step
 beads auto-clean. Wisps resume the same way mols do — `bd ready --mol <root>`.
 
-## v1 caveat (distill from practice)
+## Distill from practice
 
-This formula was designed upfront, not distilled from practice. After each of
-the first few runs, revise the step runbooks based on what actually happened
-(the `bd mol distill` direction) — treat friction as a bug in the formula, not
-in the run.
+Revise runbooks from observed friction (`bd mol distill`) rather than
+speculation; treat recurring workflow friction as a formula bug.
 
 ## Pipeline
 

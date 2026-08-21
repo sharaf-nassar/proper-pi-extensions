@@ -27,9 +27,6 @@ test("upstream usage 429 blocks that account's lane at the quota threshold", asy
 				].map((id) => ({ id })),
 			});
 		}
-		if (url.endsWith("/v0/management/auth-files/models")) {
-			return Response.json({ error: "name is required" }, { status: 400 });
-		}
 		if (url.endsWith("/v0/management/auth-files")) {
 			return Response.json({
 				files: [

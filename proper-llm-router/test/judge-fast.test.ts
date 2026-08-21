@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { judgeFastSupported, loadConfig, route } from "../llm-router.ts";
+import { loadConfig, route } from "../llm-router.ts";
 
 const ARM_IDS = [
 	"claude-haiku-4-5-20251001",
@@ -14,18 +14,6 @@ const ARM_IDS = [
 ];
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Judge fast fixture]]
-test("judgeFastSupported reads service_tiers from the pi catalog", () => {
-	const catalog = [
-		{ slug: "gpt-5.6-terra", service_tiers: [{ id: "priority" }] },
-		{ slug: "claude-sonnet-5", service_tiers: [] },
-		{ id: "bare-id-model" },
-	];
-	assert.equal(judgeFastSupported(catalog, "gpt-5.6-terra"), true);
-	assert.equal(judgeFastSupported(catalog, "claude-sonnet-5"), false);
-	assert.equal(judgeFastSupported(catalog, "bare-id-model"), false);
-	assert.equal(judgeFastSupported(catalog, "gpt-external"), null);
-});
-
 test("judge.fast controls service_tier on the judge request", async () => {
 	const defaults = loadConfig("/__proper-llm-router-missing-config__.json");
 	assert.equal(defaults.judge.fast, false);
@@ -44,7 +32,6 @@ test("judge.fast controls service_tier on the judge request", async () => {
 					{
 						message: {
 							content: JSON.stringify({
-								harness: "codex",
 								model: "gpt-5-6-terra",
 								rationale: "fixture",
 							}),
@@ -57,8 +44,12 @@ test("judge.fast controls service_tier on the judge request", async () => {
 	};
 
 	try {
-		await route({ ...defaults, judge: { ...defaults.judge, fast: true } }, "t");
+		const verdict = await route(
+			{ ...defaults, judge: { ...defaults.judge, fast: true } },
+			"t",
+		);
 		assert.equal(judgeBody.service_tier, "priority");
+		assert.equal("harness" in verdict, false);
 
 		await route(defaults, "t");
 		assert.equal("service_tier" in judgeBody, false);

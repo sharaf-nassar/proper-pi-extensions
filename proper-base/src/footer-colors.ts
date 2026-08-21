@@ -218,7 +218,7 @@ function colorFooter(
 		const styled =
 			level === "max" || level === "ultra"
 				? rainbowHighlight(label, now)
-				: theme.fg(thinkingColor(level), label);
+				: theme.getThinkingBorderColor(level)(label);
 		line = replaceLast(line, label, emphasize(styled, theme));
 	}
 	result[index] = line;
@@ -301,27 +301,6 @@ function paintField(
 	theme: FooterTheme,
 ): string {
 	return emphasize(rgb(color, text), theme);
-}
-
-function thinkingColor(
-	level: Exclude<FooterThinkingLevel, undefined | "max" | "ultra">,
-) {
-	switch (level) {
-		case "off":
-			return "thinkingOff" as const;
-		case "minimal":
-			return "thinkingMinimal" as const;
-		case "low":
-			return "thinkingLow" as const;
-		case "medium":
-			return "thinkingMedium" as const;
-		case "high":
-			return "thinkingHigh" as const;
-		case "xhigh":
-			return "thinkingXhigh" as const;
-		default:
-			return "thinkingOff" as const;
-	}
 }
 
 function rainbowHighlight(text: string, now: number): string {

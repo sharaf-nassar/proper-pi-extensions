@@ -72,6 +72,13 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 			const value = effortColors[name];
 			return value ? color(...value, text) : text;
 		},
+		getThinkingBorderColor(level: string) {
+			const name =
+				level === "off"
+					? "thinkingOff"
+					: `thinking${level[0]?.toUpperCase()}${level.slice(1)}`;
+			return (text: string) => this.fg(name, text);
+		},
 		getFgAnsi: () => "\x1b[38;2;102;102;102m",
 	};
 	const ctx = {

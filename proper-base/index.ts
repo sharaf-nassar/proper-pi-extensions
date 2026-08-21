@@ -527,7 +527,7 @@ export default function (pi: ExtensionAPI) {
 
 		// Stores written before command filtering still hold UI commands.
 		const commands = pi.getCommands();
-		const seeded = mergePrompts([readPrompts(store)], MAX_ENTRIES).filter(
+		const seeded = mergePrompts(readPrompts(store), MAX_ENTRIES).filter(
 			(text) => isRecallable(text, commands),
 		);
 		let historyGuard: HistoryGuard | undefined;
@@ -565,7 +565,7 @@ export default function (pi: ExtensionAPI) {
 			removeJumpToBottom?.();
 			removeJumpToBottom = installJumpToBottom(editor, tui);
 			imagePreview?.dispose();
-			imagePreview = installImagePreview(editor, tui, ctx);
+			imagePreview = installImagePreview(editor, tui);
 			installEditorNavigation(editor, keybindings);
 			installInlineSlashAutocomplete(editor);
 			installRecorder(

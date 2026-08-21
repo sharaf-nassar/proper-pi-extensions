@@ -62,7 +62,7 @@ The judge reasons about capability slots, not current subscription state.
 
 The seven semantic arm slots remain fixed. The swap-resolution contract in `availability.md` applies quota and availability after the verdict, using each slot's effective target model when overrides are configured. This keeps the rubric's use cases stable while allowing the execution model set to change.
 
-The lane rule constrains the source slot, not necessarily the final execution model. Fixed swaps cross harnesses, and an arbitrary target can belong to either provider, so the judge's `harness` field is advisory when the target cannot be resolved to a known arm.
+The lane rule constrains the source slot, not necessarily the final execution model. Fixed swaps cross providers, and an arbitrary override target can belong to either provider without changing the source slot's rubric role.
 
 ## Changing the arm catalog
 

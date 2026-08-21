@@ -24,7 +24,7 @@ Both `.mcp.json` and `.codex/config.toml` expose `lat mcp`; the Codex configurat
 
 ## Runtime compatibility
 
-The runtime requires global `fetch`, `AbortController`, and `AbortSignal.any`; the smoke command also requires Node's experimental TypeScript type stripping.
+The runtime requires global `fetch`, `AbortController`, `AbortSignal.any`, and `AbortSignal.timeout`; the smoke command also requires Node's experimental TypeScript type stripping.
 
 Pi 0.84.2 does not define `ultra` in its built-in thinking-level list. During module load, proper-llm-router resolves the running pi CLI entrypoint and patches that host process's `AgentSession` and `Theme` prototypes. The patch appends `ultra` only when the active model has a non-empty `thinkingLevelMap.ultra`, uses the existing maximum border color, clamps `ultra` to the next model's highest available level when unsupported, and uses global symbols so `/reload` cannot stack wrappers. This gives Shift+Tab and pi's native thinking selector the extra level without modifying the installed pi package. If the host modules cannot be resolved, routing still works but `ultra` is not added to native controls.
 
@@ -37,8 +37,7 @@ The router uses separate judge and CPA contracts even when both point at one loc
 - `<judge.baseUrl>/chat/completions` returns the strict routing verdict.
 - `<judge.baseUrl>/models` populates the judge model picker.
 - `<cpaBase>/v1/models` reports serving model IDs and populates the judge-override target picker.
-- `<cpaBase>/v0/management/auth-files/models` optionally reports model counts per credential.
-- `<cpaBase>/v0/management/auth-files` validates the management key and lists credentials.
+- `<cpaBase>/v0/management/auth-files` lists credentials for usage probes.
 - `<cpaBase>/v0/management/api-call` proxies upstream Claude and Codex usage requests.
 
 A judge can use another OpenAI-compatible provider. Arm switching and quota probes still depend on CPA.

@@ -11,6 +11,10 @@ automatically; when the bug warrants pinning the strongest arm, invoke as
 this template expands. The fix work itself will be done later by
 /implement-ready workers, each routed per task.
 You run ALL bd commands yourself — the user never touches the bd CLI.
+Whenever this workflow needs input from the user, call the
+`ask_user_question` tool instead of asking in plain text. Group related
+questions into one call. Fall back to plain text only if the tool is unavailable
+or fails before displaying its UI.
 
 1. Investigate to ACTUAL root cause — never pattern-match to a plausible one:
    - Reproduce first (failing test, curl, UI path — whatever proves it). If

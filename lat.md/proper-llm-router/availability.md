@@ -1,6 +1,6 @@
 # Availability and quota
 
-Availability combines CPA model listing, optional per-credential model counts, optional account usage, and a test-only deny list.
+Availability combines CPA model listing, optional account usage, and a test-only deny list.
 
 ## Model listing
 
@@ -8,9 +8,7 @@ Availability combines CPA model listing, optional per-credential model counts, o
 
 A model listed by CPA has at least one serving account. The request uses the key named by `cpaKeyEnv`; an empty value sends no useful credential but still performs the request. Direct routes check each arm's built-in CPA ID, while judged routes check the effective target ID for each semantic slot.
 
-When a management key is available, `/v0/management/auth-files/models` adds a second check. A listed model must also appear under at least one credential. Failure of this optional endpoint discards credential counts and keeps listing-only behavior.
-
-Both checks compare exact CPA IDs. The dated-suffix tolerance used for pi registry lookup does not apply to CPA listing or credential counts; the registry-lookup section in `routing.md` documents that separate rule.
+Listing compares exact CPA IDs. The dated-suffix tolerance used for pi registry lookup does not apply to CPA availability; the registry-lookup section in `routing.md` documents that separate rule.
 
 ## Usage collection
 
@@ -30,7 +28,7 @@ An upstream 429 is definitive exhaustion, so that credential contributes 100% ac
 
 An account's effective usage for one arm is the larger of its account-wide usage and that arm's model-specific usage. Claude and Codex accounts are averaged separately. A lane with no parsed accounts cannot block any of its arms.
 
-For an override target that resolves to a known arm, threshold blocking follows that target arm's lane and model-specific usage. An arbitrary target has no usage mapping, so only live listing and credential-count checks gate it; the percentage threshold fails open for that slot.
+For an override target that resolves to a known arm, threshold blocking follows that target arm's lane and model-specific usage. An arbitrary target has no usage mapping, so only live listing gates it; the percentage threshold fails open for that slot.
 
 This is lane averaging, not a minimum-free-account rule. Two accounts at 100% and 80% produce 90%; they are blocked at an 85% threshold and allowed at 95%.
 
@@ -58,13 +56,12 @@ A judged route swaps semantic slots first, then applies the override configured 
 
 Quota probing should reduce avoidable failures, not create a new outage mode.
 
-- Failure of the per-credential model-count endpoint falls back to `/v1/models`.
 - An account usage call returning upstream 429 counts as 100% usage because the account cannot currently serve work.
 - Other failures of one account usage call drop that account.
 - Failure of all usage calls skips only the threshold gate.
 - Failure of `/v1/models` rejects a judged route, which then uses `fallbackModel`.
 - Failure of the same probe on a direct route keeps the direct arm and reports that the quota check was skipped.
-- `fallbackModel` itself is not checked against CPA listing, credential counts, or quota before selection.
+- `fallbackModel` itself is not checked against CPA listing or quota before selection.
 
 When a threshold is configured but no usage data is available, judged verdicts set `quota_gate_skipped` so the user sees that the management key or API needs attention.
 

@@ -28,9 +28,7 @@ The usage rate-limit fixture verifies that a definitive upstream 429 blocks the 
 
 The judge fast fixture verifies that `judge.fast` controls the `service_tier` field on the judge request.
 
-`test/judge-fast.test.ts` asserts the loaded default is off, then runs the real `route()` path with the CPA listing and judge completion stubbed at the fetch boundary. With `judge.fast` enabled the captured judge body must carry `service_tier: "priority"`; with defaults it must omit the field entirely.
-
-A companion fixture exercises `judgeFastSupported()` on a static catalog: a populated `service_tiers` array is supported, an empty or missing array is unsupported, and an unlisted model returns null. The toggle-time warning path in the config menu remains integration-only.
+`test/judge-fast.test.ts` asserts the loaded default is off, then runs the real `route()` path with the CPA listing and judge completion stubbed at the fetch boundary. With `judge.fast` enabled the captured judge body must carry `service_tier: "priority"`; with defaults it must omit the field entirely. The verdict also omits the redundant harness field.
 
 ## Swap fixtures
 
@@ -68,13 +66,13 @@ These assertions exercise `commandPin()` as pure matching logic. They do not pro
 
 The extension-origin fixture invokes the registered input handler with the same `/skill:ponytail-audit` message produced by an extension command alias.
 
-It verifies that an extension-origin first input switches away from `llm-router/auto` instead of continuing to the placeholder. The fixture uses the real input handler with a minimal model registry and pi API; it does not call the judge because the alias is a bare slash command.
+It verifies that an extension-origin first input switches away from `llm-router/auto` instead of continuing to the placeholder, and that a second input does not route again after the provider changes. The fixture uses the real input handler with a minimal model registry and pi API; it does not call the judge because the alias is a bare slash command.
 
 ## Config menu fixture
 
 The config-menu fixture registers the extension against a minimal pi API and records the real command handler's select menus.
 
-It verifies that the top-level menu has one `Judge` entry plus a top-level `Overrides` entry, and that the `Judge` entry opens `Model`, `Effort`, and `Fast` choices. The fixture stubs only the management-key HTTP probe and exits before any picker performs provider work or writes config.
+It verifies that the top-level menu has one `Judge` entry plus a top-level `Overrides` entry, and that the `Judge` entry opens `Model`, `Effort`, and `Fast` choices. It exits before any picker performs provider work or writes config.
 
 ## Ultra compatibility fixtures
 

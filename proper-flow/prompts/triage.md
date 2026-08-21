@@ -6,6 +6,10 @@ argument-hint: <bug report, feature idea, task description, or issue reference>
 Route this request to the right flow: $ARGUMENTS
 
 You run every `bd` command yourself; the user never touches the Beads CLI.
+Whenever this workflow needs input from the user, call the
+`ask_user_question` tool instead of asking in plain text. Group related
+questions into one call. Fall back to plain text only if the tool is unavailable
+or fails before displaying its UI.
 
 Classify the request, announce the route in ONE line ("Routing: <tier> —
 <reason>"), then follow that flow. If genuinely borderline, ask one question

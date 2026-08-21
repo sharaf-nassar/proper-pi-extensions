@@ -53,20 +53,9 @@ function quotedRange(
 	line: string,
 	column: number,
 ): SmartSelectionRange | undefined {
-	for (let start = 0; start < line.length; start++) {
-		const quote = line[start];
-		if (!quote || !QUOTES.has(quote)) continue;
-		for (let end = start + 1; end < line.length; end++) {
-			if (line[end] === "\\") {
-				end++;
-				continue;
-			}
-			if (line[end] !== quote) continue;
-			const range = columns(line, start, end + 1);
-			if (contains(range, column)) return range;
-			start = end;
-			break;
-		}
+	for (const match of line.matchAll(/(["'`])(?:\\.|(?!\1)[^\\])*\1/gu)) {
+		const range = columns(line, match.index, match.index + match[0].length);
+		if (contains(range, column)) return range;
 	}
 	return undefined;
 }

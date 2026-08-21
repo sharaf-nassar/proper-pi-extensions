@@ -8,6 +8,10 @@ The fixture verifies Pi receives the intended prompt resource set.
 
 It parses `package.json`, checks that `pi.prompts` exposes `./prompts`, and requires exactly `file.md`, `implement-ready.md`, `spec.md`, and `triage.md`. Each file must retain `description` and `argument-hint` frontmatter.
 
+## Questionnaire routing contract
+
+The fixture requires every workflow prompt to route user questions through `ask_user_question` and retain the plain-text fallback for unavailable tools or failures before UI display.
+
 ## File acceptance contract
 
 The fixture prevents bug triage from hiding done conditions in prose that the implementation rail cannot classify reliably.
@@ -20,11 +24,15 @@ The fixture protects the user-facing scope contract against regressing to epic-o
 
 It requires `/implement-ready` to advertise epic, task, and all scopes and to retain explicit resolution and single-task isolation instructions.
 
+## Rolling pool contract
+
+The fixture requires `/implement-ready` to default to 12 workers, enforce the hard maximum, launch async children, wait for the next completion rather than the whole pool, and refill without waiting for active siblings.
+
 ## Integration recovery contract
 
 The fixture protects the rail-owned integration order and recovery references that task cleanup depends on.
 
-It requires `/implement-ready` to close each bead before cleanup, document rebase abort recovery, and keep `/file` inline fixes on the run-level absorb path.
+It requires `/implement-ready` to close each bead before cleanup, document rebase abort recovery, pass the upcoming retry attempt number to the rail, and keep `/file` inline fixes on the run-level absorb path.
 
 ## Coverage boundary
 

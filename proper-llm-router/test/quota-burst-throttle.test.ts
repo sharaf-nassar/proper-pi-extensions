@@ -27,9 +27,6 @@ test("codex limit_reached blocks the lane while used_percent is low", async () =
 				].map((id) => ({ id })),
 			});
 		}
-		if (url.endsWith("/v0/management/auth-files/models")) {
-			return Response.json({ error: "name is required" }, { status: 400 });
-		}
 		if (url.endsWith("/v0/management/auth-files")) {
 			return Response.json({
 				files: [

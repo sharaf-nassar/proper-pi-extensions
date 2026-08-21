@@ -12,7 +12,7 @@ It verifies managed symlinks, the real empty `no-hooks` directory, refusal to ov
 
 The survey test invokes the real rail with a fake read-only `bd` command.
 
-It verifies structured acceptance criteria, legacy description-section fallback, blank rejection, P4 exclusion, and `Files:` parsing without duplicating the production filter.
+It verifies structured acceptance criteria, legacy description-section fallback, blank rejection, and P4 exclusion. Focused overlap calls verify the canonical live-bead `Files:` parser handles multiple paths, missing declarations, unknown values, and case-insensitive keys.
 
 ## Integration recovery contract
 
@@ -22,9 +22,9 @@ It verifies a failed integration gate permits a same-task fix-forward preparatio
 
 ## Retry and rebase contracts
 
-Focused tests protect retry evidence and rewritten-main handling.
+Focused tests protect retry evidence and drive the real rail through both rebase modes.
 
-They verify hard repeated-signature denial, the overridable cumulative ceiling, advanced-main rebasing, and replaying only task commits after main history is rewritten.
+They verify hard repeated-signature denial and the overridable cumulative ceiling. Temporary repositories prove `prepare` uses plain rebase when main contains the worker base and `--onto` after a rewrite, without resurrecting amended-away files.
 
 ## Audit absorption contract
 
@@ -34,9 +34,6 @@ It verifies clean detection, staged-index refusal, staging only tracked Beads JS
 
 ## Speckit normative coverage contract
 
-The formula regression test replays the Flow-only plan against the normative
-A2/A3 mock inventory without invoking `bd`.
+The formula regression test validates the generic normative-ownership contract without invoking `bd`.
 
-It verifies the missing A2 collapsed, drawer, pinned, and drag owners fail the
-pre-materialization gate, a fully owned map passes, both depths retain the
-gate, and squash instructions record coverage totals.
+It verifies source authority and row-level coverage remain present, both implementation and verification owners are mandatory, both depths retain the gate, count mismatches stop before Beads mutation, the preflight precedes epic creation, and squash instructions record coverage totals.

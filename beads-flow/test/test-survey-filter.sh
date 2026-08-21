@@ -34,13 +34,16 @@ printf '[{"id":"b-1"}]\n' >"$T/blocked.json"
 
 cat >"$T/bin/bd" <<'EOF'
 #!/usr/bin/env bash
-for arg in "$@"; do
-  case "$arg" in
+args=("$@")
+while (($#)); do
+  case "$1" in
     ready) cat "$READY_FILE"; exit ;;
     blocked) cat "$BLOCKED_FILE"; exit ;;
+    show) jq --arg id "${2:-}" '[.[] | select(.id == $id)]' "$READY_FILE"; exit ;;
   esac
+  shift
 done
-printf 'fake bd: unsupported args: %s\n' "$*" >&2
+printf 'fake bd: unsupported args: %s\n' "${args[*]}" >&2
 exit 2
 EOF
 chmod 700 "$T/bin/bd"
@@ -65,12 +68,17 @@ chk "blank legacy acceptance excluded"       '[.ready[].id] | index("a-9") // "n
 chk "unacceptable lists missing and blank"   '[.unacceptable[].id] | join(",")' "a-2,a-3,a-9"
 chk "ready keeps the rest"                   '[.ready[].id] | join(",")' "a-1,a-4,a-5,a-7,a-8"
 chk "P4 excluded even with acceptance"       '[.p4_excluded[].id] | join(",")' "a-6"
-chk "multi-file parse"                       '.ready[] | select(.id=="a-1") | .files | join("|")' "src/a.rs|src/b.rs"
-chk "no Files line -> empty"                 '.ready[] | select(.id=="a-4") | .files | length' 0
-chk "Files: unknown -> empty"                '.ready[] | select(.id=="a-5") | .files | length' 0
-chk "case-insensitive files key"             '.ready[] | select(.id=="a-7") | .files | join("|")' "src/d.rs"
-chk "files_declared count (a-1, a-7)"        '.counts.files_declared' 2
 chk "ready count"                            '.counts.ready' 5
 chk "unacceptable count"                     '.counts.unacceptable' 3
 
-printf '\nsurvey filter: all cases passed\n'
+files() {
+  PATH="$T/bin:$PATH" READY_FILE="$T/ready.json" BLOCKED_FILE="$T/blocked.json" \
+    "$RAIL" overlap --run-dir "$T/run" --task "$1" | jq -r '.declared | join("|")'
+}
+[[ "$(files a-1)" == "src/a.rs|src/b.rs" ]] || { printf 'FAIL: multi-file parse\n'; exit 1; }
+[[ -z "$(files a-4)" ]] || { printf 'FAIL: no Files line should be empty\n'; exit 1; }
+[[ -z "$(files a-5)" ]] || { printf 'FAIL: unknown Files should be empty\n'; exit 1; }
+[[ "$(files a-7)" == "src/d.rs" ]] || { printf 'FAIL: lowercase files key\n'; exit 1; }
+printf 'ok: overlap parses declared Files from live beads\n'
+
+printf '\nsurvey and overlap filters: all cases passed\n'

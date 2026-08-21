@@ -10,6 +10,10 @@ edit across all three (platform-specific wording aside).
 Drive the global `speckit` beads formula end to end for: $ARGUMENTS
 
 You run ALL bd commands yourself — the user never touches the bd CLI.
+Whenever this workflow needs input from the user, call the
+`ask_user_question` tool instead of asking in plain text. Group related
+questions into one call. Fall back to plain text only if the tool is unavailable
+or fails before displaying its UI.
 
 1. If $ARGUMENTS is empty or too vague to name a feature, ask the user for the
    problem statement first. If it names an existing issue id, inspect it with
@@ -41,17 +45,10 @@ You run ALL bd commands yourself — the user never touches the bd CLI.
      `source-task` / `source-commit` description fields are the backtrack path
      to the change that incurred each shortcut; read them as context before
      refining. Every collected id still owes the normal P4 disposition.
-   For an existing epic (including one inferred from a P4 source), compute its
-   hierarchy-plus-provenance closure before instantiating the wisp:
-   - Seed SCOPE with the epic and recursively add structural descendants using
-     `bd list --parent <id> --all --limit=0 --json`.
-   - Run `bd dep list <scope ids...> --direction=up
-     --type=discovered-from --json` to add issues discovered from any SCOPE
-     issue. Add their structural descendants, then repeat the provenance query
-     for newly added ids until no ids are added.
-   Collect every SCOPE issue whose stored status is `open` and priority is `4`.
-   Pass the complete, de-duplicated id set as `--var backlog="<ids>"`. Include
-   `source_backlog` even when it remains outside the epic closure.
+   Do not snapshot an epic's hierarchy or provenance here. The formula owns
+   that live closure during `specify` and refreshes it before materialization;
+   pass only the resolved epic/source variables above. `backlog` is reserved
+   for the explicit `debt` ledger.
 2. Derive a short kebab-case feature slug and instantiate the molecule as an
    ephemeral wisp (the formula is `phase = "vapor"` — do NOT `bd mol pour` it):
    `bd mol wisp speckit --var feature=<slug> --var problem="<problem>" --var context="<any extra context the user gave>" [--var epic=<id>] [--var epic_candidates="<comma-separated ids>"] [--var source_backlog=<id>] [--var backlog="<comma-separated ids>"] [--var depth=quick]`

@@ -1,7 +1,6 @@
 import { accessSync, constants } from "node:fs";
 import { basename, isAbsolute } from "node:path";
 
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
 	type OverlayHandle,
@@ -41,7 +40,6 @@ export type ImagePreviewController = {
 	prepare(text: string): string;
 	clear(): void;
 	dispose(): void;
-	update(ctx: ExtensionContext): void;
 };
 
 type InstalledEditor = PreviewEditor & {
@@ -64,20 +62,15 @@ function singleDeletionIndex(
 export function installImagePreview(
 	editor: Component,
 	tui: TUI,
-	_ctx: ExtensionContext,
 ): ImagePreviewController | undefined {
 	const target = editor as InstalledEditor;
 	const existing = target[INSTALLED];
-	if (existing) {
-		existing.update(_ctx);
-		return existing;
-	}
+	if (existing) return existing;
 	if (!target.getText || !target.setText) return undefined;
 
 	let counter = 0;
 	let changingText = false;
 	let previousText = target.getText();
-	let visibleMarkers = "";
 	let activePreviews: Preview[] = [];
 	let handler = target.onChange;
 	const previews = new Map<string, Preview>();
@@ -134,14 +127,9 @@ export function installImagePreview(
 	};
 
 	const sync = (text: string) => {
-		const active = [...previews.values()].filter((preview) =>
+		activePreviews = [...previews.values()].filter((preview) =>
 			text.includes(preview.marker),
 		);
-		const signature = active.map((preview) => preview.marker).join("\0");
-		if (signature !== visibleMarkers) {
-			visibleMarkers = signature;
-			activePreviews = active;
-		}
 		if (isVisible() && isMounted(tui, target)) ensureOverlay();
 		else releaseOverlay();
 	};
@@ -264,7 +252,6 @@ export function installImagePreview(
 			for (const preview of previews.values()) {
 				prepared = prepared.replaceAll(preview.marker, preview.path);
 			}
-			visibleMarkers = "";
 			activePreviews = [];
 			releaseOverlay();
 			return prepared;
@@ -272,7 +259,6 @@ export function installImagePreview(
 		clear() {
 			previews.clear();
 			markersByPath.clear();
-			visibleMarkers = "";
 			activePreviews = [];
 			releaseOverlay();
 		},
@@ -283,10 +269,6 @@ export function installImagePreview(
 			delete target.onChange;
 			if (handler) target.onChange = handler;
 			delete target[INSTALLED];
-		},
-		update(_next) {
-			visibleMarkers = "";
-			sync(target.getText?.() ?? "");
 		},
 	};
 

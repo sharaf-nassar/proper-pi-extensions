@@ -15,11 +15,6 @@ function run(command, args, cwd = ".") {
 	if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-function hasScript(cwd, name) {
-	const pkg = JSON.parse(readFileSync(`${cwd}/package.json`, "utf8"));
-	return typeof pkg.scripts?.[name] === "string";
-}
-
 function checkJsonl(path) {
 	for (const [index, line] of readFileSync(path, "utf8")
 		.split("\n")
@@ -33,23 +28,16 @@ function checkJsonl(path) {
 	}
 }
 
-function fast() {
+function fast(coverage = false) {
 	run("node", ["--test", "test/*.test.mjs"]);
-	run("npm", ["test"], "proper-base");
+	run("npm", coverage ? ["run", "test:coverage"] : ["test"], "proper-base");
 	run("npm", ["test"], "proper-flow");
-	if (hasScript("proper-llm-router", "test:unit")) {
-		run("npm", ["run", "test:unit"], "proper-llm-router");
-	} else {
-		run(
-			"node",
-			["--experimental-strip-types", "--test", "test/*.test.ts"],
-			"proper-llm-router",
-		);
-	}
-	for (const cwd of LOCKED_PACKAGES) {
-		if (hasScript(cwd, "typecheck")) run("npm", ["run", "typecheck"], cwd);
-		else run("npx", ["--no-install", "tsc"], cwd);
-	}
+	run(
+		"npm",
+		["run", coverage ? "test:coverage" : "test:unit"],
+		"proper-llm-router",
+	);
+	for (const cwd of LOCKED_PACKAGES) run("npm", ["run", "typecheck"], cwd);
 	for (const cwd of LOCKED_PACKAGES) {
 		run("npm", ["ci", "--ignore-scripts", "--dry-run", "--offline"], cwd);
 	}
@@ -61,9 +49,7 @@ function fast() {
 }
 
 function full() {
-	fast();
-	run("npm", ["run", "test:coverage"], "proper-base");
-	run("npm", ["run", "test:coverage"], "proper-llm-router");
+	fast(true);
 	run("npm", ["run", "test:smoke"], "proper-llm-router");
 	for (const cwd of LOCKED_PACKAGES) {
 		run("npm", ["audit", "--audit-level=low"], cwd);

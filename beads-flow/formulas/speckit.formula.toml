@@ -27,24 +27,9 @@ same way mols do — `bd ready --mol <root>` / `bd mol ready --gated`.
 
 ## Distill from practice
 
-v1 was designed upfront; v2 folded in the first rounds of practice
-(single-file artifact, quick depth, base-10 NNN arithmetic); v3 restricted
-clarify-gate questions to product decisions — technical-approach questions
-are now self-resolved via best-practice research and presented as a
-veto-able decision log (distilled from ~20 runs where the human accepted
-"all recommended" nearly every time); v4 made the plan extract shared
-primitives into foundational beads and gave align-autofix the symmetric
-missing-serialization check (combined run diffs kept showing parallel
-workers writing the same helper twice); v5 grounded specify and plan in
-the repo's learnings store (`docs/solutions/`, `CONCEPTS.md`) so recorded
-root causes and failed approaches inform new designs; v6 moved the global
-workflow resources under repository control and clarified the missing-
-constitution soft pause; v7 added row-level ownership gates for normative
-visual artifacts after an A2 replacement design was omitted from a Flow-only
-materialization. Keep revising the step runbooks after runs based on what
-actually happened (the `bd mol distill` direction) — treat friction as a bug
-in the formula, not in the run. Bump `version` whenever the runbooks change so
-squash digests can be traced to the formula revision that produced them.
+Revise runbooks from observed friction (`bd mol distill`) rather than
+speculation. Treat recurring workflow friction as a formula bug, and bump
+`version` whenever behavior changes so squash digests identify their contract.
 
 ## Pipeline
 
@@ -116,7 +101,7 @@ way and BOTH human gates always fire. bd's enum is advisory-only, so treat any
   alignment+quality self-check, an abbreviated chat analysis, and NO artifact
   file — the epic carries the condensed spec and plan. Gates are NOT skipped.
 """
-version = 7
+version = 8
 type = "workflow"
 phase = "vapor"
 
@@ -606,15 +591,6 @@ acceptance criteria cover the row. A normative row placed in Non-Goals, omitted
 from Sequencing, or contradicted by task acceptance is a blocker until the
 human explicitly changes Source Authority or the plan restores coverage.
 
-**Regression evidence — A2/A3 omission.** For
-`specs/026-beads-flow-view.md` plus
-`.impeccable/mocks/beads-board-directions.html`, the mock declares both
-**A2 · Ledger + rail** and **A3 · Flow** normative. A Flow-only 17-task plan
-leaves A2's **Collapsed — real state**, hover drawer, pinned lane, and drag
-state without implementation or verification owners. That plan is incomplete;
-it must not become beads. A complete replay maps every A2/A3 state and
-interaction to both owners.
-
 **Exit criteria:** all nine plan sections are appended to the spec artifact,
 Target Epic is resolved in place, every backlog source has a disposition,
 Normative Visual Coverage has no gap or contradiction, and (if present)
@@ -835,11 +811,6 @@ or an authority/Goal/Non-Goal/Sequencing/task-acceptance contradiction remains,
 STOP before the first Beads mutation and return to analyze. Human GO cannot
 waive this preflight. When no normative visual artifact exists, record all
 four counts as zero and continue.
-
-Regression replay: with `specs/026-beads-flow-view.md` and
-`.impeccable/mocks/beads-board-directions.html`, A2 and A3 are normative. A
-Flow-only 17-task plan has no owners for A2 Collapsed, hover drawer, pinned, or
-drag states, so this preflight must fail before EPIC or any task is changed.
 
 **1. Establish the feature epic.**
 

@@ -9,42 +9,21 @@ import {
 } from "../src/history.ts";
 
 test("mergePrompts returns oldest first so Up yields the newest prompt", () => {
-	const firstBatch = [
+	const prompts = [
 		{ text: "older", ts: 10 },
 		{ text: "newer", ts: 30 },
+		{ text: "middle", ts: 20 },
 	];
-	const secondBatch = [{ text: "middle", ts: 20 }];
-	assert.deepEqual(mergePrompts([firstBatch, secondBatch], 10), [
-		"older",
-		"middle",
-		"newer",
-	]);
-});
-
-test("mergePrompts interleaves batches by timestamp", () => {
-	const firstBatch = [
-		{ text: "s1", ts: 1 },
-		{ text: "s2", ts: 4 },
-	];
-	const secondBatch = [
-		{ text: "r1", ts: 2 },
-		{ text: "r2", ts: 3 },
-	];
-	assert.deepEqual(mergePrompts([firstBatch, secondBatch], 10), [
-		"s1",
-		"r1",
-		"r2",
-		"s2",
-	]);
+	assert.deepEqual(mergePrompts(prompts, 10), ["older", "middle", "newer"]);
 });
 
 test("mergePrompts collapses a duplicate onto its most recent timestamp", () => {
-	const sessions = [
+	const prompts = [
 		{ text: "dup", ts: 5 },
 		{ text: "other", ts: 6 },
+		{ text: "dup", ts: 50 },
 	];
-	const store = [{ text: "dup", ts: 50 }];
-	assert.deepEqual(mergePrompts([sessions, store], 10), ["other", "dup"]);
+	assert.deepEqual(mergePrompts(prompts, 10), ["other", "dup"]);
 });
 
 test("mergePrompts keeps the newest prompts when over the limit", () => {
@@ -53,7 +32,7 @@ test("mergePrompts keeps the newest prompts when over the limit", () => {
 		{ text: "b", ts: 2 },
 		{ text: "c", ts: 3 },
 	];
-	assert.deepEqual(mergePrompts([source], 2), ["b", "c"]);
+	assert.deepEqual(mergePrompts(source, 2), ["b", "c"]);
 });
 
 test("mergePrompts keeps same-timestamp prompts in the order seen", () => {
@@ -61,13 +40,12 @@ test("mergePrompts keeps same-timestamp prompts in the order seen", () => {
 		{ text: "first", ts: 7 },
 		{ text: "second", ts: 7 },
 	];
-	assert.deepEqual(mergePrompts([source], 10), ["first", "second"]);
+	assert.deepEqual(mergePrompts(source, 10), ["first", "second"]);
 });
 
 test("mergePrompts handles empty and degenerate input", () => {
 	assert.deepEqual(mergePrompts([], 10), []);
-	assert.deepEqual(mergePrompts([[], []], 10), []);
-	assert.deepEqual(mergePrompts([[{ text: "a", ts: 1 }]], 0), []);
+	assert.deepEqual(mergePrompts([{ text: "a", ts: 1 }], 0), []);
 });
 
 test("resolveBase passes through an editor we have not wrapped", () => {

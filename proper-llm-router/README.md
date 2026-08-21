@@ -1,164 +1,234 @@
 # proper-llm-router
 
-A [pi](https://github.com/badlogic/pi-mono) extension that routes each coding
-task to the right model. A judge LLM reads the first prompt of a session,
-picks an arm from a measured rubric (4 Claude tiers + 3 GPT tiers via
-CPA/CLIProxyAPI), and the extension switches the session to it — later turns
-pay nothing. Subagent children load the extension too, so each spawned task
-gets its own verdict; the spawner can pin a model on one spawn by prefixing
-its task with `[[llm-router: <model>]]` (see below).
+A [Pi](https://pi.dev) extension that chooses a model for the first task in a
+session, switches before generation starts, and leaves later turns on that
+model. Each pi-subagents child is a separate session and gets its own route.
 
-Everything is self-contained in `llm-router.ts`: judge call, quota checks,
-swap fallback, exemplar few-shot. No local services beyond CPA itself.
+The router uses one measured judge decision per task, optional account quota
+data, and fixed cross-provider swaps. It has no project-local service; the
+judge and model catalog come from CPA/CLIProxyAPI or another compatible judge
+endpoint.
 
-## How a prompt gets routed
+## Routing behavior
 
-1. First input of a session (typed or slash command) is intercepted. A
-   pinned slash command (see below) skips straight to step 4.
-2. The judge (default: CPA + `gpt-5.6-terra` @ medium reasoning effort,
-   strict JSON schema) picks an arm from the full 7-arm menu using the
-   embedded rubric plus TF-IDF-matched measured outcomes from
-   `exemplars.jsonl`. Esc during the call aborts it and discards the prompt.
-3. Concurrently, availability is probed: CPA's `/v1/models` listing, plus
-   the quota-threshold gate when configured.
-4. An out-of-quota pick swaps to its fixed cross-harness partner:
-   fable↔sol, opus↔terra, sonnet→luna, haiku↔luna. Both sides dead →
-   fallback model. Any judge failure → fallback model, visibly.
-5. The session switches to the result; the notice shows model, latency,
-   rationale (green = judging, cyan = clean pick, amber = swapped/warnings).
+Fresh and new sessions move to the placeholder `llm-router/auto`. Resumed
+sessions keep their current model. Routing runs only while the selected provider
+is `llm-router`; `/llm-router` or manually selecting `llm-router/auto` re-arms
+the next prompt.
 
-## Judge model overrides
+The first eligible input follows this order:
 
-`judgeModelOverrides` replaces the CPA model occupying one judge arm slot while
-keeping that slot's measured use cases. The judge prompt shows the target as
-`<target> [selection key: <arm>]`, returns the stable arm key, then routing
-switches to the target after quota swapping.
+1. A configured slash-command pin switches directly and skips the judge.
+2. An unpinned bare slash command uses `fallbackModel` because it has no task
+   text to judge.
+3. `[[llm-router: <model>]]` forces one arm and removes the marker.
+4. Every other prompt goes to the judge.
 
-Configure overrides in `/llm-router-config` → *Judge* → *Overrides*. Pick one
-of the seven arm slots, then any model currently enabled by CPA. Choosing the
-slot's default removes the override. Pins and sentinels are unaffected.
+A command pin takes precedence over a sentinel. Slash commands with arguments
+are normal task text unless pinned.
 
-## Pinned slash commands
+### Judged routes
 
-Some commands always want the same model, so there is nothing for a judge to
-decide. `commandPins` maps a command to an arm and a thinking level; the
-router switches directly, with no judge call and no latency:
+- The judge receives the first 4000 characters of text, not attached image
+  contents.
+- It selects one of seven stable capability slots through strict JSON schema.
+- Up to three related measured tasks from `exemplars.jsonl` are added as
+  evidence when TF-IDF similarity is useful.
+- Judge model overrides can replace the model occupying a slot without changing
+  that slot's calibrated use cases.
+- The judge makes at most two 60-second attempts. Pressing Esc cancels judging,
+  discards the prompt, and leaves routing armed.
+- Later turns make no judge call.
 
-| Command | Arm | Effort |
-| --- | --- | --- |
-| `/file`, `/triage`, `/spec` | `claude-fable-5` | `xhigh` |
-| `/implement-ready` | `gpt-5-6-sol` | `xhigh` |
+### Model slots
 
-The quota gate still applies — a pinned arm that is out of quota swaps to its
-partner (fable→sol, sol→fable, …) and the notice says so. Effort is applied
-after the model switch, so pi clamps it to what the final arm supports;
-`ultra` is offered only when the selected model explicitly advertises it, and
-`null` leaves the session's thinking level alone. Edit pins in
-`/llm-router-config` → *Pinned commands* (add, repoint, change effort,
-remove), or directly in the config JSON. Keys match with or without the
-leading `/`, case-insensitively; a pin naming an unknown model falls through
-to the judge.
+| Slot | Intended use |
+| --- | --- |
+| `claude-fable-5` | Ambiguous architecture, protocol work, concurrency, migrations, and unclear scope. |
+| `claude-opus-5` | Cross-component diagnosis, authentication, data-loss risk, and high-impact changes. |
+| `claude-sonnet-5` | Routine multi-file repository work and test suites. |
+| `claude-haiku-4-5` | Localized repository fixes and mechanical edits. |
+| `gpt-5-6-sol` | Subtle standalone correctness, algorithms, and performance work. |
+| `gpt-5-6-terra` | Fully specified standalone functions, endpoints, or classes. |
+| `gpt-5-6-luna` | Trivial or mechanical standalone edits. |
 
-## Ultra effort compatibility
+Repository inspection and agentic tool use belong to the Claude lane.
+Self-contained work whose code and specification are already in the prompt can
+use the GPT lane. When two adjacent tiers fit, the judge chooses the stronger
+one.
 
-CLIProxyAPI already publishes `thinkingLevelMap.ultra` for supported GPT
-models, but Pi 0.84.2 stops its native effort controls at `max`. On load, this
-extension applies a reload-safe compatibility patch to the running Pi host.
-Shift+Tab and Pi's native thinking selector gain a distinct `ultra` choice only
-for models whose map contains a non-empty `ultra` value. Unsupported model
-switches clamp it to their highest available effort, and the prompt border
-reuses Pi's maximum-effort color. No installed Pi files are modified.
+### Availability, quota, and fallback
 
-## Subagents and the sentinel override
+The router checks CPA's `/v1/models` catalog while the judge runs. When
+`quotaMaxPct` and a CPA management key are configured, it also averages Claude
+or Codex account usage and treats slots at or above the threshold as down.
+Usage is cached for 60 seconds.
 
-pi-subagents children load this extension like any session: `session_start`
-forces them back to `llm-router/auto` (overriding the `--model` the spawner
-resolved) and their first input — the task — gets its own judge verdict. So
-per-child routing is the default, and `runs.run` `model=` has no effect.
+A down slot swaps once to a fixed partner:
 
-To force a model on one spawn (e.g. an agent failed and the session retries
-on a stronger arm), prefix that task string with `[[llm-router: <model>]]`:
+- Fable and Sol swap with each other.
+- Opus and Terra swap with each other.
+- Sonnet swaps to Luna.
+- Haiku swaps to Luna; Luna swaps to Haiku.
 
-```js
-runs.run("retry", { agent: "worker", task: "[[llm-router: claude-opus-5]] Fix the race in …" })
+If both judged choices are down, or judging fails, the router uses
+`fallbackModel` without quota-checking that fallback. Quota data failures skip
+only the percentage gate and produce a visible warning. Direct pins and
+sentinels fail open: if availability cannot produce a usable swap, they keep
+the requested arm rather than block the prompt. If a direct target is missing
+from Pi's registry, routing falls through to the remaining precedence rules.
+
+Notices show judging state, selected model, latency, rationale, command pins,
+forced routes, swaps, overrides, skipped quota checks, and fallback errors.
+
+## Direct model overrides
+
+Use a sentinel in a typed prompt or subagent task:
+
+```text
+[[llm-router: claude-opus-5]] Fix the race in the session cache
 ```
 
-The router skips the judge, pins the named arm (quota swap still applies —
-a dead arm degrades to its partner), and strips the marker before the model
-sees it. Names are matched loosely: arm key, CPA id, or any unique fragment
-("sol", "opus"). Unknown names fall through to the judge with a notice. The
-convention is self-advertised: a short system-prompt suffix in every
-orchestrating session (skipped in leaf children, which cannot spawn)
-documents it, so the main-session LLM knows the escape hatch exists. The
-same marker works in a typed prompt to bypass the judge manually.
+Names can be an arm key, CPA model ID, or unique fragment such as `opus` or
+`sol`. Unknown names are removed and sent to the judge with a warning.
 
-## Install
+pi-subagents spawn-time `model` options are overwritten when the child starts
+on `llm-router/auto`. The sentinel is the supported per-child override:
 
-- Install this local package: `pi install /path/to/proper-pi-extensions/proper-llm-router`.
-  Its package manifest registers `llm-router.ts`.
-- Define placeholder provider `llm-router` (model `auto`) in
-  `~/.pi/agent/models.json` + a dummy key in `auth.json` — sessions start
-  on `llm-router/auto` and are switched before any request reaches it.
-- Provide `ANTHROPIC_AUTH_TOKEN` (CPA key) in pi's environment.
-- Run `npm install` here for strict type diagnostics and test commands.
+```js
+runs.run("retry", {
+  agent: "worker",
+  task: "[[llm-router: claude-fable-5]] Diagnose the failed migration",
+})
+```
 
-## Router configuration
+## Default command pins
 
-`~/.pi/agent/llm-router.json` — missing file/keys fall back to defaults.
-Re-read on every routed prompt; no restart needed.
-
-| Field | Default | Meaning |
+| Command | Model | Thinking effort |
 | --- | --- | --- |
-| `judge.baseUrl` | `http://127.0.0.1:8317/v1` | any OpenAI-compatible `/chat/completions` with strict `json_schema` |
-| `judge.apiKeyEnv` | `ANTHROPIC_AUTH_TOKEN` | env var holding the judge API key |
-| `judge.model` | `gpt-5.6-terra` | judge model id |
-| `judge.effort` | `medium` | `reasoning_effort`; `null` for non-reasoning judges |
-| `fallbackModel` | `gpt-5.6-terra` | used when the judge fails or both swap partners are dead |
-| `cpaBase` | `http://127.0.0.1:8317` | CPA base for availability + quota probes |
-| `cpaKeyEnv` | `ANTHROPIC_AUTH_TOKEN` | env var holding the CPA key |
-| `exemplarsPath` | `<extension>/exemplars.jsonl` | measured-outcome few-shot corpus (optional) |
-| `quotaMaxPct` | `null` (off) | block arms whose average usage across accounts ≥ this % |
-| `cpaManagementKey` | `""` | CPA management key (plaintext); enables the quota gate |
-| `cpaManagementKeyEnv` | `CPA_MANAGEMENT_KEY` | env fallback for the management key |
-| `judgeModelOverrides` | `{}` | arm slot to enabled CPA model ID; judged routes only |
-| `commandPins` | `/file`,`/triage`,`/spec` → fable @xhigh; `/implement-ready` → sol @xhigh | slash commands routed without the judge: `{ "<cmd>": { "model": "<arm>", "effort": "xhigh"\|"ultra"\|null } }`; ultra requires model support |
+| `/file` | `claude-fable-5` | `xhigh` |
+| `/triage` | `claude-fable-5` | `xhigh` |
+| `/spec` | `claude-fable-5` | `xhigh` |
+| `/implement-ready` | `gpt-5-6-sol` | `xhigh` |
+
+Pins still use the quota swap. Their effort is applied after the final model
+switch and is clamped to that model's supported levels. A `null` effort leaves
+the current session effort unchanged.
 
 ## Commands
 
-- `/llm-router` — switch the session back to `llm-router/auto`; the next
-  prompt gets routed again.
-- `/llm-router-config` — interactive settings: one judge submenu for the
-  live model picker, effort picker, and CPA-backed overrides; pinned commands,
-  quota threshold,
-  masked management-key entry with live validity status, full-config JSON
-  editor, and a live judge test.
+| Command | Behavior |
+| --- | --- |
+| `/llm-router` | Select `llm-router/auto` so the next prompt routes again. |
+| `/llm-router-config` | Open the interactive configuration menu. |
 
-## Quota gate
+The configuration menu can:
 
-With `quotaMaxPct` set and a valid management key, every routing pass reads
-per-account usage through CPA's management `api-call` passthrough — Claude:
-`api.anthropic.com/api/oauth/usage` (`five_hour`/`seven_day` utilization
-plus per-model `limits[]` percentages); Codex: `chatgpt.com` wham usage
-(`rate_limit` window `used_percent`). An arm is blocked when the average
-across its lane's accounts is at/over the threshold (per-model windows
-count for Claude arms). 60s cache; probe failures skip the gate and say so
-in the notice rather than blocking routing.
+- Choose judge model, reasoning effort, and priority service tier.
+- Replace judged model slots with models currently enabled by CPA.
+- Add, repoint, remove, and set effort for command pins.
+- Enable a quota threshold at 50%, 75%, 80%, 90%, or 95%.
+- Store or clear the CPA management key through masked input.
+- Edit the complete JSON config.
+- Run a live end-to-end route test.
 
-## Smoke test
+## Ultra thinking support
+
+Pi 0.84.2 stops its native thinking controls at `max`. When the running Pi
+host exposes the expected compatibility points, this extension adds `ultra` to
+Shift+Tab and Pi's thinking selector only for models whose
+`thinkingLevelMap.ultra` contains a value. Switching to an unsupported model
+clamps effort to its highest available level. If the host layout differs, model
+routing still works without the extra native control. No installed Pi files are
+modified.
+
+## Install
+
+Use Node 22.19 or newer. The extension and `ultra` compatibility layer are
+tested against Pi 0.84.2.
+
+Install the package:
 
 ```bash
-npm run typecheck
-npm run test:unit
-npm run test:smoke -- ["task text"]
-npm run test:coverage
+pi install /path/to/proper-pi-extensions/proper-llm-router
 ```
 
-Runs offline `node:test` compatibility fixtures, the pure routing fixtures
-(swaps, quota averaging, model overrides, command pins, and config menus), then
-one live routing verdict.
+Add a placeholder provider and model to `~/.pi/agent/models.json`:
 
-## Escape hatches
+```json
+{
+  "providers": {
+    "llm-router": {
+      "baseUrl": "http://127.0.0.1:1/v1",
+      "api": "openai-completions",
+      "apiKey": "unused",
+      "models": [{ "id": "auto" }]
+    }
+  }
+}
+```
 
-- `LLM_ROUTER_OFF=1` — don't force sessions onto `llm-router/auto`.
-- `CPA_SIMULATE_UNAVAILABLE="arm1,arm2"` — test hook: treat arms as dead.
-- `JUDGE_EXEMPLARS=0` — skip the few-shot exemplar note.
+The placeholder must be available in `/model`, but a healthy route switches
+away before any request reaches its URL. If you omit the inline dummy key,
+configure equivalent placeholder authentication through Pi. Missing execution
+or fallback registry models can leave the placeholder selected; fix the model
+registry before retrying.
+
+The seven execution models, `fallbackModel`, and every active override target
+must exist in Pi's model registry under provider `cliproxyapi`. Provide the CPA
+key through the environment variable configured by `cpaKeyEnv`,
+`ANTHROPIC_AUTH_TOKEN` by default.
+
+Remove any older direct `llm-router.ts` extension registration so the package
+loads once.
+
+## Configuration file
+
+Settings live at `~/.pi/agent/llm-router.json`. The file is read before every
+routed prompt. Most edits need no restart; exemplar path changes need a restart
+after the corpus has loaded, and quota data may remain cached for 60 seconds.
+
+| Field | Default | Behavior |
+| --- | --- | --- |
+| `judge.baseUrl` | `http://127.0.0.1:8317/v1` | OpenAI-compatible judge API base. |
+| `judge.apiKeyEnv` | `ANTHROPIC_AUTH_TOKEN` | Environment variable containing the judge key. |
+| `judge.model` | `gpt-5.6-terra` | Model used for routing decisions. |
+| `judge.effort` | `medium` | Judge `reasoning_effort`; `null` omits it. |
+| `judge.fast` | `false` | Sends `service_tier: "priority"` when enabled. |
+| `fallbackModel` | `gpt-5.6-terra` | CPA model ID used after judged failure and for bare commands. |
+| `cpaBase` | `http://127.0.0.1:8317` | CPA base for model and quota requests. |
+| `cpaKeyEnv` | `ANTHROPIC_AUTH_TOKEN` | Environment variable containing the CPA API key. |
+| `exemplarsPath` | package `exemplars.jsonl` | Optional measured-outcome corpus. |
+| `quotaMaxPct` | `null` | Average lane usage threshold; `null` disables it. |
+| `cpaManagementKey` | empty | Plaintext management key, preferred over the environment. |
+| `cpaManagementKeyEnv` | `CPA_MANAGEMENT_KEY` | Management-key environment fallback. |
+| `judgeModelOverrides` | `{}` | Stable slot to enabled CPA model ID for judged routes. |
+| `commandPins` | four defaults above | Slash command to model and effort mapping. |
+
+`commandPins` and `judgeModelOverrides` replace their whole default maps when
+present. Invalid or unreadable JSON falls back to defaults. The loader does not
+validate field types or URL shapes, so use `/llm-router-config` when possible.
+The full JSON editor writes a complete merged config.
+
+## Environment controls
+
+| Variable | Effect |
+| --- | --- |
+| `LLM_ROUTER_OFF=1` | Stops automatic startup activation and sentinel help. A session already on `llm-router/auto` can still route. |
+| `JUDGE_EXEMPLARS=0` | Skips measured exemplar retrieval. |
+| `CPA_SIMULATE_UNAVAILABLE="arm1,arm2"` | Treats exact arm keys as down for swap testing. |
+| `CPA_MANAGEMENT_KEY` | Default management-key fallback. |
+
+## Development
+
+```bash
+npm install
+npm run typecheck
+npm run test:unit
+npm run test:coverage
+npm run test:smoke -- ["task text"]
+```
+
+Type checks and unit tests are offline. The smoke command runs deterministic
+checks followed by one live judge, CPA availability, quota, exemplar, and swap
+route.

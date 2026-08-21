@@ -20,7 +20,11 @@ Prompt execution depends on user-level workflow tools rather than npm dependenci
 
 The commands expect `bd`, formulas under `~/.beads/formulas/`, and the implementation rail at `~/.beads/rail/implement-ready.sh`. [[beads-flow]] owns those resources and links them into the user registry. Hook-free worktrees use the empty `~/.beads/no-hooks/` directory. `/implement-ready` can use pi-subagents, while proper-llm-router supplies command pins and worker model routing.
 
+`/spec` passes resolved epic and direct-source identifiers into Speckit without precomputing a backlog snapshot; the formula owns the live hierarchy-plus-provenance closure and refreshes it before materialization.
+
 `/implement-ready` accepts an epic id, a task id or unique title, or `all`. Task titles resolve through Beads search. Single-task mode initializes the descendant-oriented rail with `all`, then filters every survey, dispatch, and report to the resolved task id.
+
+The command defaults to a rolling pool of 12 workers and never exceeds 12. Refill batches launch async pi-subagents children, while the parent waits for individual completions, integrates terminal work through the rail, surveys newly unblocked tasks, and fills open slots without draining active siblings.
 
 ## Validation
 

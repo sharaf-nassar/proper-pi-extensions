@@ -22,15 +22,13 @@ Usage:
   implement-ready.sh retry-gate --run-dir DIR --task ID --attempt N \
       [--prior-attempts N] [--override-ceiling REASON]
   implement-ready.sh claim --run-dir DIR --task ID
-  implement-ready.sh worktree --run-dir DIR --task ID [--enforce-overlap]
+  implement-ready.sh worktree --run-dir DIR --task ID
   implement-ready.sh absorb (--run-dir DIR | --repo PATH) [--verify]
-  implement-ready.sh journal --run-dir DIR --task ID --attempt N --kind KIND --json JSON
-  implement-ready.sh result --run-dir DIR --task ID --attempt N (--json JSON | --file FILE)
+  implement-ready.sh result --run-dir DIR --task ID --attempt N --json JSON
   implement-ready.sh verify-worker --run-dir DIR --task ID --attempt N
   implement-ready.sh prepare --run-dir DIR --task ID --attempt N
   implement-ready.sh verify-integration --run-dir DIR --task ID [--gates CMD]
   implement-ready.sh cleanup --run-dir DIR --task ID
-  implement-ready.sh lock-status --run-dir DIR
   implement-ready.sh unlock --run-dir DIR --task ID [--abort]
 
 The root Codex orchestrator owns all bd and primary-checkout mutations.
@@ -251,9 +249,8 @@ cmd_init() {
     printf 'implement-ready: note: absolute core.hooksPath (%s) fires in linked worktrees; rail task worktrees are created hook-free, but worktrees made outside the rail are exposed\n' "$hooks_path" >&2
   fi
   repo_base="$(basename "$repo" | tr -c 'A-Za-z0-9._-' '-')"
-  # Run state is durable, not /tmp: attempts/*/events.jsonl is the only record
-  # of dispatch, tier, and retry history, and it is the input to any later
-  # route-to-outcome analysis. A reboot must not erase it.
+  # Run state is durable, not /tmp: worker results and integration evidence
+  # must survive reboots so interrupted runs can recover safely.
   local state_root="${XDG_STATE_HOME:-$HOME/.local/state}/bd-orchestrate"
   mkdir -p "$state_root"
   run_dir="$(mktemp -d "${state_root}/${repo_base}.run-$(date -u +%Y%m%dT%H%M%S).XXXXXX")"
@@ -303,7 +300,6 @@ cmd_survey() {
   # Prefer Beads' structured field, but accept the legacy description section
   # emitted by older /file and /spec prompts. Missing, blank, or heading-only
   # criteria remain non-dispatchable: otherwise the worker invents "done".
-  # `Files:` is parsed out of the description and exposed for the overlap guard.
   jq -cn --arg scope "$scope" --argjson ready "$ready_json" \
     --argjson blocked "$blocked_json" '
     def priority: (.priority // 0);
@@ -323,19 +319,9 @@ cmd_survey() {
       | if (($structured | gsub("\\s"; "") | length) > 0)
         then $structured else description_acceptance end;
     def acceptable: (acceptance | gsub("\\s"; "") | length) > 0;
-    def files:
-      [ (.description // "")
-        | split("\n")[]
-        | select(test("^\\s*Files:\\s*"; "i"))
-        | sub("^\\s*Files:\\s*";""; "i")
-        | split(",")[]
-        | gsub("^\\s+|\\s+$";"")
-        | select(length > 0 and (ascii_downcase | startswith("unknown") | not))
-      ];
-    def annotate: . + {files: files};
     ($ready | map(select(priority <= 3))) as $p03 |
     {scope:$scope,
-     ready:[$p03[] | select(acceptable) | annotate],
+     ready:[$p03[] | select(acceptable)],
      unacceptable:[$p03[] | select(acceptable | not)
                    | {id, title, priority, issue_type}],
      p4_excluded:[$ready[] | select(priority == 4)],
@@ -344,9 +330,7 @@ cmd_survey() {
        ready:([$p03[] | select(acceptable)] | length),
        unacceptable:([$p03[] | select(acceptable | not)] | length),
        p4_excluded:([$ready[] | select(priority == 4)] | length),
-       blocked:($blocked | length),
-       files_declared:([$p03[] | select(acceptable) | annotate
-                        | select((.files | length) > 0)] | length)
+       blocked:($blocked | length)
      }}'
 }
 
@@ -466,18 +450,11 @@ cmd_claim() {
 
 cmd_worktree() {
   local run_dir="" task="" repo main run_id branch path base json exclude
-  # Overlap is REPORT-ONLY by default. The measured harm from concurrent work is
-  # small (73% vs 78% line survival) and inconsistent across repos, so blocking
-  # on it is ahead of the evidence. The status is always recorded in task state
-  # and the run journal; re-measure churn once beads carry `Files:`, and enable
-  # --enforce-overlap only if contention turns out to cost something.
-  local enforce_overlap=0 overlap_json files_json
+  local overlap_json files_json
   while (($#)); do
     case "$1" in
       --run-dir) run_dir="${2:-}"; shift 2 ;;
       --task) task="${2:-}"; shift 2 ;;
-      --enforce-overlap) enforce_overlap=1; shift ;;
-      --allow-overlap) shift ;;  # accepted and ignored; report-only is default
       *) die "worktree: unknown argument: $1" ;;
     esac
   done
@@ -493,7 +470,6 @@ cmd_worktree() {
   if [[ "$(jq -r '.status' <<<"$overlap_json")" == "conflict" ]]; then
     printf 'implement-ready: file overlap with in-flight task(s)\n' >&2
     jq . <<<"$overlap_json" >&2
-    ((enforce_overlap)) && exit 6
   fi
   files_json="$(jq -c '.declared' <<<"$overlap_json")"
   main="$(manifest_value "$run_dir" '.main_branch')"
@@ -538,48 +514,20 @@ attempt_dir() {
   printf '%s/attempts/%s/%s\n' "$1" "$2" "$3"
 }
 
-cmd_journal() {
-  local run_dir="" task="" attempt="" kind="" payload="" dir event
-  while (($#)); do
-    case "$1" in
-      --run-dir) run_dir="${2:-}"; shift 2 ;;
-      --task) task="${2:-}"; shift 2 ;;
-      --attempt) attempt="${2:-}"; shift 2 ;;
-      --kind) kind="${2:-}"; shift 2 ;;
-      --json) payload="${2:-}"; shift 2 ;;
-      *) die "journal: unknown argument: $1" ;;
-    esac
-  done
-  validate_task "$task"; validate_attempt "$attempt"
-  [[ "$kind" =~ ^[A-Za-z0-9._-]+$ ]] || die "unsafe journal kind: $kind"
-  run_dir="$(load_manifest "$run_dir")"
-  jq -e . <<<"$payload" >/dev/null
-  dir="$(attempt_dir "$run_dir" "$task" "$attempt")"
-  mkdir -p "$dir"
-  event="$(jq -cn --arg at "$(json_now)" --arg task "$task" \
-    --argjson attempt "$attempt" --arg kind "$kind" --argjson payload "$payload" \
-    '{at:$at,task_id:$task,attempt:$attempt,kind:$kind,payload:$payload}')"
-  printf '%s\n' "$event" >>"$dir/events.jsonl"
-  printf '%s\n' "$event"
-}
-
 cmd_result() {
-  local run_dir="" task="" attempt="" payload="" file="" dir path normalized
+  local run_dir="" task="" attempt="" payload="" dir path normalized
   while (($#)); do
     case "$1" in
       --run-dir) run_dir="${2:-}"; shift 2 ;;
       --task) task="${2:-}"; shift 2 ;;
       --attempt) attempt="${2:-}"; shift 2 ;;
       --json) payload="${2:-}"; shift 2 ;;
-      --file) file="${2:-}"; shift 2 ;;
       *) die "result: unknown argument: $1" ;;
     esac
   done
   validate_task "$task"; validate_attempt "$attempt"
-  [[ -n "$payload" && -z "$file" || -z "$payload" && -n "$file" ]] ||
-    die "result requires exactly one of --json or --file"
+  [[ -n "$payload" ]] || die "result requires --json"
   run_dir="$(load_manifest "$run_dir")"
-  [[ -z "$file" ]] || { [[ -s "$file" ]] || die "result file not found: $file"; payload="$(<"$file")"; }
   normalized="$(jq -ce --arg task "$task" --argjson attempt "$attempt" '
     if (
       type == "object" and
@@ -872,8 +820,8 @@ cmd_retry_gate() {
       # how one task reached six attempts under a "3-attempt ceiling".
       --prior-attempts) prior="${2:-}"; shift 2 ;;
       # Soft-ceiling override. A capable orchestrator that can name a concrete
-      # change should not be walled off by an arithmetic budget — but the
-      # reason is journaled so the decision is visible after the fact.
+      # change should not be walled off by an arithmetic budget; the returned
+      # JSON keeps the reason visible to the caller.
       --override-ceiling) override="${2:-}"; shift 2 ;;
       *) die "retry-gate: unknown argument: $1" ;;
     esac
@@ -920,7 +868,7 @@ cmd_retry_gate() {
     fi
   fi
   # SOFT ceiling, only after the evidence gates passed. Not proof of anything —
-  # a budget checkpoint that forces the decision to be stated and journaled
+  # a budget checkpoint that forces the decision to be stated in the result
   # rather than walling off an orchestrator that can name a concrete change.
   if [[ "$allowed" == "true" ]] && ((total > 3)); then
     if [[ -n "$override" ]]; then
@@ -1008,26 +956,6 @@ cmd_absorb() {
       next:"root orchestrator commits: git commit -m \"chore(beads): record task audit log\""}'
 }
 
-cmd_lock_status() {
-  local run_dir="" repo lock
-  while (($#)); do
-    case "$1" in
-      --run-dir) run_dir="${2:-}"; shift 2 ;;
-      *) die "lock-status: unknown argument: $1" ;;
-    esac
-  done
-  run_dir="$(load_manifest "$run_dir")"
-  repo="$(manifest_value "$run_dir" '.repo')"
-  lock="$(lock_path "$repo")"
-  if [[ -s "$lock" ]]; then
-    jq -c '. + {status:"locked"}' "$lock"
-  elif [[ -e "$lock" ]]; then
-    die "malformed empty integration lock: $lock"
-  else
-    jq -cn --arg lock "$lock" '{status:"unlocked",lock:$lock}'
-  fi
-}
-
 cmd_unlock() {
   local run_dir="" task="" abort=0 lock out repo main vpath cpath abort_path
   local state path rebase_merge rebase_apply
@@ -1095,13 +1023,11 @@ main() {
     absorb) cmd_absorb "$@" ;;
     claim) cmd_claim "$@" ;;
     worktree) cmd_worktree "$@" ;;
-    journal) cmd_journal "$@" ;;
     result) cmd_result "$@" ;;
     verify-worker) cmd_verify_worker "$@" ;;
     prepare) cmd_prepare "$@" ;;
     verify-integration) cmd_verify_integration "$@" ;;
     cleanup) cmd_cleanup "$@" ;;
-    lock-status) cmd_lock_status "$@" ;;
     unlock) cmd_unlock "$@" ;;
     *) die "unknown command: $command (run --help)" ;;
   esac

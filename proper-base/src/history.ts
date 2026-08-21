@@ -67,18 +67,16 @@ export function isRecallable(
  * the trusted history append method expects, so Up yields the newest prompt.
  */
 export function mergePrompts(
-	sources: readonly (readonly Prompt[])[],
+	prompts: readonly Prompt[],
 	limit: number,
 ): string[] {
 	if (limit <= 0) return [];
 
 	const newest = new Map<string, number>();
-	for (const source of sources) {
-		for (const prompt of source) {
-			const known = newest.get(prompt.text);
-			if (known === undefined || prompt.ts > known)
-				newest.set(prompt.text, prompt.ts);
-		}
+	for (const prompt of prompts) {
+		const known = newest.get(prompt.text);
+		if (known === undefined || prompt.ts > known)
+			newest.set(prompt.text, prompt.ts);
 	}
 
 	// Insertion order breaks timestamp ties, keeping same-millisecond prompts

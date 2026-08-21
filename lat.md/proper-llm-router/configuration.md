@@ -80,7 +80,7 @@ Pin edits affect the next armed routing decision. They do not repin a session th
 
 `/llm-router-config` opens a UI-only configuration loop when the current pi context has a UI.
 
-The menu has one `Judge` entry that opens model, effort, and fast pickers, plus a top-level `Overrides` entry for judge model overrides. The fast picker is an on/off toggle that always saves the choice; after enabling, it reads the judge catalog's `?client_version=pi` listing and warns when the configured judge model lists no `service_tiers` entry, since CPA silently ignores the tier there. A missing model or unreachable catalog produces no warning. It can also add, repoint, or remove command pins, set a quota threshold from `off`, `50%`, `75%`, `80%`, `90%`, or `95%`, enter a masked management key, edit the full JSON object, and run a live route test.
+The menu has one `Judge` entry that opens model, effort, and fast pickers, plus a top-level `Overrides` entry for judge model overrides. The fast picker is an on/off toggle that saves whether judge requests send `service_tier: "priority"`; unsupported endpoints may ignore it. The menu can also add, repoint, or remove command pins, set a quota threshold from `off`, `50%`, `75%`, `80%`, `90%`, or `95%`, enter a masked management key, edit the full JSON object, and run a live route test.
 
 The menu summary reports current override and pin counts. The pin editor offers canonical arm keys and every session thinking level supported by the selected model, plus a choice that leaves the session default unchanged. `ultra` appears only when that model's `thinkingLevelMap.ultra` is a non-empty string.
 
@@ -100,7 +100,7 @@ A non-null judge effort is sent as `reasoning_effort`, while a pin effort is pas
 
 ## Management key handling
 
-The config UI checks a management key against `/v0/management/auth-files` and reports valid, rejected, or unreachable states.
+The config summary reports whether the management key comes from the config file, the configured environment variable, or is unset. Runtime quota probes report unusable keys through the visible skipped-gate notice.
 
 Custom UI support masks typed characters and handles paste, backspace, Enter, Esc, and Ctrl-C. Older pi versions fall back to a visible editor.
 
@@ -108,6 +108,6 @@ A key entered in the UI is stored as plaintext in `llm-router.json`. An empty en
 
 ## Rearming command
 
-`/llm-router` switches the session to `llm-router/auto` and clears the routed flag.
+`/llm-router` switches the session to `llm-router/auto`, whose provider identity re-arms the next eligible input.
 
 The next eligible prompt runs the normal `Input precedence` contract in `routing.md`. The command reports an error if the placeholder model is absent from pi's registry.

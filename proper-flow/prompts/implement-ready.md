@@ -1,12 +1,12 @@
 ---
-description: Fan out parallel agents over the ready beads frontier — one agent per task, relaunching as tasks unblock, until all work is done
-argument-hint: "[epic id | task id/name | all] [max parallel agents, e.g. 4]"
+description: Keep a rolling worker pool on the ready beads frontier until all scoped work is done
+argument-hint: "[epic id | task id/name | all] [workers 1-12, default 12]"
 ---
 
 Orchestrate parallel implementation of the ready beads frontier. Scope from the
 user: $ARGUMENTS (an epic id, one task id or unique task title, or "all" for
-the whole board; optionally a number capping concurrent agents — default: no
-cap).
+the whole board; optionally a positive integer setting the worker limit —
+default 12, hard maximum 12).
 
 You are the ORCHESTRATOR: you dispatch and verify agents, re-survey, and report.
 You MAY mutate files when needed, but never outside the rail's ownership model:
@@ -19,6 +19,10 @@ You MAY mutate files when needed, but never outside the rail's ownership model:
   directly on main or edit while a prepared squash or staged index exists.
 You need no separate orchestrator worktree. You run ALL `bd` and rail commands;
 the user never touches the bd CLI.
+Whenever this workflow needs input from the user, call the
+`ask_user_question` tool instead of asking in plain text. Group related
+questions into one call. Fall back to plain text only if the tool is unavailable
+or fails before displaying its UI.
 
 Mechanism lives in the rail, not in this file:
 
@@ -62,10 +66,12 @@ misrouting DOWN is self-correcting (the failure escalates the retry at the
 cost of one attempt); a pinned misroute UP only burns money. So the
 escalation retry is the ONLY pin. Record each pinned dispatch and include
 escalation counts in the final report. (No surveyor agents exist in this
-flow: `survey` is a rail command YOU run directly between waves.)
+flow: `survey` is a rail command YOU run directly between pool events.)
 
 0. Resolve scope before doing anything else. Parse an optional final standalone
-   integer as the concurrency cap; everything before it is the scope.
+   integer as the worker limit; everything before it is the scope. Set
+   `POOL_LIMIT` to 12 when omitted, reject values below 1, and clamp values above
+   12 to 12 while reporting the effective limit.
 
    No scope given? Show the open epics (`bd list --status=open --type=epic`,
    plus any epic with open children), each with id, title, and its
@@ -150,48 +156,87 @@ flow: `survey` is a rail command YOU run directly between waves.)
    rebase proves only textual integration, and this is what catches two
    individually-green siblings that break each other semantically.
 
-2. Orchestrate as a WAVE LOOP that YOU drive, dispatching each wave with the
-   pi-subagents `subagent` tool (this command is your authorization to invoke
-   it). Do NOT try to encode the whole dispatch/refill cycle in one
-   workflowScript: scripts can only run agents (`runs.run`/`runs.all`) — they
-   cannot run the rail, bd, or git; claims and worktrees must exist
-   parent-side BEFORE a worker can be dispatched; and beads only close when
-   YOU integrate results, so an in-script survey can never see a refilled
-   frontier. One big script degenerates to a single wave and then stalls.
-   The loop lives in you; the script is per-wave.
+2. Orchestrate as a ROLLING POOL LOOP that YOU drive with the pi-subagents
+   `subagent` and `subagent_wait` tools (this command authorizes both). Keep
+   these explicit maps in your run state:
 
-   Each wave:
-   - Survey: re-run rail `survey` yourself → the current frontier. In
-     single-task mode, discard every entry except `TARGET_TASK`; once it is
-     completed, stuck, or non-dispatchable, the run ends without refilling.
-   - Pick the wave: PRE-ASSIGN each agent its exact task id — agents must NOT
-     survey, pick, or re-route for themselves; assignment by the orchestrator
-     is what prevents two agents claiming the same task. Slice to the cap,
-     and screen every candidate:
-     - HOLDS: never dispatch a task on the hold list (step 0).
+   - `ACTIVE`: task id → async worker run id, attempt, and worktree.
+   - `LAUNCHING_TASKS`: task ids reserved by a launch workflow whose child run
+     receipts have not been reconciled yet.
+
+   HARD INVARIANT: `ACTIVE.size + LAUNCHING_TASKS.size <= POOL_LIMIT <= 12`.
+   Paused, needs-attention, or supervisor-blocked workers remain ACTIVE. A slot
+   becomes refillable only after its worker is terminal, its result is recorded
+   through the rail, and the task is integrated and cleaned up or classified
+   for retry/stuck handling. This prevents duplicate workers and keeps overlap
+   accounting honest.
+
+   Do NOT encode the whole pool lifecycle in one workflowScript. Scripts can
+   run agents but cannot run the rail, bd, or git; claims and worktrees must
+   exist parent-side before launch, and newly unblocked beads appear only after
+   YOU integrate and close a task. The parent loop therefore owns survey,
+   integration, and refill. Each refill batch uses one short workflowScript
+   only to launch async workers and return their run ids.
+
+   Pool loop:
+   - Survey: re-run rail `survey` yourself. In single-task mode, discard every
+     entry except `TARGET_TASK`; once it is completed, stuck, or
+     non-dispatchable, the run ends without refilling from sibling work.
+   - Compute free capacity as
+     `POOL_LIMIT - ACTIVE.size - LAUNCHING_TASKS.size`. If it is zero, monitor
+     ACTIVE instead of dispatching. If it is positive, PRE-ASSIGN up to that
+     many exact task ids. Agents must NOT survey, pick, or re-route themselves.
+   - Screen every candidate:
+     - HOLDS: never dispatch a task on the hold list from step 0.
      - In EPIC and ALL modes, newly-ready tasks (any id beyond the first
        frontier saved in step 1, including beads filed mid-run) are
        ADJUDICATED, never auto-dispatched: check the hold list, and ask whether
        closing one needs anything a worker must not do — production access,
        credentials, spend, or an irreversible action. If yes, surface it to
-       the user and leave it out of the wave; the rest of the frontier keeps
-       dispatching. In single-task mode, every non-target id is simply out of
-       scope.
-   - Per assigned task, YOU run the rail pre-dispatch sequence
-     (overlap → claim → worktree; details below).
-   - Dispatch the wave as ONE `subagent` call: a `workflowScript` whose body
-     is a single `runs.all` with one item per task (`agent: "worker"`,
-     `context: "fresh"`, task string per the prompt spec below), returning
-     the workers' JSON results. Every worker's task gets its own llm-router
-     verdict from its task text — no per-child model or effort options exist,
-     and none are needed.
-   - When the wave returns, integrate each result through the rail (result →
+       the user and leave it out; keep filling other safe slots. In single-task
+       mode, every non-target id is out of scope.
+     - Apply the overlap guard. Serialize conflicts until the conflicting task
+       has integrated and cleaned up.
+   - Per assigned task, run the rail pre-dispatch sequence (overlap → claim →
+     worktree; details below), then add its id to `LAUNCHING_TASKS`. A retry
+     reuses its preserved worktree after passing step 4's retry gate rather
+     than claiming or creating it again.
+   - Dispatch the refill batch with ONE top-level `subagent` call using
+     `async: true`. Its workflowScript contains one `runs.all` item per task,
+     with a stable key derived from task id + attempt, `agent: "worker"`,
+     `context: "fresh"`, the task string below, and child `async: true`. Return
+     only `{key, ok, runId, error}` launch receipts. Child async is essential:
+     the short workflow finishes after starting workers instead of waiting for
+     the slowest worker, leaving the parent free to integrate and refill.
+   - Wait for that short launch workflow by exact id with
+     `subagent_wait({ id: <launch-workflow-id> })`, then inspect its status and
+     receipt. Move every successful task with an exact child run id from
+     `LAUNCHING_TASKS` to `ACTIVE`. For any missing or failed receipt, inspect
+     the workflow's nested status before acting; never relaunch a task while an
+     unaccounted child may exist. Once absence is proven, record a synthetic
+     failed attempt through rail `result` with a stable launch
+     `error_signature`, then route it through step 4.
+   - Monitor without polling. Inspect ACTIVE once after each launch/refill to
+     catch instant completion. If no ACTIVE run is terminal, call
+     `subagent_wait({ stopOnAttention: false })`, never `all: true`; this wakes
+     on the next completion while still-running siblings continue. Supervisor
+     requests still surface. Ignore unrelated run completions and keep waiting
+     for an ACTIVE id.
+   - On each wake, inspect exact ACTIVE statuses and collect every worker now
+     terminal. A terminal worker must provide the JSON result described below;
+     retrieve it from the run result or saved output, then process terminal
+     tasks sequentially through the rail. Successful work follows result →
      verify-worker → prepare → your commit → verify-integration --gates →
-     `bd close` → cleanup → unlock), then loop back to Survey — completing a
-     task may unblock others.
-   - Track per-task attempt count AND the previous attempt's
-     `error_signature` across waves (step 4 needs both). Stop when the
-     frontier has no workable tasks or a wave makes no progress.
+     `bd close` → cleanup → unlock. Failed work follows result → step 4.
+     Remove a task from ACTIVE only after that reconciliation.
+   - After processing all currently terminal workers, immediately survey and
+     fill every free slot. Do not wait for still-running siblings. Completing
+     and closing one task may unblock its dependents, which are eligible for
+     that refill after the normal screening above.
+   - Track each task's attempt count and previous `error_signature` across the
+     whole pool. Stop only when ACTIVE and LAUNCHING_TASKS are empty and the
+     scoped frontier has no workable task, or when every remaining task is
+     explicitly held, blocked, unacceptable, excluded, stranded, or stuck.
 
    If pi-subagents is unavailable, work the tasks one at a time yourself under
    the worker protocol below. You may also take over a narrow repair directly
@@ -200,42 +245,20 @@ flow: `survey` is a rail command YOU run directly between waves.)
    every normal rail verification and integration step. Never edit a task
    worktree while its worker is active — stop or reap the worker first.
 
-   Per task, YOU run the rail sequence; workers never touch it:
-   - `overlap --run-dir DIR --task ID` — report-only. `conflict` means another
-     in-flight task declares the same non-hub file; serialize it into a later
-     wave when you judge that worthwhile. `undeclared` means the bead has no
-     `Files:` line and the guard is blind to it — count these, because a run
-     that is mostly undeclared is unguarded, not clear.
-   - `claim --run-dir DIR --task ID` — exit 3 means another actor holds it;
-     that is terminal for this run, never steal a claim.
-   - `worktree --run-dir DIR --task ID` — creates the worktree and branch and
-     records the base. This is the worker's only workspace.
-   - Dispatch the worker (prompt below).
-   - `result --run-dir DIR --task ID --attempt N --json <worker JSON>`
-   - `verify-worker` — proves the commit is real, canonical, on the right
-     branch, and descends from the recorded base, and reports `files_drift`.
-     Do NOT relay worker claims without it. Non-empty `undeclared` drift
-     means the overlap guard screened this task against the wrong file set:
-     re-check those paths against the other in-flight tasks' declared files
-     before `prepare`, integrate any intersecting pair serially, and count
-     the drift in the report.
-   - `prepare` — takes the integration lock, rebases (choosing the advanced or
-     rewritten-main path itself), squashes into the primary index, and proves
-     the staged tree equals the branch tree.
-   - YOU commit on main, following the repo/user commit conventions.
-   - `verify-integration --gates "<the run's integration gate command>"` —
-     proves the commit shape AND runs the gate on the integrated tree while
-     the lock is held. Exit 10 = the gate failed on main: the breakage
-     belongs to the task that just landed (its own worktree checks passed
-     against a main that no longer exists). Keep the lock, fix forward with a
-     fresh worker in the preserved task worktree — or revert the squash commit.
-     The next same-task `prepare` archives the failed preparation and rebases
-     the fix onto current main. Do not prepare another task until main is green.
-   - Close the completed bead under the run actor with `bd close <task>`.
-   - `cleanup` → `unlock`. On a rebase conflict (exit 5) the lock is retained
-     deliberately: preserve the evidence, report, and use `unlock --abort`
-     when recovering; it aborts the in-progress task rebase before releasing
-     the lock.
+   The rail's `--help` is authoritative. Per task, YOU run this lifecycle;
+   workers never touch it:
+   `overlap → claim → worktree → dispatch → result --json → verify-worker →
+   prepare → commit → verify-integration --gates → bd close → cleanup → unlock`.
+
+   Keep only the decisions the rail cannot make for you:
+   - Serialize a reported non-hub `conflict` until its active task is cleaned.
+     Count `undeclared` tasks; a mostly undeclared run is unguarded, not clear.
+   - Before `prepare`, compare non-empty `files_drift.undeclared` paths against
+     every active task and serialize any newly discovered intersection.
+   - Exit 3 means another actor owns the task; never steal it. Exit 5 retains
+     conflict evidence and the lock; recover with `unlock --abort`. Exit 10
+     keeps the lock on an integration-gate failure; fix forward in the preserved
+     task worktree or revert, and never prepare another task while main is red.
 
    Each dispatched worker's task string must be self-contained and contains NO
    git protocol — the rail owns that:
@@ -267,14 +290,14 @@ flow: `survey` is a rail command YOU run directly between waves.)
      create or remove worktrees or branches, spawn their own subagents, or work
      on another task. The rail refuses a task branch that modifies `.beads`.
 
-3. Monitor and refill: the wave loop keeps the pipeline full — completing a
-   task may unblock others, which get agents in the next wave. When the run
-   finishes, verify the load-bearing claims yourself: spot-check beads closed
-   (`bd show`), squash commits present on main (`git log --oneline`), and sweep
-   worktrees (`git worktree list`). Do not relay agent claims unverified.
+3. Drain and verify: continue the rolling pool until both ACTIVE and
+   LAUNCHING_TASKS are empty and no scoped task can be dispatched. Then verify
+   the load-bearing claims yourself: spot-check beads closed (`bd show`), squash
+   commits present on main (`git log --oneline`), and sweep worktrees
+   (`git worktree list`). Do not relay agent claims unverified.
 
-4. Failures. Before dispatching attempt N+1, run
-   `retry-gate --run-dir DIR --task ID --attempt N --prior-attempts M`, where M
+4. Failures. Before dispatching attempt N+1, pass that upcoming attempt number:
+   `retry-gate --run-dir DIR --task ID --attempt <N+1> --prior-attempts M`, where M
    is the count this bead already burned in EARLIER runs (read it from the bead
    notes — without it the ceiling is meaningless, since a fresh run resets a
    per-run counter). Two denial classes:
@@ -282,8 +305,9 @@ flow: `survey` is a rail command YOU run directly between waves.)
      the `error_signature` repeated. A repeated signature is evidence the change
      did not move the failure. Not overridable.
    - exit 9 (soft): the cumulative ceiling. Pass `--override-ceiling "<reason>"`
-     to proceed; the reason is journaled. Do this when you can name a genuinely
-     different next attempt — do not let arithmetic stop a converging run.
+     to proceed; keep the returned reason with the retry record. Do this only
+     when you can name a genuinely different next attempt — do not let
+     arithmetic stop a converging run.
 
    The gate the rail CANNOT check is yours: you must be able to name a concrete
    change since the last attempt — an amended prompt stating the specific fix
@@ -425,6 +449,7 @@ flow: `survey` is a rail command YOU run directly between waves.)
 7. Report using the run's OWN scoped result — for single-task mode this means
    only `TARGET_TASK`, never board siblings. Include completed (with commits on
    main), retries, stuck, stranded, unacceptable, p4_excluded, blocked_remaining,
+   worker_pool (limit, peak occupied, refill batches, launch failures),
    leftover_worktrees, overlap_guard (declared/undeclared), files_drift
    (workers whose diff left their declared Files), integration_gates (the
    gate command used; any exit-10 failure and its resolution), holds

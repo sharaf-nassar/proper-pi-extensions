@@ -67,7 +67,7 @@ const availWith = (dead: string[]) =>
 			"gpt-5-6-luna",
 			"gpt-5-6-terra",
 			"gpt-5-6-sol",
-		].map((a) => [a, { available: !dead.includes(a), auths: null }]),
+		].map((a) => [a, { available: !dead.includes(a) }]),
 	);
 assert.deepStrictEqual(
 	resolveVerdictModel("claude-fable-5", availWith(["claude-fable-5"])),
@@ -175,34 +175,36 @@ let aliasInputHandler:
 	| ((event: any, ctx: any) => Promise<{ action: string }>)
 	| undefined;
 let aliasSwitches = 0;
+let aliasCtx: any;
 llmRouter({
 	on(name: string, handler: typeof aliasInputHandler) {
 		if (name === "input") aliasInputHandler = handler;
 	},
 	registerCommand() {},
-	async setModel() {
+	async setModel(model: unknown) {
 		aliasSwitches += 1;
+		aliasCtx.model = model;
 		return true;
 	},
-} as any);
+} as unknown as Parameters<typeof llmRouter>[0]);
 const handleAliasInput = aliasInputHandler;
 assert.ok(handleAliasInput);
-await handleAliasInput(
-	{
-		text: "/skill:ponytail-audit",
-		images: [],
-		source: "extension",
+aliasCtx = {
+	model: { provider: "llm-router", id: "auto" },
+	modelRegistry: {
+		find: (provider: string, id: string) =>
+			provider === "cliproxyapi" ? { provider, id } : undefined,
+		getAll: () => [],
 	},
-	{
-		model: { provider: "llm-router", id: "auto" },
-		modelRegistry: {
-			find: (provider: string, id: string) =>
-				provider === "cliproxyapi" ? { provider, id } : undefined,
-			getAll: () => [],
-		},
-		ui: { notify() {} },
-	} as any,
-);
+	ui: { notify() {} },
+};
+const aliasEvent = {
+	text: "/skill:ponytail-audit",
+	images: [],
+	source: "extension",
+};
+await handleAliasInput(aliasEvent, aliasCtx);
+await handleAliasInput(aliasEvent, aliasCtx);
 assert.strictEqual(aliasSwitches, 1);
 
 // @lat: [[lat.md/proper-llm-router/tests#Config menu fixture]]
@@ -214,28 +216,22 @@ llmRouter({
 	registerCommand(name: string, command: { handler: typeof configHandler }) {
 		if (name === "llm-router-config") configHandler = command.handler;
 	},
-} as any);
+} as unknown as Parameters<typeof llmRouter>[0]);
 const handleConfig = configHandler;
 assert.ok(handleConfig);
 const menus: string[][] = [];
 const replies: Array<string | undefined> = ["Judge", undefined, "Done"];
-const originalFetch = globalThis.fetch;
-globalThis.fetch = async () => new Response("{}", { status: 200 });
-try {
-	await handleConfig("", {
-		hasUI: true,
-		modelRegistry: { getAll: () => [] },
-		ui: {
-			notify() {},
-			select: async (_title: string, items: string[]) => {
-				menus.push(items);
-				return replies.shift();
-			},
+await handleConfig("", {
+	hasUI: true,
+	modelRegistry: { getAll: () => [] },
+	ui: {
+		notify() {},
+		select: async (_title: string, items: string[]) => {
+			menus.push(items);
+			return replies.shift();
 		},
-	} as any);
-} finally {
-	globalThis.fetch = originalFetch;
-}
+	},
+});
 assert.deepStrictEqual(
 	(menus[0] ?? []).filter((item) => item.startsWith("Judge")),
 	["Judge"],

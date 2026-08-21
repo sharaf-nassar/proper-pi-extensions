@@ -41,6 +41,7 @@ test("smart selection expands terminal tokens and leaves prose native", () => {
 		["use --output=dist/file", "--output=dist/file"],
 		["call ModelRegistry.getProvider", "ModelRegistry.getProvider"],
 		['run "hello world" now', '"hello world"'],
+		['run "hello \\"wide\\" world" now', '"hello \\"wide\\" world"'],
 	] as const) {
 		assert.deepEqual(
 			findSmartSelectionRange(line, line.indexOf(token) + 1),
