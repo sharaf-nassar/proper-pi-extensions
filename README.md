@@ -84,12 +84,13 @@ Configure all three npm packages with the same trusted publisher:
 - Environment: `npm-release`
 - Allowed action: npm publish
 
-Protect the GitHub `npm-release` environment with a required reviewer and
-restrict creation or deletion of `proper-base-v*`, `proper-llm-router-v*`, and
-`proper-flow-v*` tags to maintainers. Main-branch rules must allow the release maintainer to bypass a
-PR-only rule for the script's atomic version-commit plus tag push. After the
-first trusted release succeeds, set each npm package to disallow token
-publishing.
+Keep the GitHub `npm-release` environment free of required reviewers and wait
+timers so releases stay automatic. Restrict its deployment policies to
+`proper-base-v*`, `proper-llm-router-v*`, and `proper-flow-v*` tags, and restrict
+tag creation or deletion to maintainers. Main-branch rules must allow the
+release maintainer to bypass a PR-only rule for the script's atomic
+version-commit plus tag push. After the first trusted release succeeds, set each
+npm package to disallow token publishing.
 
 ## Repository internals
 

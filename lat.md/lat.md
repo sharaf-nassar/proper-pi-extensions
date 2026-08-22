@@ -65,7 +65,7 @@ A package bump updates only its `package.json`, validates `npm pack`, creates a 
 
 The protected publish job downloads and verifies that exact artifact, holds only read plus `id-token: write` permissions, and publishes through npm's GitHub Actions trusted publisher. A separate `contents: write` job creates an idempotent GitHub Release from the tag annotation. Action dependencies are pinned to full commit SHAs.
 
-All three npm packages must trust the `publish-npm.yml` workflow in `sharaf-nassar/proper-pi-extensions` with environment `npm-release`. A brand-new package receives one maintainer-authenticated initial publish because npm cannot configure trust before the package exists; later releases use the protected trusted path. The GitHub environment and package tag rules supply the human approval and maintainer-only tag boundary; the release maintainer also needs ruleset bypass for the atomic `main` version-commit push. npm token publishing is disabled after the trusted path is proven.
+All three npm packages must trust the `publish-npm.yml` workflow in `sharaf-nassar/proper-pi-extensions` with environment `npm-release`. A brand-new package receives one maintainer-authenticated initial publish because npm cannot configure trust before the package exists; later releases use the protected trusted path. The GitHub environment has no required reviewer or wait timer, and its custom deployment policies allow only the three package tag prefixes. Repository tag rules supply the maintainer-only tag boundary; the release maintainer also needs ruleset bypass for the atomic `main` version-commit push. npm token publishing is disabled after the trusted path is proven.
 
 ## Repository validation
 
