@@ -32,6 +32,10 @@ The absorb test uses a temporary tracked `.beads/interactions.jsonl` file.
 
 It verifies clean detection, staged-index refusal, staging only tracked Beads JSONL files, and final clean verification.
 
+## Speckit backlog-state contract
+
+The backlog-state regression protects open/deferred discovery, deferral clearing, target-epic promotion without type conversion, and formula versioning.
+
 ## Speckit normative coverage contract
 
 The formula regression test validates the generic normative-ownership contract without invoking `bd`.

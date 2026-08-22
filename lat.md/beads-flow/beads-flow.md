@@ -26,6 +26,10 @@ The installation model preserves Beads ownership of its user directory.
 6. Formula checks verify Beads resolves each user formula from its managed path.
 7. Speckit inventories normative visual rows in both depths and refuses Beads
    mutations until every row has implementation and verification ownership.
+8. Speckit includes open and deferred P4 issues in backlog closure, then clears
+   deferral when refining a source into open P0-P3 work.
+9. A P4 source that is also the target epic uses `promote-epic`: Speckit keeps
+   its epic type and promotes priority only after P0-P3 child coverage exists.
 
 ## Documentation map
 

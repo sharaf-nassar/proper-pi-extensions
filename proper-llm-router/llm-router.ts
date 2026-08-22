@@ -273,6 +273,7 @@ const DEFAULTS: Config = {
 		file: { model: "claude-fable-5", effort: "xhigh" },
 		triage: { model: "claude-fable-5", effort: "xhigh" },
 		spec: { model: "claude-fable-5", effort: "xhigh" },
+		backlog: { model: "claude-fable-5", effort: "xhigh" },
 		"implement-ready": { model: "gpt-5-6-sol", effort: "xhigh" },
 	},
 };

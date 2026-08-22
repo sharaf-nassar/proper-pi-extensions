@@ -101,7 +101,7 @@ way and BOTH human gates always fire. bd's enum is advisory-only, so treat any
   alignment+quality self-check, an abbreviated chat analysis, and NO artifact
   file — the epic carries the condensed spec and plan. Gates are NOT skipped.
 """
-version = 8
+version = 10
 type = "workflow"
 phase = "vapor"
 
@@ -139,7 +139,7 @@ required = false
 default = ""
 
 [vars.backlog]
-description = "Comma-separated ids of open P4 backlog inputs discovered before the wisp starts. The pipeline must disposition every id."
+description = "Comma-separated ids of open or deferred P4 backlog inputs discovered before the wisp starts. The pipeline must disposition every id."
 required = false
 default = ""
 
@@ -223,16 +223,17 @@ Favor breadth over polish — expose uncertainty rather than hiding it.
   This closure—not only parent-child descendants—is the feature scope.
 - If the clarify gate later selects one of `{{epic_candidates}}`, compute the
   same closure for the selected epic before planning continues.
-- From SCOPE, collect every issue whose stored status is `open` and priority is
-  `4`.
+- From SCOPE, collect every issue whose stored status is `open` or `deferred`
+  and priority is `4`.
 - Merge those ids with `{{backlog}}` and `{{source_backlog}}`, de-duplicate
   them, and read every record with `bd show <id> --json`. Treat their title,
   description, design, notes, acceptance criteria, and dependency context as
   required source material—not optional future work.
 - Record the resulting id set for every later step. A P4 source may only leave
-  this pipeline refined in place to P0-P3, superseded after replacement
-  coverage exists, or retired after the human explicitly approves it as a
-  non-goal. If it was already retired, preserve that state and produce
+  this pipeline refined in place to P0-P3, promoted while remaining the target
+  epic, superseded after replacement coverage exists, or retired after the
+  human explicitly approves it as a non-goal. If it was already retired,
+  preserve that state and produce
   actionable replacement coverage. Never silently drop or duplicate one.
 
 **Ground in recorded knowledge.** If the repo has a learnings store
@@ -488,7 +489,8 @@ If Target Epic is ambiguous, present every candidate id and its title/context,
 ask the human to select exactly one target epic (or explicitly choose a new
 epic), and record the answer in the spec's Target Epic section. After selection,
 compute that epic's full hierarchy-plus-`discovered-from` closure and merge any
-new open P4 inputs before this gate exits. Never select an epic yourself.
+new open or deferred P4 inputs before this gate exits. Never select an epic
+yourself.
 
 **Exit criteria:** Human has answered; the spec artifact has a
 `## Clarifications` section, the body reflects the answers, and Source
@@ -558,12 +560,15 @@ Source Authority has no normative visual artifact.)
 ## Backlog Refinement
 (Map every Backlog Input id to its plan work item(s), concrete acceptance
 criteria, target P0-P3 priority, and one disposition:
-`refine-in-place`, `split-and-supersede`, `already-retired-covered`, or
-`approved-non-goal`.
-Use `refine-in-place` for a one-to-one task; use `split-and-supersede` only
-when multiple replacement tasks are needed. Use `already-retired-covered` for
-a closed/superseded source and create P0-P3 work without reopening it. A
-non-goal requires explicit human approval and remains artifact-only.)
+`refine-in-place`, `promote-epic`, `split-and-supersede`,
+`already-retired-covered`, or `approved-non-goal`.
+Use `refine-in-place` for a one-to-one task. Use `promote-epic` only when the
+P4 source is the resolved target epic: keep its type, materialize the approved
+P0-P3 child work first, then promote the epic priority. Use
+`split-and-supersede` only when multiple replacement tasks are needed. Use
+`already-retired-covered` for a closed/superseded source and create P0-P3 work
+without reopening it. A non-goal requires explicit human approval and remains
+artifact-only.)
 ```
 
 Do not add a second `## Target Epic` section — resolve the spec's existing
@@ -872,10 +877,11 @@ Immediately before materialization, recompute scope from current Beads data:
 4. Add `{{source_backlog}}`, every `{{backlog}}` id, and every id recorded in
    the spec's Backlog Inputs to the working set even if outside the closure.
 
-Collect every working-set issue whose stored status is `open` and priority is
-`4`, read each with `bd show <id> --json`, and match it to the approved plan's
-Backlog Refinement table. This refresh catches P4 provenance dependents added
-while the wisp was running; parent-only discovery is insufficient.
+Collect every working-set issue whose stored status is `open` or `deferred`
+and priority is `4`, read each with `bd show <id> --json`, and match it to the
+approved plan's Backlog Refinement table. This refresh catches P4 provenance
+dependents added while the wisp was running; parent-only discovery is
+insufficient.
 
 If any source has no concrete P0-P3 work item with verifiable acceptance
 criteria and is not an explicitly human-approved non-goal, STOP. Do not create
@@ -939,12 +945,23 @@ bd supersede <source-id> --with <primary-replacement-id>
 Reference the source id in every replacement's description. Never supersede
 first, and never leave both the original and replacement actionable.
 
+For a `promote-epic` source, require the source id to equal EPIC and keep its
+issue type as `epic`. Materialize and verify all approved P0-P3 child cards
+first, then clear deferral and promote only the epic priority:
+```bash
+bd update EPIC -p <P0-P3> --defer="" --status=open
+```
+Never convert the epic into a task, and never promote it before its child
+coverage exists.
+
 For an `already-retired-covered` source, create the approved P0-P3 replacement
 work and verify its acceptance criteria cover the source. Preserve the source's
 closed/superseded state; never reopen or supersede it again.
 
 For an `approved-non-goal`, create no task. Confirm the analyze gate records
-the human's explicit approval, then retire the source with a specific reason:
+the human's explicit approval. If the source is EPIC, first require every open,
+in-progress, or deferred child to have its own approved disposition; never force
+close an epic over live children. Then retire the source with a specific reason:
 ```bash
 bd close <source-id> --reason="Approved non-goal; recorded in the {{feature}} spec Non-Goals"
 ```
@@ -987,9 +1004,9 @@ bd blocked --parent EPIC
 Re-read the plan sections against the resulting issues. For every work item
 confirm exactly one new or refined task exists with why, what, a `design`
 reference (plus `spec_id` in full depth), a P0-P3 priority, and concrete
-acceptance criteria. Confirm every source backlog id was refined, superseded
-only after replacement coverage, covered while already retired, or retired as
-an approved non-goal.
+acceptance criteria. Confirm every source backlog id was refined, promoted as
+the target epic only after child coverage, superseded only after replacement
+coverage, covered while already retired, or retired as an approved non-goal.
 
 Resolve every Normative Visual Coverage owner work item to its materialized
 bead id and build the durable materialized map: row/artifact locator,
@@ -1018,14 +1035,14 @@ pre-materialization snapshot.
 Then run the structural check and full-closure checks:
 ```bash
 bd ready --parent EPIC --priority=4 --limit=0 --json
-bd list --id "<comma-separated SCOPE_IDS>" --status=open --priority=4 --limit=0 --json
+bd list --id "<comma-separated SCOPE_IDS>" --status=open,deferred --priority=4 --limit=0 --json
 bd list --id "<comma-separated SCOPE_IDS>" --ready --priority=4 --limit=0 --json
 ```
 All three JSON arrays must be empty. The first explicitly verifies structural
-`bd ready`; the second prevents an open P4 anywhere in the full closure from
-surviving merely because dependency edges currently keep it out of the ready
-queue; the third applies ready semantics across hierarchy, provenance
-dependents, and any outside direct source.
+`bd ready`; the second prevents an open or deferred P4 anywhere in the full
+closure from surviving merely because it is outside the ready queue; the third
+applies ready semantics across hierarchy, provenance dependents, and any
+outside direct source.
 
 If any check returns an item, do not warn and continue. Add it to the backlog
 set, resolve it by refinement, coverage-first supersession, or approved
@@ -1047,7 +1064,7 @@ Epic: EPIC
 Task beads: <count>
 Dispatchable ready (P0-P3): <scoped count>
 Blocked: <scoped count>
-Backlog dispositions: <source id → refined/superseded/already-retired/non-goal>
+Backlog dispositions: <source id → refined/epic-promoted/superseded/already-retired/non-goal>
 Normative visual coverage: <fully materialized>/<total> rows
 Implementation owners: <count>/<total>
 Verification owners: <count>/<total>
@@ -1073,7 +1090,7 @@ and acceptance criteria; every normative visual row maps to materialized
 implementation and verification bead ids and the durable map records equal
 fully-owned/total counts; every backlog source has a recorded disposition; the
 freshly recomputed hierarchy-plus-provenance closure (plus any outside direct
-source) has no open or ready P4; structural
+source) has no open, deferred, or ready P4; structural
 `bd ready --parent EPIC --priority=4` is empty; the human has the epic id,
 dispatchable/blocked counts, dispositions, normative coverage totals, and
 `Ready P4: 0`; and the wisp has been squashed into a single digest bead.

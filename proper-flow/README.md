@@ -1,6 +1,6 @@
 # proper-flow
 
-Four [Pi](https://pi.dev) prompt templates that take Beads work from intake to
+Five [Pi](https://pi.dev) prompt templates that take Beads work from intake to
 verified implementation. The package contains prompts only; it installs no
 runtime extension code, skills, or npm dependencies. Prompt-only describes the
 package loading boundary, not the workflows' Beads, Git, worktree, and commit
@@ -12,10 +12,11 @@ side effects.
 | --- | --- |
 | `/triage <request>` | Classifies the request as broken behavior, known concrete work, or fuzzy scope. It routes to `/file`, files a ready task directly, or routes to `/spec`. |
 | `/file <bug>` | Reproduces the bug, traces the root cause, checks prior work, presents findings for approval, then files precise bug beads with structured acceptance criteria. It does not implement unless explicitly asked. |
-| `/spec <input>` | Accepts an idea, epic, P4 item, or `debt`; runs `speckit` in full or quick depth, pauses at clarification and approval gates, then creates or updates an epic with dependency-wired P0 to P3 tasks. |
+| `/spec <input>` | Accepts one idea, epic, or P4 item; runs `speckit` in full or quick depth, pauses at clarification and approval gates, then creates or updates an epic with dependency-wired P0 to P3 tasks. |
+| `/backlog [workers]` | Researches every open or deferred P4, groups conflicts, and fans independent clusters through quick Speckit refinement into workable P0 to P3 cards. |
 | `/implement-ready [scope] [workers]` | Accepts an epic, task, or `all`; runs the scope through a rolling pool of 1 to 12 workers with worktree, integration, retry, verification, cleanup, and reporting controls. |
 
-All four commands run `bd` for the user. When input is needed, they use
+All five commands run `bd` for the user. When input is needed, they use
 `ask_user_question` and group related questions into one dialog. Plain-text
 questions are a fallback only when the tool is unavailable or fails before its
 UI appears.
@@ -27,8 +28,9 @@ UI appears.
 - Broken or regressed behavior goes to `/file`.
 - Small work with known files and verifiable acceptance criteria is filed
   directly, without a larger pipeline.
-- Features, material unknowns, multi-part work, and P4 refinement go to
-  `/spec`.
+- Whole-board backlog or ponytail-debt sweeps go to `/backlog`.
+- Features, material unknowns, multi-part work, and one specific P4 refinement
+  go to `/spec`.
 - Borderline requests get one explicit user decision instead of a guess.
 
 ### `/file`
@@ -49,8 +51,8 @@ UI appears.
 
 ### `/spec`
 
-Accepted inputs include a new idea, an existing epic, a direct P4 backlog item,
-or `debt` for open `ponytail-debt` items.
+Accepted inputs include a new idea, an existing epic, or one direct P4 backlog
+item. Whole-board P4 refinement belongs to `/backlog`.
 
 The underlying `speckit` pipeline performs:
 
@@ -70,6 +72,24 @@ land as squash commits, clean up after success, and never push unless asked.
 Both depths require verifiable acceptance criteria, resolve every source P4,
 and verify implementation and test ownership for normative visual requirements
 before creating tasks.
+
+### `/backlog`
+
+- Acquires one atomic repository run lock, then snapshots every open or deferred
+  P4 so concurrent backlog sessions cannot share sources or human gates.
+- Fans read-only reconnaissance across up to 12 workers, requiring local
+  investigation and relevant current web documentation.
+- Groups duplicate or same-epic outcomes into refinement clusters. Cross-epic
+  file/shared-primitive conflicts remain separate and serialize.
+- Runs one quick Speckit wisp per independent cluster and adopts only P4s found
+  later in that cluster's required live closure.
+- Mediates Speckit's clarification and approval gates through the parent session.
+- Refines a source in place, creates coverage-first replacements before
+  superseding it, preserves actionable coverage for an already-retired source,
+  retires an approved non-goal, or promotes a P4 epic after child coverage.
+- Verifies every initial source has one terminal disposition and that no initial
+  open or deferred P4 remains before reporting success.
+- Absorbs the Beads audit log once after all cluster wisps and final checks.
 
 ### `/implement-ready`
 
@@ -92,15 +112,16 @@ before creating tasks.
   end.
 - Reports completed, retried, stuck, blocked, held, excluded, and unacceptable
   work separately, including leftover worktrees and model escalations.
-- When available, records new `ponytail:` debt, runs one whole-run
-  `ponytail-review`, and writes only reusable run learnings.
+- When available, records new `ponytail:` debt as deferred P4 backlog so it
+  stays out of `bd ready`, runs one whole-run `ponytail-review`, and writes only
+  reusable run learnings.
 
 Common report states:
 
 | State | Meaning |
 | --- | --- |
 | `unacceptable` | P0 to P3 work lacks structured acceptance criteria and must return to `/file` or `/spec`. |
-| `p4_excluded` | Backlog work is intentionally not dispatchable and should go through `/spec`. |
+| `p4_excluded` | Backlog work is intentionally not dispatchable and should go through `/backlog` or a focused `/spec <id>`. |
 | `stuck` | Attempts stopped on repeated failure, environment, conflict, missing concrete fix, or retry ceiling. |
 | `stranded` | Work remains blocked by a stuck task. |
 | `held` | User excluded the task from this run. |
@@ -139,10 +160,11 @@ The prompts expect:
 - `~/.beads/rail/implement-ready.sh`.
 - The real empty `~/.beads/no-hooks/` directory for hook-free worktrees.
 
+`/backlog` requires pi-subagents for its rolling research/refinement pool.
 `/implement-ready` uses pi-subagents when available and otherwise works tasks
 serially. `proper-llm-router` is optional, but its default command pins and
-per-worker routing match this workflow. `/constitution` remains a Beads formula,
-not a prompt in this package.
+per-worker routing match these workflows. `/constitution` remains a Beads
+formula, not a prompt in this package.
 
 ## Development
 
@@ -154,7 +176,8 @@ npm publish --dry-run
 
 `prepack` runs the test before a tarball or publish. The test protects package
 discovery, autocomplete metadata, questionnaire use, structured acceptance,
-task scope, rolling-pool behavior, and integration sequencing. It does not
+backlog clustering, task scope, rolling-pool behavior, and integration
+sequencing. It does not
 execute Beads formulas, the rail, subagents, or live model routing. Node 22.19
 or newer is required for development checks.
 

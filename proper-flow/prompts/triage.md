@@ -1,5 +1,5 @@
 ---
-description: Route a work request to the right beads entry point — /file for bugs, /spec for fuzzy scope, direct bd create for known work
+description: Route work to /file, direct Beads creation, /backlog, or /spec
 argument-hint: <bug report, feature idea, task description, or issue reference>
 ---
 
@@ -32,19 +32,22 @@ Files: <comma-separated repo-relative paths this will touch>" --acceptance="<ver
    - Then absorb the beads audit log exactly as /file step 7 does (standalone
      chore-commit path, staged-index guard included). No learning disposition
      here — tier 2 is known work, not an investigation.
-3. **Fuzzy scope** — new feature, unknowns needing human answers, multiple
-   interdependent work items, or P4 backlog refinement → invoke `/spec` with
-   the request (quick depth for plainly small features, full otherwise).
+3. **Whole backlog sweep** — the request asks to drain/refine all backlog,
+   all P4 work, or the ponytail-debt ledger → invoke `/backlog` with any worker
+   limit. Never collapse unrelated backlog into one `/spec` run.
+4. **Fuzzy scope** — new feature, unknowns needing human answers, multiple
+   interdependent work items, or one specific P4 refinement → invoke `/spec`
+   with the request (quick depth for plainly small features, full otherwise).
 
 Tie-breakers:
 - If you could not write the acceptance criteria without asking the user
-  something material, it is tier 3 — regardless of how small it sounds.
+  something material, it is tier 4 — regardless of how small it sounds.
 - If you cannot name the `Files:` this touches without guessing, you have not
   looked at the code, and tier 2 is not available to you: open the files and
   confirm, or route to tier 1/3. This gate tests FACTS, not whether the human
   needs consulting — crisp acceptance criteria can be written for a function
   that does not exist.
-- A "bug" whose fix requires a design decision is tier 3, not tier 1 — say
+- A "bug" whose fix requires a design decision is tier 4, not tier 1 — say
   so in the routing line.
 - An existing issue id routes by its content: bug-shaped → tier 1 context,
-  epic or P4 backlog → tier 3.
+  epic or one P4 item → tier 4. Tier 3 is only the whole backlog sweep.

@@ -58,7 +58,7 @@ These assertions exercise `applyJudgeModelOverrides()` and `judgeCpaModel()`. Th
 
 The command fixtures verify that configured slash commands bypass the judge only when their model resolves.
 
-They cover keys with and without `/`, case-insensitive matching, CPA IDs in pin values, nullable effort, invalid models falling through, rejection of prefix matches, and rejection when a command token is not at the start of the prompt.
+They cover the built-in `/backlog` pin, keys with and without `/`, case-insensitive matching, CPA IDs in pin values, nullable effort, invalid models falling through, rejection of prefix matches, and rejection when a command token is not at the start of the prompt.
 
 These assertions exercise `commandPin()` as pure matching logic. They do not prove that the pi input event skips the judge, applies quota swapping, switches the model, or sets thinking effort; those behaviors remain integration-only.
 

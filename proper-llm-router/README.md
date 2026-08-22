@@ -109,6 +109,7 @@ runs.run("retry", {
 | `/file` | `claude-fable-5` | `xhigh` |
 | `/triage` | `claude-fable-5` | `xhigh` |
 | `/spec` | `claude-fable-5` | `xhigh` |
+| `/backlog` | `claude-fable-5` | `xhigh` |
 | `/implement-ready` | `gpt-5-6-sol` | `xhigh` |
 
 Pins still use the quota swap. Their effort is applied after the final model
@@ -203,7 +204,7 @@ after the corpus has loaded, and quota data may remain cached for 60 seconds.
 | `cpaManagementKey` | empty | Plaintext management key, preferred over the environment. |
 | `cpaManagementKeyEnv` | `CPA_MANAGEMENT_KEY` | Management-key environment fallback. |
 | `judgeModelOverrides` | `{}` | Stable slot to enabled CPA model ID for judged routes. |
-| `commandPins` | four defaults above | Slash command to model and effort mapping. |
+| `commandPins` | five defaults above | Slash command to model and effort mapping. |
 
 `commandPins` and `judgeModelOverrides` replace their whole default maps when
 present. Invalid or unreadable JSON falls back to defaults. The loader does not

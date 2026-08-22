@@ -3,9 +3,15 @@ import { readdir, readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 const root = new URL("../", import.meta.url);
-const expected = ["file.md", "implement-ready.md", "spec.md", "triage.md"];
+const expected = [
+	"backlog.md",
+	"file.md",
+	"implement-ready.md",
+	"spec.md",
+	"triage.md",
+];
 
-test("package exposes the four workflow prompts", async () => {
+test("package exposes the five workflow prompts", async () => {
 	const manifest = JSON.parse(
 		await readFile(new URL("package.json", root), "utf8"),
 	);
@@ -45,6 +51,37 @@ test("file stores acceptance criteria in the structured field", async () => {
 	assert.match(source, /never only in the description/);
 });
 
+test("backlog drains P4 work through a rolling quick-spec pool", async () => {
+	const source = await readFile(new URL("prompts/backlog.md", root), "utf8");
+	assert.match(source, /^argument-hint: "\[workers 1-12, default 12\]"/m);
+	assert.match(source, /bd list --status=open,deferred --priority=4/);
+	assert.match(source, /INITIAL_BACKLOG_IDS/);
+	assert.match(source, /ADOPTED_SOURCE_IDS/);
+	assert.match(source, /BACKLOG_RUN_ID/);
+	assert.match(source, /backlog-refinement\.lock/);
+	assert.match(source, /reconnaissance/i);
+	assert.match(source, /conflict cluster/i);
+	assert.match(source, /distinct target\s+epics/i);
+	assert.match(
+		source,
+		/ACTIVE\.size \+ LAUNCHING_CLUSTERS\.size <= POOL_LIMIT <= 12/,
+	);
+	assert.match(source, /child `async: true`/);
+	assert.match(source, /subagent_wait\(\{ stopOnAttention: false \}\)/);
+	assert.match(source, /--var depth=quick/);
+	assert.match(source, /`promote-epic`\s+disposition/);
+	assert.match(source, /ask_user_question/);
+	assert.match(source, /bd gate list/);
+	assert.match(source, /bd gate show/);
+	assert.match(source, /bd gate resolve <gate-id>/);
+	assert.match(source, /already-retired-covered/);
+	assert.match(source, /absorb --repo <repo>/);
+
+	const triage = await readFile(new URL("prompts/triage.md", root), "utf8");
+	assert.match(triage, /Whole backlog sweep/);
+	assert.match(triage, /invoke `\/backlog`/);
+});
+
 test("implement-ready accepts epic, task, or all scopes", async () => {
 	const source = await readFile(
 		new URL("prompts/implement-ready.md", root),
@@ -56,6 +93,24 @@ test("implement-ready accepts epic, task, or all scopes", async () => {
 		/Resolve a non-`all` scope before initializing the rail:/,
 	);
 	assert.match(source, /single-task mode/);
+});
+
+test("P4 debt stays out of ready work and routes to backlog", async () => {
+	const implementReady = await readFile(
+		new URL("prompts/implement-ready.md", root),
+		"utf8",
+	);
+	assert.match(
+		implementReady,
+		/bd create[\s\S]*?--type=chore -p 4[\s\S]*?--status=deferred/,
+	);
+	assert.doesNotMatch(implementReady, /bd defer/);
+	assert.match(implementReady, /refine with `\/backlog`/);
+	assert.doesNotMatch(implementReady, /\/spec\s+debt/);
+
+	const spec = await readFile(new URL("prompts/spec.md", root), "utf8");
+	assert.doesNotMatch(spec, /literal argument `debt`/);
+	assert.doesNotMatch(spec, /ponytail-debt/);
 });
 
 test("implement-ready caps and refills a rolling worker pool", async () => {

@@ -12,7 +12,7 @@ require() {
   }
 }
 
-require 'version = 8' 'coverage-gate formula version'
+require 'version = 10' 'coverage-gate formula version'
 require '## Source Authority' 'visual source authority inventory'
 require '## Normative Visual Coverage' 'row-level normative coverage map'
 require 'Each row needs both an implementation owner and a' 'two-owner plan contract'

@@ -1,12 +1,12 @@
 # proper-flow
 
-proper-flow packages four Beads workflow prompts as one independently installable Pi resource bundle.
+proper-flow packages five Beads workflow prompts as one independently installable Pi resource bundle.
 
 ## Purpose
 
-The package owns `/triage`, `/file`, `/spec`, and `/implement-ready`, keeping workflow prompts versioned beside related Pi extensions instead of loose global files.
+The package owns `/triage`, `/file`, `/spec`, `/backlog`, and `/implement-ready`, keeping workflow prompts versioned beside related Pi extensions instead of loose global files.
 
-The four commands form a pipeline. Triage selects the entry point, file investigates broken behavior, spec creates implement-ready beads, and implement-ready executes one task, an epic frontier, or the whole ready board.
+The five commands form a pipeline. Triage selects the entry point, file investigates broken behavior, spec refines one feature, backlog drains P4 work into independent implement-ready clusters, and implement-ready executes ready cards.
 
 ## Resource boundary
 
@@ -18,14 +18,17 @@ Beads formulas and the implementation rail remain outside the Pi package but are
 
 The package keeps command identity and ownership predictable.
 
-1. Filenames remain `triage.md`, `file.md`, `spec.md`, and `implement-ready.md` because Pi derives slash-command names from them.
+1. Filenames remain `triage.md`, `file.md`, `spec.md`, `backlog.md`, and `implement-ready.md` because Pi derives slash-command names from them.
 2. Every prompt retains `description` and `argument-hint` frontmatter for autocomplete.
-3. The package is the only installed source for these four prompts; duplicate files under `~/.pi/agent/prompts/` are removed.
-4. Prompt responsibilities stay separate: routing, bug investigation, specification, then implementation.
+3. The package is the only installed source for these five prompts; duplicate files under `~/.pi/agent/prompts/` are removed.
+4. Prompt responsibilities stay separate: routing, bug investigation, one-feature specification, backlog refinement, then implementation.
 5. proper-llm-router owns command model pins; proper-flow does not duplicate routing configuration.
 6. `/implement-ready` resolves a task id or unique title to one exact bead and never refills that run with sibling board work.
 7. Every workflow uses `ask_user_question` when it needs user input, grouping related questions into one call and falling back to plain text only when the tool is unavailable or fails before displaying its UI.
 8. `/implement-ready` caps its rolling pool at 12 workers and refills capacity after terminal workers are reconciled, without waiting for unrelated active workers.
+9. Newly filed P4 debt is indefinitely deferred so Beads excludes it from `bd ready`; `/backlog` owns whole-board open and deferred P4 refinement.
+10. `/backlog` holds one atomic repository run lock, snapshots baseline P4 ids, and records later P4 adoption only from a cluster's required live closure.
+11. `/backlog` combines only duplicate or same-epic outcomes; cross-epic file conflicts stay in separate serialized wisps, and every run source needs a verified terminal disposition.
 
 ## Documentation map
 

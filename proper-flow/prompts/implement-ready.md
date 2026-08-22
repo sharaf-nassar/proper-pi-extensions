@@ -372,18 +372,26 @@ flow: `survey` is a rail command YOU run directly between pool events.)
      `git diff RUN_BASE..HEAD`. Everything else predates the run.
    - Attribute each survivor: `git blame -L<line>,<line> <file>` gives the
      commit, and the run's one-squash-per-task mapping names the task bead.
-   - File each as unparented P4 backlog:
-     `bd create "<the ceiling, as a short imperative>" --type=chore -p 4
-     --label ponytail-debt --description "<file>:<line> — <full comment text>.
+   - File each as unparented, indefinitely deferred P4 backlog:
+
+     ```bash
+     bd create "<the ceiling, as a short imperative>" --type=chore -p 4 \
+       --label ponytail-debt --description "<file>:<line> — <full comment text>.
      Upgrade trigger: <the trigger, or 'none stated'>.
      source-task: <task-bead-id>  source-commit: <squash sha>
-     source-epic: <epic-id, 'single-task <id>', or 'all-board run'>  source-run: <run_id>"`
+     source-epic: <epic-id, 'single-task <id>', or 'all-board run'>  source-run: <run_id>" \
+       --status=deferred
+     ```
+
+     Deferred creation is required: P4 expresses backlog priority, while Beads
+     readiness is status/dependency-based, so an open unblocked P4 would pollute
+     `bd ready`; refine with `/backlog` later.
    - Unparented and dependency-free is deliberate: both a `--parent` and a
      `discovered-from` edge would pull these into /spec's SCOPE closure, whose
-     zero-open-P4 invariant would then force every later spec run to adjudicate
-     unrelated debt. Provenance lives as description TEXT, which no closure
-     traverses. `bd list --label ponytail-debt` is the ledger; `/spec debt` is
-     the paydown.
+     zero-unresolved-P4 invariant would then force every later spec run to
+     adjudicate unrelated debt. Provenance lives as description TEXT, which no
+     closure traverses. `bd list --label ponytail-debt` is the ledger;
+     `/backlog` is the paydown.
    - Report `ponytail_debt: N filed`.
 
    Ponytail review (after debt filing, still before the absorb). Dispatch ONE

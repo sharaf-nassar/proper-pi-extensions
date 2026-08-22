@@ -13,6 +13,15 @@ const ARM_IDS = [
 	"gpt-5.6-sol",
 ];
 
+// @lat: [[lat.md/proper-llm-router/tests#Verification#Command pin fixtures]]
+test("defaults pin backlog to the high-judgment arm", () => {
+	const defaults = loadConfig("/__proper-llm-router-missing-config__.json");
+	assert.deepEqual(defaults.commandPins.backlog, {
+		model: "claude-fable-5",
+		effort: "xhigh",
+	});
+});
+
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Judge fast fixture]]
 test("judge.fast controls service_tier on the judge request", async () => {
 	const defaults = loadConfig("/__proper-llm-router-missing-config__.json");

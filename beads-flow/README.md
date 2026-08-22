@@ -61,17 +61,18 @@ User-visible guarantees:
   file, but still runs both human gates.
 - Product decisions go to the user. Technical choices are investigated and
   recorded for veto instead of being pushed back as avoidable questions.
-- Existing epics and P4 inputs keep provenance. Every source P4 is refined,
-  superseded after replacement coverage, preserved as already retired, or
-  retired as a user-approved non-goal.
+- Existing epics and open or deferred P4 inputs keep provenance. Every source
+  P4 is refined, promoted while remaining the target epic, superseded after
+  replacement coverage, preserved as already retired, or retired as a
+  user-approved non-goal.
 - Referenced visual artifacts record which sections are normative. Every
   normative row needs named implementation and verification owners before
   Beads mutation begins.
 - Materialized tasks use P0 to P3, structured acceptance criteria, concrete
   `Files:` declarations, native spec/design links, and dependency edges only
   where order matters.
-- The finished scope has no open or ready P4 work. Squashing the wisp leaves one
-  digest bead plus the epic and full-depth spec file.
+- The finished scope has no open, deferred, or ready P4 work. Squashing the
+  wisp leaves one digest bead plus the epic and full-depth spec file.
 
 ## Implementation rail
 

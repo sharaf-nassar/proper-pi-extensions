@@ -1,6 +1,6 @@
 ---
 description: Run the global speckit beads formula from an idea, epic, or P4 backlog issue to implement-ready task beads
-argument-hint: <feature idea, problem statement, existing epic id, P4 issue id, or "debt">
+argument-hint: <feature idea, problem statement, existing epic id, or P4 issue id>
 ---
 
 Pi port of `~/.claude/commands/spec.md` (itself twin-maintained with the
@@ -33,25 +33,12 @@ or fails before displaying its UI.
      requires actionable replacement coverage; never reopen it.
    - Any other existing issue is not a backlog-refinement input; treat the
      request as a problem statement unless the user explicitly asks to reuse it.
-   - The literal argument `debt`: a ponytail-debt paydown pass, not a feature.
-     Collect the ledger with `bd list --label ponytail-debt --status=open
-     --json`. Empty → say the ledger is clean and stop; do not instantiate a
-     wisp. Otherwise pass every id as `--var backlog="<ids>"` and use a problem
-     statement naming the actual ceilings, e.g. "Pay down N deliberate ponytail
-     shortcuts: <one clause per ceiling>." These beads are unparented by design
-     (implement-ready files them that way so they stay out of feature-run
-     closures), so there is no epic to infer — do NOT walk parent chains or
-     provenance for them, and let the formula create the epic. Their
-     `source-task` / `source-commit` description fields are the backtrack path
-     to the change that incurred each shortcut; read them as context before
-     refining. Every collected id still owes the normal P4 disposition.
    Do not snapshot an epic's hierarchy or provenance here. The formula owns
    that live closure during `specify` and refreshes it before materialization;
-   pass only the resolved epic/source variables above. `backlog` is reserved
-   for the explicit `debt` ledger.
+   pass only the resolved epic/source variables above.
 2. Derive a short kebab-case feature slug and instantiate the molecule as an
    ephemeral wisp (the formula is `phase = "vapor"` — do NOT `bd mol pour` it):
-   `bd mol wisp speckit --var feature=<slug> --var problem="<problem>" --var context="<any extra context the user gave>" [--var epic=<id>] [--var epic_candidates="<comma-separated ids>"] [--var source_backlog=<id>] [--var backlog="<comma-separated ids>"] [--var depth=quick]`
+   `bd mol wisp speckit --var feature=<slug> --var problem="<problem>" --var context="<any extra context the user gave>" [--var epic=<id>] [--var epic_candidates="<comma-separated ids>"] [--var source_backlog=<id>] [--var depth=quick]`
    (the underlying beads formula is named `speckit`).
    Depth defaults to `full`. Pass `--var depth=quick` when the user asks for a
    quick/light spec or the feature is plainly small (lighter self-review, merged
@@ -80,14 +67,15 @@ or fails before displaying its UI.
    the artifacts, and `bd close <step>` normally, then continue the loop.
    (`bd ready --gated` flags molecules whose gate just closed, for resume.)
 5. Do not treat `create-beads` as finished until its backlog invariants pass:
-   every source P4 is refined in place to P0-P3, superseded after replacement
-   coverage exists, covered while already retired, or retired as an explicitly
-   human-approved non-goal. Immediately before materialization and again before
+   every source P4 is refined in place to P0-P3, promoted while remaining the
+   target epic after child coverage, superseded after replacement coverage,
+   covered while already retired, or retired as an explicitly human-approved
+   non-goal. Immediately before materialization and again before
    completion, recompute the full hierarchy-plus-`discovered-from` closure and
-   include any outside direct source. The closure must contain no open P4, and
-   its ready subset must contain zero P4 items. Report the feature epic id,
-   task count, dispatchable ready count (ready P0-P3), blocked count, backlog
-   dispositions, and `Ready P4: 0`.
+   include any outside direct source. The closure must contain no unresolved
+   open or deferred P4, and its ready subset must contain zero P4 items. Report
+   the feature epic id, task count, dispatchable ready count (ready P0-P3),
+   blocked count, backlog dispositions, and `Ready P4: 0`.
    Only then recommend /implement-ready (or ask any session to work the epic).
 6. Squash the wisp: `bd mol squash <root-id> --summary "<2-4 sentence digest: feature, epic id, task-bead count, both gate outcomes, spec file path (quick: epic-carried)>"`.
    This collapses the spent pipeline scaffolding into one durable digest bead and

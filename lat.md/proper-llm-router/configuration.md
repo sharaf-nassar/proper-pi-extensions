@@ -21,7 +21,7 @@ Missing files and missing keys use built-in defaults.
 | `cpaManagementKey` | empty | plaintext management key with priority over the environment |
 | `cpaManagementKeyEnv` | `CPA_MANAGEMENT_KEY` | management-key fallback variable |
 | `judgeModelOverrides` | empty map | judge arm slot to enabled CPA model ID |
-| `commandPins` | four built-in pins | slash commands that skip judging |
+| `commandPins` | five built-in pins | slash commands that skip judging |
 
 The default exemplar path resolves beside the loaded `llm-router.ts`, so a package move does not break default configuration. An explicit user `exemplarsPath` still overrides the default and must be updated if it names the former checkout. `fallbackModel` is looked up as a CPA model ID, so `gpt-5.6-terra` is valid while arm key `gpt-5-6-terra` is not.
 
@@ -68,6 +68,7 @@ The built-in map removes judge latency for commands with fixed model needs.
 | `/file` | `claude-fable-5` | `xhigh` |
 | `/triage` | `claude-fable-5` | `xhigh` |
 | `/spec` | `claude-fable-5` | `xhigh` |
+| `/backlog` | `claude-fable-5` | `xhigh` |
 | `/implement-ready` | `gpt-5-6-sol` | `xhigh` |
 
 Pin keys may include or omit `/` and match case-insensitively. Matching is exact on the first slash-command token, so `/filet` does not match `/file` and embedded text such as `fix /file` is not a command.

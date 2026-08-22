@@ -15,7 +15,7 @@ credentials or private integrations.
 | --- | --- | --- |
 | [proper-base](./proper-base/README.md) | Pi extension | Improves transcripts, session titles, `/clear`, prompt history and search, editor keys, autocomplete, fullscreen navigation, image handling, cancellation, and footer layout. |
 | [proper-llm-router](./proper-llm-router/README.md) | Pi extension | Routes each session's first task to one of seven model tiers, then handles command pins, per-task overrides, quota swaps, fallbacks, and `ultra` thinking support. |
-| [proper-flow](./proper-flow/README.md) | Pi prompt package | Adds `/triage`, `/file`, `/spec`, and `/implement-ready` for filing, specifying, and implementing Beads work. |
+| [proper-flow](./proper-flow/README.md) | Pi prompt package | Adds `/triage`, `/file`, `/spec`, `/backlog`, and `/implement-ready` for filing, refining, and implementing Beads work. |
 | [beads-flow](./beads-flow/README.md) | Beads support bundle | Installs the `constitution` and `speckit` formulas plus the worktree, retry, integration, and audit rail used by `proper-flow`. |
 
 `proper-base` and `proper-llm-router` work independently. `proper-flow` expects
