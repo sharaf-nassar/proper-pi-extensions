@@ -22,7 +22,20 @@ local setup requires Node 22.19 or newer.
 
 ## Install
 
-From this checkout:
+Published packages:
+
+```bash
+pi install npm:proper-base
+pi install npm:proper-flow
+```
+
+`proper-flow` still expects the Beads resources from this repository:
+
+```bash
+./beads-flow/install.sh link
+```
+
+Local checkout:
 
 ```bash
 npm --prefix proper-base install
@@ -30,13 +43,11 @@ npm --prefix proper-base install
 pi install ./proper-base
 pi install ./proper-llm-router
 pi install ./proper-flow
-
-./beads-flow/install.sh link
 ```
 
-The `proper-base` install prepares its runtime dependency and seeds its optional
-pi-subagents worker default. Each package README lists its remaining setup and
-runtime requirements.
+Pi supplies proper-base's core peer packages. Its local `npm install` prepares
+development tooling and seeds the optional pi-subagents worker default. Each
+package README lists its remaining setup and runtime requirements.
 
 ## Repository internals
 

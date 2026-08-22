@@ -126,20 +126,29 @@ highlight. Custom replacement footers are not changed.
 
 ## Install
 
-Node 22.19 or newer is required. The package is tested against Pi 0.84.2. From
-this package directory:
+Node 22.19 or newer is required. The package is tested against Pi 0.84.2.
+
+From npm:
+
+```bash
+pi install npm:proper-base
+```
+
+From a local checkout:
 
 ```bash
 npm install
 pi install /path/to/proper-pi-extensions/proper-base
 ```
 
-Run `npm install` before registering a local checkout so the runtime dependency
-is present. When an existing `settings.json` is readable, the postinstall hook
-also sets `subagents.agentOverrides.worker.defaultContext` to `fresh` if no
-worker override exists. It leaves existing overrides, missing files, and
-unreadable settings untouched. Installing with `--ignore-scripts` skips that
-default.
+Pi supplies the core `@earendil-works/pi-coding-agent` and
+`@earendil-works/pi-tui` peer packages. Local `npm install` prepares development
+tooling and runs the install-time settings seed; it is not a runtime build.
+
+When an existing `settings.json` is readable, the postinstall hook sets
+`subagents.agentOverrides.worker.defaultContext` to `fresh` if no worker
+override exists. It leaves existing overrides, missing files, and unreadable
+settings untouched. Installing with `--ignore-scripts` skips that default.
 
 This package replaces the former local `proper-customs` identity. Keep only one
 registration. Existing data under the legacy `proper-history` path remains
@@ -165,9 +174,12 @@ compatible.
 npm test
 npm run typecheck
 npm run test:coverage
+npm pack --dry-run
+npm publish --dry-run
 ```
 
-Tests use Node's built-in test runner. There is no build step.
+`prepack` runs tests and strict type checking before a tarball or publish. Tests
+use Node's built-in runner. There is no build step.
 
 ## License
 

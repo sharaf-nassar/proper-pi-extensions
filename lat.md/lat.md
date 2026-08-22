@@ -1,6 +1,6 @@
 # proper-pi-extensions
 
-proper-pi-extensions is a repository of independently installable local pi extension packages and their workflow support bundles.
+proper-pi-extensions is a repository of independently installable Pi packages and workflow support bundles distributed through npm or local checkouts.
 
 ## Repository layout
 
@@ -11,8 +11,8 @@ The root is not an installable pi package and has no npm workspace manifest. Pac
 Current packages:
 
 - [proper-llm-router](../proper-llm-router/) — routes each session's first task to an appropriate model.
-- [proper-base](../proper-base/) — provides baseline history, prompt editing, cancellation, fullscreen navigation, image previews, and footer layout.
-- [proper-flow](../proper-flow/) — packages triage, bug investigation, specification, and implementation workflow prompts.
+- [proper-base](../proper-base/) — npm package `proper-base`, providing baseline history, prompt editing, cancellation, fullscreen navigation, image previews, and footer layout.
+- [proper-flow](../proper-flow/) — npm package `proper-flow`, containing triage, bug investigation, specification, and implementation workflow prompts.
 
 ## Support bundles
 
@@ -29,9 +29,11 @@ Repository-owned support bundles remain separate from Pi package discovery.
 
 ## Installation model
 
-Local pi installs point at an extension package directory rather than the repository root, allowing packages to be enabled and updated independently.
+Published installs use npm package names; local installs point at package directories. The repository root is not installable, and each package remains independently enabled and updated.
 
-A package install replaces any legacy direct-file registration for the same extension. Keeping both entries can load the extension twice; keeping only the stale path can make pi fail during startup after a move.
+The npm manifests use the `pi-package` keyword, explicit `pi.extensions` or `pi.prompts` resources, public-registry publish settings, package file allowlists, and monorepo repository metadata. A `prepack` gate validates each package before npm creates a tarball.
+
+A package install replaces any legacy direct-file registration for the same extension. Keeping both entries can load the extension twice; keeping only the stale path can make Pi fail during startup after a move.
 
 ## Runtime responsiveness
 

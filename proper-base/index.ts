@@ -1,5 +1,5 @@
 /**
- * pi-proper-base — baseline editor, fullscreen, history, and footer behavior.
+ * proper-base — baseline editor, fullscreen, history, and footer behavior.
  *
  * pi's Up/Down history covers the current session only, so a new session in a
  * project you have worked in for weeks starts empty. This extension seeds the

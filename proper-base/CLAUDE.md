@@ -13,8 +13,8 @@ Beads (`bd`) is managed from the repository root.
 ## Build & test
 
 Pi loads `index.ts` through this package's `pi` manifest. There is no build
-step or test framework; package dependencies provide pi-tui wrapping utilities,
-and dev dependencies provide pi and Node diagnostic types.
+step or test framework. Pi supplies coding-agent and pi-tui as core peer
+packages; dev dependencies pin both APIs plus TypeScript and Node diagnostics.
 
 ```bash
 npm test

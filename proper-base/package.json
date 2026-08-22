@@ -1,5 +1,5 @@
 {
-  "name": "pi-proper-base",
+  "name": "proper-base",
   "version": "0.2.0",
   "description": "Baseline Pi behavior for session naming, history, prompt editing, fullscreen navigation, and footer styling",
   "keywords": [
@@ -19,6 +19,19 @@
     "theme"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sharaf-nassar/proper-pi-extensions.git",
+    "directory": "proper-base"
+  },
+  "homepage": "https://github.com/sharaf-nassar/proper-pi-extensions/tree/main/proper-base#readme",
+  "bugs": {
+    "url": "https://github.com/sharaf-nassar/proper-pi-extensions/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "files": [
     "index.ts",
@@ -29,18 +42,21 @@
   ],
   "scripts": {
     "postinstall": "node install.mjs",
+    "prepack": "npm test && npm run typecheck",
     "test": "node --test test/*.test.ts",
     "test:coverage": "node --experimental-test-coverage --test --test-coverage-lines=93 --test-coverage-branches=78 --test-coverage-functions=90 test/*.test.ts",
     "typecheck": "tsc"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.19.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.84.2",
+    "@earendil-works/pi-tui": "0.84.2",
     "@types/node": "25.9.5",
     "typescript": "6.0.2"
   },
@@ -48,8 +64,5 @@
     "extensions": [
       "./index.ts"
     ]
-  },
-  "dependencies": {
-    "@earendil-works/pi-tui": "^0.84.2"
   }
 }

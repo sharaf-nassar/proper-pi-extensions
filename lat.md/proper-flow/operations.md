@@ -4,9 +4,11 @@ proper-flow is installed as a local Pi package and exposes prompt templates with
 
 ## Package identity and installation
 
-The repository directory is `proper-flow`; the manifest package name is `pi-proper-flow`.
+The repository directory and public npm package are both named `proper-flow`.
 
-Install the checkout with `pi install /path/to/proper-pi-extensions/proper-flow`. The manifest registers `./prompts`, and Pi derives `/triage`, `/file`, `/spec`, and `/implement-ready` from the four Markdown filenames.
+Install the published package with `pi install npm:proper-flow`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-flow`. The manifest registers `./prompts`, and Pi derives `/triage`, `/file`, `/spec`, and `/implement-ready` from the four Markdown filenames.
+
+The npm manifest uses the `pi-package` discovery keyword, limits the tarball to prompts and user documentation, points repository metadata at the `proper-flow` monorepo directory, and publishes only to the public npm registry. Its `prepack` script runs the package contract test before tarball creation or publication.
 
 ## Source migration
 
@@ -28,10 +30,12 @@ The command defaults to a rolling pool of 12 workers and never exceeds 12. Refil
 
 ## Validation
 
-Run the package check from `proper-flow/`.
+Run the package and release checks from `proper-flow/` with Node 22.19 or newer.
 
 ```bash
 npm test
+npm pack --dry-run
+npm publish --dry-run
 ```
 
-After installation, `pi list` must resolve the local proper-flow path. Reload Pi after prompt edits so command discovery refreshes.
+After installation, `pi list` must resolve `npm:proper-flow` or the selected local checkout. Reload Pi after prompt edits so command discovery refreshes.

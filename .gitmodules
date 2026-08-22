@@ -1,0 +1,3 @@
+[submodule "tools/release-me"]
+	path = tools/release-me
+	url = https://github.com/sharaf-nassar/release-me

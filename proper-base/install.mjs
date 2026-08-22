@@ -6,7 +6,7 @@
  * package is installed, never from a running session. Plain JavaScript because
  * npm runs this with bare `node`.
  *
- * Runs for `pi install npm:pi-proper-base`, for git sources, and for `npm
+ * Runs for `pi install npm:proper-base`, for git sources, and for `npm
  * install` in a local checkout. A local path registered with `pi install
  * /path/to/proper-base` is only recorded in settings, so it seeds when that
  * checkout's own `npm install` runs.
@@ -74,11 +74,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	try {
 		if (seedWorkerContext(agentDir())) {
 			console.log(
-				"pi-proper-base: set subagents.agentOverrides.worker.defaultContext to fresh",
+				"proper-base: set subagents.agentOverrides.worker.defaultContext to fresh",
 			);
 		}
 	} catch (error) {
 		// A failed convenience default must never fail the install.
-		console.warn(`pi-proper-base: could not seed settings.json: ${error}`);
+		console.warn(`proper-base: could not seed settings.json: ${error}`);
 	}
 }

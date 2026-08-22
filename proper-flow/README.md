@@ -107,12 +107,20 @@ Common report states:
 
 ## Install
 
+From npm:
+
+```bash
+pi install npm:proper-flow
+```
+
+From a local checkout:
+
 ```bash
 pi install /path/to/proper-pi-extensions/proper-flow
 ```
 
 Remove same-named files from `~/.pi/agent/prompts/` so Pi discovers only one
-source for each command. Confirm the package path with `pi list`, then reload Pi
+source for each command. Confirm the package with `pi list`, then reload Pi
 after prompt edits.
 
 ## Runtime requirements
@@ -140,12 +148,15 @@ not a prompt in this package.
 
 ```bash
 npm test
+npm pack --dry-run
+npm publish --dry-run
 ```
 
-The test protects package discovery, autocomplete metadata, questionnaire use,
-structured acceptance, task scope, rolling-pool behavior, and integration
-sequencing. It does not execute Beads formulas, the rail, subagents, or live
-model routing. Node 22 or newer is required for development checks.
+`prepack` runs the test before a tarball or publish. The test protects package
+discovery, autocomplete metadata, questionnaire use, structured acceptance,
+task scope, rolling-pool behavior, and integration sequencing. It does not
+execute Beads formulas, the rail, subagents, or live model routing. Node 22.19
+or newer is required for development checks.
 
 ## License
 

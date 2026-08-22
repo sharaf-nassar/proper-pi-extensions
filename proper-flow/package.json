@@ -1,7 +1,6 @@
 {
-  "name": "pi-proper-flow",
+  "name": "proper-flow",
   "version": "0.1.0",
-  "private": true,
   "description": "Beads workflow prompt templates for triage, investigation, specification, and implementation",
   "keywords": [
     "pi-package",
@@ -12,16 +11,30 @@
     "beads"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sharaf-nassar/proper-pi-extensions.git",
+    "directory": "proper-flow"
+  },
+  "homepage": "https://github.com/sharaf-nassar/proper-pi-extensions/tree/main/proper-flow#readme",
+  "bugs": {
+    "url": "https://github.com/sharaf-nassar/proper-pi-extensions/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "files": [
     "prompts",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
+    "prepack": "npm test",
     "test": "node --test test/*.test.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.19.0"
   },
   "pi": {
     "prompts": [
