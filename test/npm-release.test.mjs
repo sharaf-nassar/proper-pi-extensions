@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 const root = new URL("../", import.meta.url);
-const packages = ["proper-base", "proper-flow"];
+const packages = ["proper-base", "proper-flow", "proper-llm-router"];
 
 test("npm release config matches publishable packages", async () => {
 	const config = JSON.parse(
@@ -21,8 +21,30 @@ test("npm release config matches publishable packages", async () => {
 		);
 		assert.equal(manifest.name, name);
 		assert.notEqual(manifest.private, true);
+		assert.equal(manifest.license, "MIT");
+		assert.equal(manifest.repository?.directory, name);
 		assert.equal(manifest.publishConfig?.access, "public");
+		assert.ok(manifest.files?.length > 0);
+		assert.ok(manifest.scripts?.prepack);
 	}
+});
+
+// @lat: [[proper-llm-router/tests#Strict validation]]
+test("router release packaging stays offline and runtime-only", async () => {
+	const manifest = JSON.parse(
+		await readFile(new URL("proper-llm-router/package.json", root), "utf8"),
+	);
+	assert.equal(
+		manifest.scripts.prepack,
+		"npm run test:unit && npm run typecheck",
+	);
+	assert.deepEqual(manifest.files, [
+		"llm-router.ts",
+		"exemplars.jsonl",
+		"README.md",
+		"LICENSE",
+		"THIRD_PARTY_NOTICES.md",
+	]);
 });
 
 test("npm release workflow separates verification from OIDC publishing", async () => {
@@ -34,6 +56,7 @@ test("npm release workflow separates verification from OIDC publishing", async (
 	for (const name of packages) {
 		assert.match(workflow, new RegExp(`- "${name}-v\\*"`));
 	}
+	assert.match(workflow, /\^\(proper-base\|proper-flow\|proper-llm-router\)-v/);
 	assert.match(workflow, /^permissions: \{\}$/m);
 	assert.match(workflow, /^ {2}verify:\n[\s\S]*?^ {2}publish:/m);
 	assert.match(workflow, /^ {2}publish:\n[\s\S]*?id-token: write/m);

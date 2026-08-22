@@ -22,9 +22,9 @@ auth files, private endpoints, or machine-specific paths from another user.
 
 Install:
 
-- `proper-base`, `proper-flow`, `proper-llm-router`, and `beads-flow` from this
-  repository.
-- The public Pi packages listed below.
+- `proper-base`, `proper-flow`, and `proper-llm-router` from npm.
+- `beads-flow` from this repository.
+- The other public Pi packages listed below.
 - `ui-ux-pro-max`, `unslop`, and Ponytail's bundled skills.
 - The public `lat.md` and Beads CLIs required by this repository.
 
@@ -87,6 +87,7 @@ These were verified as public npm Pi packages. Install unpinned sources so
 | `@ff-labs/pi-fff` | Adds fast fuzzy file and content search plus FFF-backed file autocomplete. |
 | `pi-context-view` | Adds context usage and hidden-injection inspection. |
 | `proper-base` | Adds this repository's baseline transcript, editor, history, image, cancellation, title, and footer behavior. |
+| `proper-llm-router` | Routes each session's first task to a configured model and applies quota-aware swaps. |
 | `proper-flow` | Adds this repository's `/triage`, `/file`, `/spec`, and `/implement-ready` prompts. |
 
 ```bash
@@ -102,6 +103,7 @@ packages=(
   'npm:@ff-labs/pi-fff'
   'npm:pi-context-view'
   'npm:proper-base'
+  'npm:proper-llm-router'
   'npm:proper-flow'
 )
 
@@ -112,30 +114,25 @@ done
 
 ## 3. Install repository-local resources
 
-`proper-llm-router` is not an npm release. Register this checkout by absolute
-path:
-
-```bash
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-pi install "$REPO_ROOT/proper-llm-router"
-```
-
 Install the Beads formulas and implementation rail. The links point into this
 checkout, so moving or deleting the checkout breaks them.
 
 ```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 "$REPO_ROOT/beads-flow/install.sh" link
 "$REPO_ROOT/beads-flow/install.sh" check
 ```
 
-For extension development, local installs of `proper-base` and `proper-flow`
-may replace their npm installs:
+For extension development, local installs may replace the three npm packages:
 
 ```bash
 pi remove npm:proper-base
+pi remove npm:proper-llm-router
 pi remove npm:proper-flow
 npm --prefix "$REPO_ROOT/proper-base" install
+npm --prefix "$REPO_ROOT/proper-llm-router" install
 pi install "$REPO_ROOT/proper-base"
+pi install "$REPO_ROOT/proper-llm-router"
 pi install "$REPO_ROOT/proper-flow"
 ```
 

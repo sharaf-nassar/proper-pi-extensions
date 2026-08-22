@@ -148,9 +148,16 @@ modified.
 Use Node 22.19 or newer. The extension and `ultra` compatibility layer are
 tested against Pi 0.84.2.
 
-Install the package:
+Install the published package:
 
 ```bash
+pi install npm:proper-llm-router
+```
+
+For extension development, install a local checkout instead:
+
+```bash
+npm --prefix /path/to/proper-pi-extensions/proper-llm-router install
 pi install /path/to/proper-pi-extensions/proper-llm-router
 ```
 

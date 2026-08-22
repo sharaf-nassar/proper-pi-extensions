@@ -5,6 +5,7 @@ on:
     tags:
       - "proper-base-v*"
       - "proper-flow-v*"
+      - "proper-llm-router-v*"
 
 permissions: {}
 
@@ -71,7 +72,7 @@ jobs:
             throw new Error(`Configured release branch ${config.branch} is not ${process.env.DEFAULT_BRANCH}`);
           }
 
-          const match = /^(proper-base|proper-flow)-v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$/.exec(process.env.TAG_NAME);
+          const match = /^(proper-base|proper-flow|proper-llm-router)-v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$/.exec(process.env.TAG_NAME);
           if (!match) throw new Error(`Unsupported npm release tag: ${process.env.TAG_NAME}`);
 
           const packageName = match[1];

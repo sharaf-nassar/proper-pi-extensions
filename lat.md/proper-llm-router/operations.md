@@ -4,13 +4,17 @@ Operating llm-router requires pi registration, a placeholder provider, switchabl
 
 ## Installation contract
 
-Pi loads `llm-router.ts` from the local `proper-llm-router` package.
+The repository directory and public npm package are both named `proper-llm-router`.
 
-Install the package directory with `pi install /path/to/proper-pi-extensions/proper-llm-router`; its `package.json` manifest registers the extension. Remove any former direct `extensions` entry for `llm-router.ts` so only the package source loads. Define provider `llm-router` with model `auto` in `~/.pi/agent/models.json`, and provide pi's required dummy authentication entry.
+Install the published package with `pi install npm:proper-llm-router`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-llm-router`. The manifest registers `llm-router.ts`, limits the tarball to runtime source, the exemplar corpus, user documentation, and required license notices, and declares Pi's coding-agent API as a host-supplied peer.
 
-The CPA models named in the arm catalog in `models.md`, the configured fallback, and every active judge override target must also exist in pi's model registry under provider `cliproxyapi`.
+Remove any former direct `extensions` entry for `llm-router.ts` so only one package source loads. Define provider `llm-router` with model `auto` in `~/.pi/agent/models.json`, and provide Pi's required dummy authentication entry.
 
-There is no build step. Pi loads the TypeScript source directly, while Node uses experimental type stripping for tests. `package.json` and `package-lock.json` pin TypeScript, Node, and pi declarations for strict no-emit diagnostics; they do not produce runtime artifacts.
+The CPA models named in the arm catalog in `models.md`, the configured fallback, and every active judge override target must also exist in Pi's model registry under provider `cliproxyapi`.
+
+There is no build step. Pi loads the TypeScript source directly, while Node uses experimental type stripping for tests. `package.json` and `package-lock.json` pin TypeScript, Node, and Pi declarations for strict no-emit diagnostics; they do not produce runtime artifacts. Package `prepack` runs only offline unit tests and type checking because the live smoke needs external CPA services and credentials.
+
+Releases run from the repository root with `./tools/release-me/release.sh bump <major|minor|patch> proper-llm-router`. The script commits the manifest version and creates `proper-llm-router-vMAJOR.MINOR.PATCH`; [[lat#Package releases]] verifies and publishes that exact tarball through npm trusted publishing after the maintainer-authenticated initial release establishes the package.
 
 ## Repository agent tooling
 

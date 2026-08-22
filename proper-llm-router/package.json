@@ -1,27 +1,61 @@
 {
   "name": "proper-llm-router",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Route each pi session's first task to an appropriate model",
+  "version": "0.1.0",
+  "description": "Route each Pi session's first task to an appropriate model",
   "keywords": [
-    "pi-package"
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "pi-coding-agent",
+    "llm",
+    "model-router",
+    "routing",
+    "quota"
   ],
-  "type": "module",
-  "pi": {
-    "extensions": [
-      "./llm-router.ts"
-    ]
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sharaf-nassar/proper-pi-extensions.git",
+    "directory": "proper-llm-router"
   },
+  "homepage": "https://github.com/sharaf-nassar/proper-pi-extensions/tree/main/proper-llm-router#readme",
+  "bugs": {
+    "url": "https://github.com/sharaf-nassar/proper-pi-extensions/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "module",
+  "files": [
+    "llm-router.ts",
+    "exemplars.jsonl",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
   "scripts": {
+    "prepack": "npm run test:unit && npm run typecheck",
     "test": "npm run test:unit && npm run test:smoke",
     "test:coverage": "node --experimental-strip-types --experimental-test-coverage --test --test-coverage-lines=40 --test-coverage-branches=55 --test-coverage-functions=52 test/*.test.ts",
     "test:smoke": "node --experimental-strip-types smoke.ts",
     "test:unit": "node --experimental-strip-types --test test/*.test.ts",
     "typecheck": "tsc"
   },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.84.2",
     "@types/node": "25.9.5",
     "typescript": "6.0.2"
+  },
+  "pi": {
+    "extensions": [
+      "./llm-router.ts"
+    ]
   }
 }

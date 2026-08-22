@@ -10,7 +10,7 @@ The root is not an installable pi package and has no npm workspace manifest. Pac
 
 Current packages:
 
-- [proper-llm-router](../proper-llm-router/) — routes each session's first task to an appropriate model.
+- [proper-llm-router](../proper-llm-router/) — npm package `proper-llm-router`, routing each session's first task to an appropriate model.
 - [proper-base](../proper-base/) — npm package `proper-base`, providing baseline history, prompt editing, cancellation, fullscreen navigation, image previews, and footer layout.
 - [proper-flow](../proper-flow/) — npm package `proper-flow`, containing triage, bug investigation, specification, and implementation workflow prompts.
 
@@ -57,15 +57,15 @@ The repository regression test discovers every `pi.extensions` manifest entry, f
 
 Package releases use package-scoped tags and npm trusted publishing without stored registry tokens.
 
-`.release-me.json` selects npm mode, requires releases from `main`, and maps `proper-base` and `proper-flow` to their tracked manifests. The shared `tools/release-me/release.sh` requires a package argument only in this mode, derives the version from that manifest, and scopes release notes to the package directory.
+`.release-me.json` selects npm mode, requires releases from `main`, and maps `proper-base`, `proper-llm-router`, and `proper-flow` to their tracked manifests. The shared `tools/release-me/release.sh` requires a package argument only in this mode, derives the version from that manifest, and scopes release notes to the package directory.
 
 A package bump updates only its `package.json`, validates `npm pack`, creates a conventional release commit and annotated `<package>-vMAJOR.MINOR.PATCH` tag, then atomically pushes `main` and the tag. Dry runs change no files or refs. Retagging is disabled because npm versions are immutable.
 
-`.github/workflows/publish-npm.yml` accepts only the two configured package tag prefixes and then applies a strict package/version regex. Its verify job checks that the annotated tag targets a commit on the default branch, matches the config and manifest, runs package `prepack`, and uploads one integrity-described tarball without OIDC permissions.
+`.github/workflows/publish-npm.yml` accepts only the three configured package tag prefixes and then applies a strict package/version regex. Its verify job checks that the annotated tag targets a commit on the default branch, matches the config and manifest, runs package `prepack`, and uploads one integrity-described tarball without OIDC permissions.
 
 The protected publish job downloads and verifies that exact artifact, holds only read plus `id-token: write` permissions, and publishes through npm's GitHub Actions trusted publisher. A separate `contents: write` job creates an idempotent GitHub Release from the tag annotation. Action dependencies are pinned to full commit SHAs.
 
-Both npm packages must trust the `publish-npm.yml` workflow in `sharaf-nassar/proper-pi-extensions` with environment `npm-release`. The GitHub environment and package tag rules supply the human approval and maintainer-only tag boundary; the release maintainer also needs ruleset bypass for the atomic `main` version-commit push. npm token publishing is disabled after the trusted path is proven.
+All three npm packages must trust the `publish-npm.yml` workflow in `sharaf-nassar/proper-pi-extensions` with environment `npm-release`. A brand-new package receives one maintainer-authenticated initial publish because npm cannot configure trust before the package exists; later releases use the protected trusted path. The GitHub environment and package tag rules supply the human approval and maintainer-only tag boundary; the release maintainer also needs ruleset bypass for the atomic `main` version-commit push. npm token publishing is disabled after the trusted path is proven.
 
 ## Repository validation
 

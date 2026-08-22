@@ -96,7 +96,7 @@ There is no fixture-only flag. Every invocation that passes the deterministic as
 
 Strict compiler, lint, and coverage checks prevent new dynamic-data shortcuts from weakening router guarantees.
 
-`npm run typecheck` enables strict mode, exact optional properties, unchecked-index diagnostics, unused checks, fallthrough checks, and no-emit compilation. Biome rejects explicit `any` in runtime source. `npm run test:coverage` requires at least 40% lines, 55% branches, and 52% functions from the focused unit fixtures.
+`npm run typecheck` enables strict mode, exact optional properties, unchecked-index diagnostics, unused checks, fallthrough checks, and no-emit compilation. Biome rejects explicit `any` in runtime source. `npm run test:coverage` requires at least 40% lines, 55% branches, and 52% functions from the focused unit fixtures. Package `prepack` runs `test:unit` plus type checking and deliberately excludes the credentialed live smoke.
 
 ## Current coverage gaps
 

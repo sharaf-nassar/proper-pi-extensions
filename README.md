@@ -31,6 +31,7 @@ Published packages:
 
 ```bash
 pi install npm:proper-base
+pi install npm:proper-llm-router
 pi install npm:proper-flow
 ```
 
@@ -50,9 +51,10 @@ pi install ./proper-llm-router
 pi install ./proper-flow
 ```
 
-Pi supplies proper-base's core peer packages. Its local `npm install` prepares
-development tooling and seeds the optional pi-subagents worker default. Each
-package README lists its remaining setup and runtime requirements.
+Pi supplies the extensions' core peer packages. proper-base's local
+`npm install` prepares development tooling and seeds the optional pi-subagents
+worker default. Each package README lists its remaining setup and runtime
+requirements.
 
 ## Release npm packages
 
@@ -61,6 +63,7 @@ shared script from the repository root with the package name:
 
 ```bash
 ./tools/release-me/release.sh bump patch proper-base
+./tools/release-me/release.sh bump patch proper-llm-router
 ./tools/release-me/release.sh bump minor proper-flow
 ./tools/release-me/release.sh bump --dry-run patch proper-base
 ./tools/release-me/release.sh latest proper-flow
@@ -71,8 +74,10 @@ the version, creates an annotated `<package>-vX.Y.Z` tag, and atomically pushes
 `main` plus the tag. The tag starts `.github/workflows/publish-npm.yml`, which
 verifies and packs without OIDC permissions, publishes the exact tarball through
 npm trusted publishing, then creates a GitHub Release from the tag annotation.
+A brand-new package needs one maintainer-authenticated initial publish before
+npm allows trusted-publisher configuration; later versions use only this flow.
 
-Configure both npm packages with the same trusted publisher:
+Configure all three npm packages with the same trusted publisher:
 
 - GitHub repository: `sharaf-nassar/proper-pi-extensions`
 - Workflow: `publish-npm.yml`
@@ -80,8 +85,8 @@ Configure both npm packages with the same trusted publisher:
 - Allowed action: npm publish
 
 Protect the GitHub `npm-release` environment with a required reviewer and
-restrict creation or deletion of `proper-base-v*` and `proper-flow-v*` tags to
-maintainers. Main-branch rules must allow the release maintainer to bypass a
+restrict creation or deletion of `proper-base-v*`, `proper-llm-router-v*`, and
+`proper-flow-v*` tags to maintainers. Main-branch rules must allow the release maintainer to bypass a
 PR-only rule for the script's atomic version-commit plus tag push. After the
 first trusted release succeeds, set each npm package to disallow token
 publishing.
