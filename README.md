@@ -4,6 +4,11 @@ Local [Pi](https://pi.dev) packages and Beads workflow support. The repository
 root is not a Pi package or npm workspace; install only the package directories
 you use.
 
+Agents configuring a complete user environment should follow
+[Complete Pi setup](./PI_SETUP.md). It installs this repository, the verified
+public extension set, UI/UX Pro Max, Unslop, and Ponytail without copying local
+credentials or private integrations.
+
 ## Packages and bundles
 
 | Folder | Type | User-facing behavior |

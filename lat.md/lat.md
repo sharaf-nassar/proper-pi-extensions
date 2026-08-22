@@ -35,6 +35,18 @@ The npm manifests use the `pi-package` keyword, explicit `pi.extensions` or `pi.
 
 A package install replaces any legacy direct-file registration for the same extension. Keeping both entries can load the extension twice; keeping only the stale path can make Pi fail during startup after a move.
 
+## Complete user setup
+
+[PI_SETUP.md](../PI_SETUP.md) is the agent-facing runbook for reproducing the repository maintainer's public Pi environment without copying machine secrets or private integrations.
+
+The runbook installs the repository packages and Beads support, the verified public npm extension set, `lat.md`, Beads, UI/UX Pro Max, Unslop, and Ponytail. Package installs remain unpinned so Pi can update them; the documented list records sources and user-facing purpose.
+
+Settings changes are merge-only and limited to fullscreen TUI, skill commands, and the safe default for subagent worker context. Provider, trust, telemetry, proxy, image model, and credential choices remain user decisions.
+
+CLIProxyAPI and llm-router setup uses a non-serving `llm-router/auto` placeholder plus user-entered provider credentials. The runbook never writes real keys. It explicitly excludes Quill, Scribe, the superseded Ctrl+C extension, and the local lat extension fork.
+
+Verification covers Pi package registration, Beads links, lat validation, skill discovery, router/provider health, image configuration, MCP, FFF, context view, Ponytail, and proper-flow prompt discovery.
+
 ## Runtime responsiveness
 
 Runtime extension entrypoints must not synchronously wait on child processes because Pi's terminal rendering and tool execution share the Node event loop.

@@ -47,7 +47,7 @@ test("npm release workflow separates verification from OIDC publishing", async (
 	assert.match(workflow, /test -z "\$\(git status --porcelain\)"/);
 	assert.match(workflow, /npm publish "\$PWD\/\$TARBALL" --access public/);
 	assert.match(workflow, /gh release create "\$TAG_NAME"/);
-	assert.match(workflow, /git tag -l --format='\%\(contents\)'/);
+	assert.match(workflow, /git tag -l --format='%\(contents\)'/);
 	assert.match(workflow, /--notes-file "\$notes_file"/);
 	assert.doesNotMatch(workflow, /--notes-from-tag/);
 	assert.match(workflow, /actions\/checkout@[0-9a-f]{40} # v7\.0\.1/);

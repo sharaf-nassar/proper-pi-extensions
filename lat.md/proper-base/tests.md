@@ -98,7 +98,7 @@ One case proves the extra row appears only while the viewport is scrolled away f
 
 A session integration fixture verifies the rearranged footer keeps its model, effort, and usage rows inside a safe terminal width.
 
-The same fixture verifies distinct colors for path, branch, input, output, cache read/write/hit, cost, context, model, and effort; context changes at warning and danger thresholds; a narrow row retains `xhigh`; max and ultra animate; and shutdown restores the native footer without stale context access.
+The same fixture verifies distinct colors for path, branch, input, output, cache read/write/hit, cost, context, model, and effort; context changes at warning and danger thresholds; a narrow row retains `xhigh`; max and ultra animate; and shutdown restores the native footer without stale context access. It also replaces an inherited prototype renderer after shutdown and verifies the reused footer picks up the replacement instead of retaining proper-base's stale captured function.
 
 ## Early cancellation fixture
 

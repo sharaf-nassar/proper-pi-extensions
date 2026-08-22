@@ -193,6 +193,10 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 		assert.ok(ultra.split("\x1b[38;2;").length - 1 >= 6);
 
 		await onSessionShutdown?.({}, ctx);
+		const replacementRender = () => ["gpt-5.6-sol • low • fast"];
+		FooterComponent.prototype.render = replacementRender;
+		assert.equal(Object.hasOwn(footer, "render"), false);
+		assert.equal(footer.render, replacementRender);
 		stale = true;
 		assert.doesNotThrow(() => footer.render());
 	} finally {

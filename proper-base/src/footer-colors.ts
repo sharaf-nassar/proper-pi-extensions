@@ -75,6 +75,7 @@ export function installFooterColors(
 
 	let state = { ctx, tui };
 	let timer: ReturnType<typeof setInterval> | undefined;
+	const ownsRender = Object.hasOwn(footer, "render");
 	const render = footer.render;
 	const dispose = footer.dispose;
 	const stopAnimation = () => {
@@ -101,7 +102,8 @@ export function installFooterColors(
 		uninstall() {
 			if (footer[INSTALLED] !== controller) return;
 			stopAnimation();
-			footer.render = render;
+			if (ownsRender) footer.render = render;
+			else Reflect.deleteProperty(footer, "render");
 			if (dispose) footer.dispose = dispose;
 			else delete footer.dispose;
 			delete footer[INSTALLED];

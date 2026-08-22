@@ -190,7 +190,7 @@ When the stats row contains a dollar cost, cumulative input, output, cache, cach
 
 After layout, stable low-chroma truecolors identify each metric without changing its label: slate path, sage branch, steel-blue input, sage output, lavender cache read, clay cache write, teal cache hit, ochre cost, and dusty-rose context. Context becomes amber above 70% and muted red above 90%. The active model stays purple; off through xhigh use pi's semantic thinking-level colors, and maximum effort uses the animation above. Extension statuses and components other than the built-in footer are not modified.
 
-`session_shutdown` restores the built-in footer methods and stops the animation before pi invalidates the outgoing extension context. The replacement session can therefore render its native footer during rebinding without touching a stale captured context, then install fresh decoration from its new `session_start`.
+`session_shutdown` restores the built-in footer methods and stops the animation before pi invalidates the outgoing extension context. If `render()` was inherited, cleanup removes proper-base's instance override instead of assigning the captured prototype function. A reused footer can therefore observe prototype decorations reinstalled by other extensions, including CLIProxyAPI's Fast label, while the replacement session binds fresh proper-base decoration without touching stale context.
 
 ## Early prompt cancellation
 
