@@ -233,7 +233,7 @@ jobs:
             test "$published_integrity" = "$EXPECTED_INTEGRITY"
             echo "${EXPECTED_PACKAGE}@${EXPECTED_VERSION} is already published with this tarball."
           elif [[ "$view_output" == *"E404"* ]]; then
-            npm publish "$TARBALL" --access public
+            npm publish "$PWD/$TARBALL" --access public
           else
             echo "$view_output" >&2
             exit "$view_status"
