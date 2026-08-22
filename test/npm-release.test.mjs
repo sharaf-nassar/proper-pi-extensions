@@ -43,6 +43,7 @@ test("npm release workflow separates verification from OIDC publishing", async (
 	);
 	assert.match(workflow, /environment: npm-release/);
 	assert.doesNotMatch(workflow, /registry-url:/);
+	assert.match(workflow, /npm pack "\.\/\$PACKAGE_PATH"/);
 	assert.match(workflow, /test -z "\$\(git status --porcelain\)"/);
 	assert.match(workflow, /npm publish "\$TARBALL" --access public/);
 	assert.match(workflow, /gh release create "\$TAG_NAME"/);

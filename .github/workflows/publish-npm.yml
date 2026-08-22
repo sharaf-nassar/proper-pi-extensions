@@ -119,7 +119,7 @@ jobs:
           set -euo pipefail
           artifact_dir="$RUNNER_TEMP/npm-release"
           mkdir -p "$artifact_dir"
-          npm pack "$PACKAGE_PATH" --pack-destination "$artifact_dir" --json > "$artifact_dir/pack.json"
+          npm pack "./$PACKAGE_PATH" --pack-destination "$artifact_dir" --json > "$artifact_dir/pack.json"
           test -z "$(git status --porcelain)"
 
           ARTIFACT_DIR="$artifact_dir" node <<'NODE'
