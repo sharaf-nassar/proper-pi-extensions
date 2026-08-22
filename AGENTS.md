@@ -15,7 +15,8 @@ implementation rail). Root is NOT an npm package/workspace — use
 - Validation-policy edits, test deletions, and suppression directives are
   guarded: they fail pre-commit unless a HUMAN reviews and applies
   `ALLOW_POLICY_CHANGES=1`. Never set it yourself.
-- No CI — the pre-commit/pre-push gates are the only enforcement.
+- Pre-commit/pre-push remain the development gates. GitHub Actions runs only
+  the protected npm trusted-publishing release path.
 
 ## Build, test, gates
 
@@ -41,6 +42,11 @@ package, tsc typechecks, npm pack dry-runs, exemplars JSON parse,
 `lat check`). Full swaps in coverage-thresholded tests and adds
 `npm audit`, `npm audit signatures`, osv-scanner, and the router live
 smoke. No build step exists anywhere.
+
+Package releases use `.release-me.json` and package-scoped tags. Run
+`./tools/release-me/release.sh bump <part> <package>` from the repo root. The
+GitHub release workflow verifies and packs without OIDC, then publishes the
+exact artifact from a protected `npm-release` environment.
 
 - Router live smoke (`npm run test:smoke` in proper-llm-router/) needs a
   reachable judge/CPA at `http://127.0.0.1:8317` and

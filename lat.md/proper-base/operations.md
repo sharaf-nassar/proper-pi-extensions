@@ -14,6 +14,8 @@ Install the published package with `pi install npm:proper-base`, or install this
 
 Runtime `Symbol.for` keys and private process links retain their `pi-proper-base` namespace so existing reload guards and clickable transcript targets stay compatible; that internal namespace is not the npm package name.
 
+Releases run from the repository root with `./tools/release-me/release.sh bump <major|minor|patch> proper-base`. The script commits the manifest version and creates `proper-base-vMAJOR.MINOR.PATCH`; [[lat#Package releases]] verifies and publishes that exact tarball through npm trusted publishing.
+
 ## Seeded user settings
 
 Pi has no package install hook, so a default that another extension reads only from `~/.pi/agent/settings.json` is written by the npm `postinstall` script. No session ever writes it.

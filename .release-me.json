@@ -1,0 +1,8 @@
+{
+  "type": "npm",
+  "branch": "main",
+  "packages": {
+    "proper-base": "proper-base/package.json",
+    "proper-flow": "proper-flow/package.json"
+  }
+}

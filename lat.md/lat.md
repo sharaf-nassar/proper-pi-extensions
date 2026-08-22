@@ -41,6 +41,20 @@ Runtime extension entrypoints must not synchronously wait on child processes bec
 
 The repository regression test discovers every `pi.extensions` manifest entry, follows its relative runtime imports, and rejects Node's synchronous child-process APIs. Install scripts, smoke commands, and repository hooks are outside that runtime graph.
 
+## Package releases
+
+Package releases use package-scoped tags and npm trusted publishing without stored registry tokens.
+
+`.release-me.json` selects npm mode, requires releases from `main`, and maps `proper-base` and `proper-flow` to their tracked manifests. The shared `tools/release-me/release.sh` requires a package argument only in this mode, derives the version from that manifest, and scopes release notes to the package directory.
+
+A package bump updates only its `package.json`, validates `npm pack`, creates a conventional release commit and annotated `<package>-vMAJOR.MINOR.PATCH` tag, then atomically pushes `main` and the tag. Dry runs change no files or refs. Retagging is disabled because npm versions are immutable.
+
+`.github/workflows/publish-npm.yml` accepts only the two configured package tag prefixes and then applies a strict package/version regex. Its verify job checks that the annotated tag targets a commit on the default branch, matches the config and manifest, runs package `prepack`, and uploads one integrity-described tarball without OIDC permissions.
+
+The protected publish job downloads and verifies that exact artifact, holds only read plus `id-token: write` permissions, and publishes through npm's GitHub Actions trusted publisher. A separate `contents: write` job creates an idempotent GitHub Release from the tag annotation. Action dependencies are pinned to full commit SHAs.
+
+Both npm packages must trust the `publish-npm.yml` workflow in `sharaf-nassar/proper-pi-extensions` with environment `npm-release`. The GitHub environment and package tag rules supply the human approval and maintainer-only tag boundary; the release maintainer also needs ruleset bypass for the atomic `main` version-commit push. npm token publishing is disabled after the trusted path is proven.
+
 ## Repository validation
 
 Shared repository hooks run pinned format, lint, secret, package, test, type, documentation, and dependency checks before changes leave a checkout.
@@ -49,6 +63,6 @@ Git uses `.beads/hooks` through `core.hooksPath`. The Beads-managed `pre-commit`
 
 Biome enforces formatting, recommended lint rules, JSON syntax and duplicate-key checks, explicit-any rejection in runtime source, and focused or skipped test rejection. Both TypeScript packages enable strict diagnostics, unchecked-index checks, exact optional properties, unused checks, and no-emit compilation. Markdown, shell, YAML, TOML, spelling, file hygiene, package-lock consistency, package contents, and lat.md links are also checked.
 
-`scripts/policy-guard.mjs` rejects staged edits to hook and validation policy, deleted tests, and new suppression directives unless a human deliberately sets `ALLOW_POLICY_CHANGES=1`. Package manifests are not guarded — `package.json` edits pass while `package-lock.json` stays protected — and lock consistency is separately enforced by the package-lock hook. The `prepare-commit-msg` shim runs the committed guard when possible so a staged guard cannot approve itself.
+`scripts/policy-guard.mjs` rejects staged edits to hook, validation, and npm release policy, deleted tests, and new suppression directives unless a human deliberately sets `ALLOW_POLICY_CHANGES=1`. Package manifests are not guarded — `package.json` edits pass while package locks, `.release-me.json`, and GitHub workflow files stay protected — and lock consistency is separately enforced by the package-lock hook. The `prepare-commit-msg` shim runs the committed guard when possible so a staged guard cannot approve itself.
 
-These local controls are friction, not a security boundary. A process with the developer's filesystem and Git permissions can replace hooks, change `core.hooksPath`, or bypass Git porcelain; authoritative enforcement requires a remote pre-receive policy or protected CI rules.
+These local controls are friction, not a security boundary. A process with the developer's filesystem and Git permissions can replace hooks, change `core.hooksPath`, or bypass Git porcelain. Protected package-tag rules, the reviewed `npm-release` environment, and npm's exact trusted-publisher binding are the remote publication boundary.

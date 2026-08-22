@@ -10,6 +10,8 @@ Install the published package with `pi install npm:proper-flow`, or install the 
 
 The npm manifest uses the `pi-package` discovery keyword, limits the tarball to prompts and user documentation, points repository metadata at the `proper-flow` monorepo directory, and publishes only to the public npm registry. Its `prepack` script runs the package contract test before tarball creation or publication.
 
+Releases run from the repository root with `./tools/release-me/release.sh bump <major|minor|patch> proper-flow`. The script commits the manifest version and creates `proper-flow-vMAJOR.MINOR.PATCH`; [[lat#Package releases]] verifies and publishes that exact tarball through npm trusted publishing.
+
 ## Source migration
 
 The package directory is the source of truth for all four workflow prompts.

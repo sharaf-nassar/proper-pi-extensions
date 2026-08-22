@@ -30,6 +30,11 @@ test("policy guard blocks validation edits and suppression shortcuts", () => {
 	assert.equal(isProtectedPolicyPath("proper-base/package-lock.json"), true);
 	assert.equal(isProtectedPolicyPath("proper-base/package.json"), false);
 	assert.equal(isProtectedPolicyPath("CLAUDE.md"), true);
+	assert.equal(
+		isProtectedPolicyPath(".github/workflows/publish-npm.yml"),
+		true,
+	);
+	assert.equal(isProtectedPolicyPath(".release-me.json"), true);
 	assert.equal(isProtectedPolicyPath("scripts/check-repo.mjs"), true);
 	assert.equal(isProtectedPolicyPath("proper-base/src/history.ts"), false);
 

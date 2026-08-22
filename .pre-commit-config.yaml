@@ -27,6 +27,7 @@ repos:
       - id: check-yaml
       - id: detect-private-key
       - id: forbid-submodules
+        exclude: ^tools/release-me$
       - id: mixed-line-ending
         args: [--fix=lf]
 

@@ -49,6 +49,38 @@ Pi supplies proper-base's core peer packages. Its local `npm install` prepares
 development tooling and seeds the optional pi-subagents worker default. Each
 package README lists its remaining setup and runtime requirements.
 
+## Release npm packages
+
+`.release-me.json` opts this repository into package-aware releases. Run the
+shared script from the repository root with the package name:
+
+```bash
+./tools/release-me/release.sh bump patch proper-base
+./tools/release-me/release.sh bump minor proper-flow
+./tools/release-me/release.sh bump --dry-run patch proper-base
+./tools/release-me/release.sh latest proper-flow
+```
+
+The script updates the selected package version, validates its tarball, commits
+the version, creates an annotated `<package>-vX.Y.Z` tag, and atomically pushes
+`main` plus the tag. The tag starts `.github/workflows/publish-npm.yml`, which
+verifies and packs without OIDC permissions, publishes the exact tarball through
+npm trusted publishing, then creates a GitHub Release from the tag annotation.
+
+Configure both npm packages with the same trusted publisher:
+
+- GitHub repository: `sharaf-nassar/proper-pi-extensions`
+- Workflow: `publish-npm.yml`
+- Environment: `npm-release`
+- Allowed action: npm publish
+
+Protect the GitHub `npm-release` environment with a required reviewer and
+restrict creation or deletion of `proper-base-v*` and `proper-flow-v*` tags to
+maintainers. Main-branch rules must allow the release maintainer to bypass a
+PR-only rule for the script's atomic version-commit plus tag push. After the
+first trusted release succeeds, set each npm package to disallow token
+publishing.
+
 ## Repository internals
 
 | Folder | Purpose |

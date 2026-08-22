@@ -9,6 +9,8 @@ const PROTECTED_PATHS = [
 	/^\.claude\/settings\.json$/,
 	/^\.codex\/(?:config\.toml|hooks\.json)$/,
 	/^\.cursor\/hooks\.json$/,
+	/^\.github\/workflows\/[^/]+\.ya?ml$/,
+	/^\.release-me\.json$/,
 	/^\.markdownlint-cli2\.jsonc$/,
 	/^\.pre-commit-config\.yaml$/,
 	/^_typos\.toml$/,
