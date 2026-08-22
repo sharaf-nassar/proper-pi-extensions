@@ -6,7 +6,7 @@ Routing is a one-shot session state machine around pi's startup, model-selection
 
 The selected provider is the routing state: input is armed only while the current model belongs to `llm-router`.
 
-On `startup` and `new`, `session_start` switches to `llm-router/auto` only when the current model belongs to another provider. A successful route selects `cliproxyapi`, which naturally disarms later input. `/llm-router` or manual selection of the placeholder provider naturally re-arms it.
+On `startup` and `new`, `session_start` switches to `llm-router/auto` only when the current model belongs to another provider. A successful route selects any authenticated non-router provider, which naturally disarms later input. `/llm-router` or manual placeholder selection re-arms it.
 
 Resumed sessions are never forcibly moved to `llm-router/auto`, so they stay on the model they were left with.
 
@@ -31,25 +31,29 @@ A pin wins over a sentinel when both appear in one command. Because the pin path
 
 ## Judged route
 
-`route()` combines the measured rubric, optional exemplar note, judge verdict, and concurrent availability probe.
+`route()` combines the measured rubric, optional exemplar note, judge verdict, and concurrent registry and optional CPA availability checks.
 
 The judge receives seven stable arm selection keys. Configured model overrides replace source-arm labels throughout the rubric and exemplar note, but the schema still returns the source key. After the verdict, `resolveVerdictModel()` keeps the slot, swaps it to a fixed partner, or throws when both choices are unavailable.
 
-The final slot is then mapped to its configured CPA target. An overridden verdict exposes the target in `model` and `cpa_model` and records the slot in `overridden_from`. The down-arm list remains keyed by semantic slots and combines missing effective CPA models, threshold blocks, and simulated unavailability.
+The final slot maps to a resolved provider and model. The verdict exposes `arm`, `provider`, and `model`; an override records the source slot in `overridden_from`. `arms_unavailable` stays keyed by semantic slots and combines missing registry targets, CPA serving or quota failures, and simulation.
 
 The measured latency covers both the judge request and the concurrent availability work because routing waits for both. Lazy exemplar loading and note construction happen before the timer and are excluded.
 
 ## Judge protocol
 
-The judge endpoint must implement OpenAI-compatible chat completions with strict JSON Schema output.
+The judge can run through Pi's configured provider runtime or an OpenAI-compatible chat-completions endpoint.
 
-The request requires `model` and `rationale`, rejects extra fields, and limits `model` to the seven stable arm keys. The selected arm already determines the lane, so the protocol carries no duplicate harness field. Override targets appear only in the system-message labels, paired with their required selection keys. The user task is truncated to 4,000 characters. The rationale schema permits 500 characters; the UI displays at most 150.
+Both transports require `model` and `rationale`, reject extra fields, and limit `model` to the seven stable arm keys. Override targets appear only in system-message labels, paired with their selection keys. The task is truncated to 4,000 characters. Rationale permits 500 characters; UI displays 150.
 
-The router adds `reasoning_effort` only when configured and adds `service_tier: "priority"` only when `judge.fast` is enabled; whether that tier takes effect is up to the endpoint and model. It makes at most two 60-second attempts. Empty content, invalid JSON, HTTP errors, and transport errors consume an attempt; user cancellation does not.
+A provider-qualified judge model always uses `ctx.modelRegistry.complete()`. When CPA is absent, an unqualified judge model also uses Pi if it resolves among authenticated models. This path forces one strict `route_model` tool call and delegates auth, endpoint, and provider serialization to Pi.
+
+Otherwise the router preserves the raw HTTP path at `<judge.baseUrl>/chat/completions` with strict `response_format` JSON Schema. This keeps existing CPA and compatible custom endpoint configurations working.
+
+The router maps configured effort and optional priority service to the selected judge transport. It makes at most two 60-second attempts. Missing or invalid structured output, provider errors, HTTP errors, and transport errors consume an attempt; user cancellation does not.
 
 ## Direct routes
 
-Command pins and sentinels skip the judge and its model overrides but still consult availability.
+Command pins and sentinels skip the judge and its model overrides but still resolve authenticated targets and consult optional CPA checks.
 
 `commandPin()` runs only while the selected provider is `llm-router`. A pinned command on a later turn does not change models; reselect `llm-router/auto` first when the command must route a new session choice.
 
@@ -57,7 +61,7 @@ A successful pin applies its configured thinking level after the model switch. A
 
 Sentinel parsing consumes only the first marker, wherever it appears in the text. Later markers remain part of the task. The first marker is also removed before judged fallback when its name is unknown or its direct model cannot be selected.
 
-Pins and sentinels share `quotaFinal()`, so their quota failure policy is identical. The helper deliberately fails open: if the probe fails or both the requested arm and its partner are down, the direct path keeps the requested arm and shows a warning instead of blocking the prompt.
+Pins and sentinels share `directFinal()`, so their failure policy is identical. If no swap is usable, the direct path keeps the requested target when it exists and shows a warning instead of blocking the prompt.
 
 If a resolved pinned model is absent from the registry or cannot be selected, routing resumes at the remaining precedence rules. A bare command then uses `fallbackModel`; a command with arguments proceeds to sentinel handling or the judge.
 
@@ -71,11 +75,11 @@ This is the one path that fails silently. If the fallback model is missing from 
 
 ## Registry lookup
 
-Every switch path resolves an arm's CPA model ID through pi's model registry with one tolerance for dated identifiers.
+Every switch path resolves model IDs through Pi's authenticated model registry.
 
-The lookup asks for the exact ID under provider `cliproxyapi`, then accepts a registered model whose ID begins with that ID followed by a hyphen. A registry entry such as `claude-sonnet-5-20250929` therefore satisfies the `claude-sonnet-5` arm without editing the arm catalog.
+A `provider/model-id` value resolves only under that provider. An unqualified ID prefers `cliproxyapi`, then the direct provider for its model family, with a stable provider/name tie-break. Exact IDs beat `-suffix` and `@suffix` dated variants.
 
-A judged verdict whose effective target has no registry entry retries the lookup with `fallbackModel`. The route notice is composed before this registry fallback, so it can name an overridden target while pi's model footer shows the fallback actually selected.
+A judged verdict whose effective target cannot be selected retries lookup with `fallbackModel`. The fallback may also be provider-qualified.
 
 This retry applies only when lookup returns no target. If the verdict model exists but `pi.setModel` rejects it, the handler reports failure and does not try `fallbackModel`.
 
@@ -87,9 +91,9 @@ Pressing Esc during judging aborts the active request, consumes the terminal inp
 
 Cancellation depends on `ctx.ui.onTerminalInput`. On a pi build without it the handler subscribes to nothing and judging always runs to completion. Esc aborts only the judge request; the concurrent availability probe is not passed that signal and may continue until its own timeout.
 
-Any other judged-path failure selects `fallbackModel` and shows an error notice. This includes judge failure, CPA availability failure, an invalid verdict, and the case where both a verdict arm and its swap target are unavailable. Fallback selection uses registry lookup only; it does not re-run availability or quota checks for `fallbackModel`.
+Any other judged-path failure selects `fallbackModel` and shows an error notice. This includes judge failure, invalid structured output, and both a verdict arm and its swap target being unavailable. Fallback selection uses authenticated registry lookup only; it does not re-run CPA checks for the fallback.
 
-The registry must contain a switchable target or fallback CPA model. If neither can be found, the extension reports an error and remains on the placeholder provider; the placeholder-avoidance invariant then depends on correcting the registry before retrying.
+The registry must contain a switchable target or fallback model. If neither can be found, the extension reports an error and remains on the placeholder provider; correct model authentication or configuration before retrying.
 
 ## Subagent behavior
 

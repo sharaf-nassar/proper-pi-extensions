@@ -1,10 +1,10 @@
 /**
  * llm-router pi extension — fully self-contained (2026-08-15).
  *
- * All routing lives HERE: judge call, CPA quota probe, backup-chain
- * resolution, exemplar few-shot. No python subprocess, no shim. Every
- * first input of a session (typed or slash command) is routed: the judge
- * picks an arm and the session switches to that cliproxyapi model.
+ * All routing lives HERE: judge call, optional CPA quota probe,
+ * backup-chain resolution, exemplar few-shot. No python subprocess, no
+ * shim. Every first input of a session (typed or slash command) is routed:
+ * the judge picks an arm and the session switches to an available Pi model.
  * Re-selecting llm-router/auto re-arms.
  *
  * Subagent children (pi-subagents) load this extension too: session_start
@@ -26,15 +26,15 @@
  *   "judge": { "baseUrl": "...", "apiKeyEnv": "...", "model": "...",
  *              "effort": "medium" | null,    // any OpenAI-compatible
  *              "fast": false },              // priority service tier
- *   "fallbackModel": "gpt-5.6-terra",         // used when the judge fails
- *   "cpaBase": "http://127.0.0.1:8317",       // arm availability probe
+ *   "fallbackModel": "gpt-5.6-terra",         // id or provider/id
+ *   "cpaBase": "http://127.0.0.1:8317",       // optional CPA availability probe
  *   "cpaKeyEnv": "ANTHROPIC_AUTH_TOKEN",
  *   "exemplarsPath": ".../exemplars.jsonl",   // optional few-shot corpus
  *   "quotaMaxPct": null,                      // gate: exclude arms >= this % used
  *   "cpaManagementKey": "",                   // plaintext; env fallback below
  *   "cpaManagementKeyEnv": "CPA_MANAGEMENT_KEY",
- *   "judgeModelOverrides": {                  // arm slot -> enabled CPA model
- *     "claude-fable-5": "another-enabled-model"
+ *   "judgeModelOverrides": {                  // arm slot -> id or provider/id
+ *     "claude-fable-5": "anthropic/claude-fable-5"
  *   },
  *   "commandPins": {                          // slash command -> fixed arm,
  *     "file": { "model": "claude-fable-5", "effort": "xhigh" }  // judge skipped
@@ -42,19 +42,19 @@
  * }
  *
  * Quota: the judge is NEVER menu-filtered — it always sees all 7 slots.
- * Availability is checked after the verdict (probes run concurrently
- * with the judge call): CPA's /v1/models listing, plus — with
- * quotaMaxPct set and the CPA management key configured
- * (cpaManagementKey, or the env fallback) — per-account usage through
- * CPA's management api-call passthrough (claude: oauth/usage windows
+ * Availability is checked after the verdict (checks run concurrently
+ * with the judge call). Pi's authenticated model registry covers every
+ * provider. CPA-backed targets additionally use CPA's /v1/models listing
+ * and, when quotaMaxPct plus a management key are configured, per-account
+ * usage through CPA's management api-call passthrough (claude: oauth/usage
  * incl. per-model 7d; codex: wham/usage used_percent). An out-of-quota
- * pick swaps to its fixed cross-harness partner (fable<->sol,
+ * pick swaps to its fixed cross-lane partner (fable<->sol,
  * opus<->terra, sonnet->luna, haiku<->luna); both sides dead falls back
- * to fallbackModel. Usage is cached 60s; any probe failure skips the
- * threshold gate rather than blocking routing.
- * The judge needs strict json_schema response_format support; effort maps
- * to reasoning_effort (null for non-reasoning judges). Point judge.baseUrl
- * at another provider to keep routing when CPA is down.
+ * to fallbackModel. Usage is cached 60s; usage failures skip the threshold
+ * gate, while catalog failures mark only CPA targets unavailable.
+ * Registry judges use one strict tool call; raw endpoints need strict
+ * json_schema response_format support. Point judge.baseUrl at any compatible
+ * provider; execution does not require CPA.
  *
  * session_start forces fresh sessions back to llm-router/auto because pi
  * persists the last-set model as the default (LLM_ROUTER_OFF=1 disables).
@@ -85,8 +85,7 @@ export interface JudgeConfig {
 	apiKeyEnv: string;
 	model: string;
 	effort: string | null;
-	// send service_tier "priority" on judge requests (CPA fast lane; only
-	// effective for catalog models that support it, e.g. gpt-5.6-*)
+	// request the provider's priority service tier when supported
 	fast: boolean;
 }
 // Pi 0.84.2 stops at max, while CLIProxyAPI already advertises ultra for
@@ -230,7 +229,7 @@ async function installUltraThinkingShim(): Promise<boolean> {
 
 export const ULTRA_THINKING_SHIM_INSTALLED = await installUltraThinkingShim();
 export interface CommandPin {
-	model: string; // arm key, CPA id, or unique fragment (resolveArm)
+	model: string; // arm key, model id, or unique fragment (resolveArm)
 	effort: ThinkingLevel | null; // null = leave the session's thinking level
 }
 export interface Config {
@@ -245,8 +244,8 @@ export interface Config {
 	quotaMaxPct: number | null;
 	cpaManagementKey: string;
 	cpaManagementKeyEnv: string;
-	// replace a judge arm's execution model while preserving that arm's
-	// rubric use cases and stable schema selection key
+	// replace a judge arm's execution model with an id or provider/id while
+	// preserving that arm's rubric use cases and stable schema selection key
 	judgeModelOverrides: Record<string, string>;
 	// slash commands routed without asking the judge (key = command name,
 	// leading "/" optional). Quota swaps still apply to the pinned arm.
@@ -301,15 +300,90 @@ export function saveConfig(cfg: Config): void {
 
 // ---------------------------------------------------------------- arms
 const ARMS = {
-	"claude-haiku-4-5": { cpa: "claude-haiku-4-5-20251001" },
-	"claude-sonnet-5": { cpa: "claude-sonnet-5" },
-	"claude-opus-5": { cpa: "claude-opus-5" },
-	"claude-fable-5": { cpa: "claude-fable-5" },
-	"gpt-5-6-luna": { cpa: "gpt-5.6-luna" },
-	"gpt-5-6-terra": { cpa: "gpt-5.6-terra" },
-	"gpt-5-6-sol": { cpa: "gpt-5.6-sol" },
+	"claude-haiku-4-5": { model: "claude-haiku-4-5" },
+	"claude-sonnet-5": { model: "claude-sonnet-5" },
+	"claude-opus-5": { model: "claude-opus-5" },
+	"claude-fable-5": { model: "claude-fable-5" },
+	"gpt-5-6-luna": { model: "gpt-5.6-luna" },
+	"gpt-5-6-terra": { model: "gpt-5.6-terra" },
+	"gpt-5-6-sol": { model: "gpt-5.6-sol" },
 } as const;
 type Arm = keyof typeof ARMS;
+
+export interface ModelTarget {
+	provider: string;
+	id: string;
+}
+
+type RegistryModel = ReturnType<
+	ExtensionContext["modelRegistry"]["getAvailable"]
+>[number];
+type ArmTargets = Partial<Record<Arm, ModelTarget>>;
+
+function modelIdRank(candidate: string, wanted: string): number {
+	const id = candidate.toLowerCase();
+	const target = wanted.toLowerCase();
+	if (id === target) return 0;
+	return id.startsWith(`${target}-`) || id.startsWith(`${target}@`) ? 1 : 2;
+}
+
+/** Resolve id or provider/id against Pi's authenticated model snapshot.
+ * Unqualified duplicate IDs prefer CPA for backward compatibility, then
+ * the direct provider for that model family. */
+export function resolveModelTarget<T extends ModelTarget>(
+	name: string,
+	models: readonly T[],
+): T | undefined {
+	const value = name.trim();
+	if (!value) return undefined;
+	const slash = value.indexOf("/");
+	const explicit = slash > 0;
+	const provider = explicit ? value.slice(0, slash) : undefined;
+	const wanted = explicit ? value.slice(slash + 1) : value;
+	const family = wanted.toLowerCase();
+	const preferred = family.includes("claude")
+		? [
+				CPA_PROVIDER,
+				"anthropic",
+				"amazon-bedrock",
+				"google-vertex",
+				"anthropic-vertex",
+				"github-copilot",
+			]
+		: family.includes("gpt")
+			? [
+					CPA_PROVIDER,
+					"openai-codex",
+					"openai",
+					"azure-openai-responses",
+					"github-copilot",
+				]
+			: [CPA_PROVIDER];
+	return models
+		.filter(
+			(model) =>
+				(!explicit || model.provider === provider) &&
+				modelIdRank(model.id, wanted) < 2,
+		)
+		.sort((a, b) => {
+			const ap = preferred.indexOf(a.provider);
+			const bp = preferred.indexOf(b.provider);
+			const providerRank =
+				(ap < 0 ? preferred.length : ap) - (bp < 0 ? preferred.length : bp);
+			if (!explicit && providerRank) return providerRank;
+			const id = modelIdRank(a.id, wanted) - modelIdRank(b.id, wanted);
+			return (
+				id ||
+				providerRank ||
+				`${a.provider}/${a.id}`.localeCompare(`${b.provider}/${b.id}`)
+			);
+		})
+		.at(0);
+}
+
+function cpaConfigured(models: readonly ModelTarget[]): boolean {
+	return models.some((model) => model.provider === CPA_PROVIDER);
+}
 
 function isArm(value: string): value is Arm {
 	return value in ARMS;
@@ -320,9 +394,9 @@ const CLAUDE_ARMS = new Set([
 	"claude-opus-5",
 	"claude-fable-5",
 ]);
-// Post-verdict quota swap: fixed cross-harness tier pairs. The judge is
-// never menu-filtered; an out-of-quota pick swaps to its partner (both
-// dead -> caller falls back). luna's return pair is haiku (cheap tier).
+// Post-verdict availability swap: fixed cross-lane tier pairs. The judge
+// is never menu-filtered; an unavailable pick swaps to its partner (both
+// unavailable -> caller falls back). Luna's return pair is Haiku.
 const SWAP: Record<Arm, Arm> = {
 	"claude-fable-5": "gpt-5-6-sol",
 	"gpt-5-6-sol": "claude-fable-5",
@@ -342,7 +416,7 @@ const SWAP: Record<Arm, Arm> = {
 export const SENTINEL_RE = /\[\[\s*llm-router\s*:\s*([^\]]+?)\s*\]\]/i;
 
 /** Resolve a sentinel model name to an arm key. Accepts arm keys
- * ("gpt-5-6-sol"), CPA ids ("gpt-5.6-sol"), or any unique fragment
+ * ("gpt-5-6-sol"), default IDs ("gpt-5.6-sol"), or any unique fragment
  * ("sol", "opus"); ambiguous or unknown -> null. Pure — see smoke.ts. */
 export function resolveArm(name: string): Arm | null {
 	const normalized = name.trim().toLowerCase().replace(/[\s.]/g, "-");
@@ -359,18 +433,46 @@ function judgeOverrides(cfg: Config): Map<Arm, string> {
 	for (const [name, value] of Object.entries(cfg.judgeModelOverrides ?? {})) {
 		const arm = resolveArm(name);
 		const model = typeof value === "string" ? value.trim() : "";
-		if (arm && model && model !== ARMS[arm].cpa) overrides.set(arm, model);
+		if (arm && model && model !== ARMS[arm].model) overrides.set(arm, model);
 	}
 	return overrides;
 }
 
-/** CPA model executed when the judge selects a stable arm slot. */
-export function judgeCpaModel(cfg: Config, arm: string): string {
-	return isArm(arm) ? (judgeOverrides(cfg).get(arm) ?? ARMS[arm].cpa) : arm;
+/** Configured model name executed when the judge selects an arm slot. */
+export function judgeModelName(cfg: Config, arm: string): string {
+	return isArm(arm) ? (judgeOverrides(cfg).get(arm) ?? ARMS[arm].model) : arm;
+}
+
+function armTargets(
+	cfg: Config,
+	models: readonly ModelTarget[],
+	withOverrides: boolean,
+): ArmTargets {
+	return Object.fromEntries(
+		(Object.keys(ARMS) as Arm[]).flatMap((arm) => {
+			const name = withOverrides ? judgeModelName(cfg, arm) : ARMS[arm].model;
+			const target = resolveModelTarget(name, models);
+			return target
+				? [[arm, { provider: target.provider, id: target.id }]]
+				: [];
+		}),
+	) as ArmTargets;
+}
+
+function legacyCpaTargets(cfg: Config, withOverrides: boolean): ArmTargets {
+	return Object.fromEntries(
+		(Object.keys(ARMS) as Arm[]).map((arm) => [
+			arm,
+			{
+				provider: CPA_PROVIDER,
+				id: withOverrides ? judgeModelName(cfg, arm) : ARMS[arm].model,
+			},
+		]),
+	) as ArmTargets;
 }
 
 /** Replace arm labels in judge instructions while retaining stable schema
- * keys, so an arbitrary enabled CPA model inherits the original arm's
+ * keys, so an arbitrary enabled model inherits the original arm's
  * calibrated use cases without changing the verdict protocol. */
 export function applyJudgeModelOverrides(
 	cfg: Config,
@@ -823,21 +925,27 @@ export interface ArmStatus {
 
 export async function armAvailability(
 	cfg: Config,
-	modelIds: Record<string, string> = {},
+	targets: ArmTargets = legacyCpaTargets(cfg, false),
 ): Promise<Record<string, ArmStatus>> {
-	const key = process.env[cfg.cpaKeyEnv] ?? "";
-	const models = await fetchJson<{ data?: Array<{ id: string }> }>(
-		`${cfg.cpaBase}/v1/models`,
-		{
-			headers: { Authorization: `Bearer ${key}` },
-		},
+	const cpaTargets = Object.values(targets).filter(
+		(target): target is ModelTarget => target?.provider === CPA_PROVIDER,
 	);
-	const listed = new Set<string>((models.data ?? []).map((model) => model.id));
+	let listed = new Set<string>();
+	if (cpaTargets.length && cfg.cpaBase) {
+		try {
+			const key = process.env[cfg.cpaKeyEnv] ?? "";
+			const models = await fetchJson<{ data?: Array<{ id: string }> }>(
+				`${cfg.cpaBase}/v1/models`,
+				{ headers: { Authorization: `Bearer ${key}` } },
+			);
+			listed = new Set((models.data ?? []).map((model) => model.id));
+		} catch {
+			// A failed CPA probe makes only CPA-backed targets unavailable.
+		}
+	}
 
-	// quota-threshold gate: arms whose accounts have used >= quotaMaxPct
-	// are treated as unavailable, exactly like a quota-exceeded arm
 	let overQuota = new Set<string>();
-	if (cfg.quotaMaxPct != null) {
+	if (cpaTargets.length && cfg.quotaMaxPct != null) {
 		const usages = await cachedAccountUsages(cfg);
 		if (usages) overQuota = quotaBlockedArms(usages, cfg.quotaMaxPct);
 	}
@@ -849,18 +957,22 @@ export async function armAvailability(
 			.filter(Boolean),
 	);
 	const out: Record<string, ArmStatus> = {};
-	for (const [arm, spec] of Object.entries(ARMS)) {
-		const model = modelIds[arm] ?? spec.cpa;
-		let ok = listed.has(model);
-		const quotaArm = resolveArm(model);
-		if ((quotaArm && overQuota.has(quotaArm)) || simulated.has(arm)) ok = false;
+	for (const arm of Object.keys(ARMS) as Arm[]) {
+		const target = targets[arm];
+		let ok = Boolean(target);
+		if (target?.provider === CPA_PROVIDER) {
+			ok = [...listed].some((id) => modelIdRank(id, target.id) < 2);
+			const quotaArm = resolveArm(target.id);
+			if (quotaArm && overQuota.has(quotaArm)) ok = false;
+		}
+		if (simulated.has(arm)) ok = false;
 		out[arm] = { available: ok };
 	}
 	return out;
 }
 
-/** Post-verdict check: keep the pick if it has quota, else its swap
- * partner; both dead throws (caller falls back). Pure — see smoke.ts. */
+/** Post-verdict check: keep the pick if available, else its swap partner;
+ * both unavailable throws so the caller can use its fallback. */
 export function resolveVerdictModel(
 	model: string,
 	avail: Record<string, ArmStatus>,
@@ -869,22 +981,29 @@ export function resolveVerdictModel(
 	if (avail[model]?.available) return { final: model, swapped: false };
 	const partner = SWAP[model];
 	if (avail[partner]?.available) return { final: partner, swapped: true };
-	throw new Error(`${model} and swap partner ${partner} are both out of quota`);
+	throw new Error(`${model} and swap partner ${partner} are both unavailable`);
 }
 
 // --------------------------------------------------------------- judge
 export interface Verdict {
+	arm: string;
+	provider: string;
 	model: string;
 	rationale: string;
-	cpa_model: string;
 	latency_s: number;
 	swapped_from?: string;
 	overridden_from?: string;
-	arms_out_of_quota?: string[];
+	arms_unavailable?: string[];
 	quota_gate_skipped?: boolean; // threshold set but no usage data (bad key?)
 }
 
 type JudgeResult = Pick<Verdict, "model" | "rationale">;
+type JudgeRunner = (
+	instructions: string,
+	task: string,
+	menu: string[],
+	signal?: AbortSignal,
+) => Promise<JudgeResult>;
 type ChatCompletion = {
 	choices?: Array<{ message?: { content?: string } }>;
 };
@@ -947,50 +1066,164 @@ async function judgeCall(
 	);
 }
 
+function registryJudgeRunner(
+	ctx: ExtensionContext,
+	cfg: Config,
+	model: RegistryModel,
+): JudgeRunner {
+	return async (instructions, task, menu, signal) => {
+		const schema = {
+			type: "object",
+			properties: {
+				model: { type: "string", enum: menu },
+				rationale: { type: "string", maxLength: 500 },
+			},
+			required: ["model", "rationale"],
+			additionalProperties: false,
+		};
+		const options: Record<string, unknown> = {
+			signal,
+			maxRetries: 0,
+			timeoutMs: 60_000,
+			maxTokens: 512,
+			cacheRetention: "none",
+		};
+		if (cfg.judge.effort) {
+			if (
+				model.api === "anthropic-messages" ||
+				model.api === "bedrock-converse-stream"
+			) {
+				options.reasoning = cfg.judge.effort;
+			} else if (
+				model.api === "google-generative-ai" ||
+				model.api === "google-vertex"
+			) {
+				options.thinking = { enabled: true, level: cfg.judge.effort };
+			} else {
+				options.reasoningEffort = cfg.judge.effort;
+			}
+		}
+		if (cfg.judge.fast) options.serviceTier = "priority";
+		if (
+			model.api === "anthropic-messages" ||
+			model.api === "bedrock-converse-stream"
+		) {
+			options.toolChoice = { type: "tool", name: "route_model" };
+		} else if (
+			model.api === "google-generative-ai" ||
+			model.api === "google-vertex"
+		) {
+			options.toolChoice = "any";
+		} else if (model.api === "openai-codex-responses") {
+			options.toolChoice = "required";
+		} else {
+			options.toolChoice = {
+				type: "function",
+				function: { name: "route_model" },
+			};
+		}
+
+		let last = "";
+		for (let attempt = 0; attempt < 2; attempt++) {
+			try {
+				const response = await ctx.modelRegistry.complete(
+					model,
+					{
+						systemPrompt: instructions,
+						messages: [
+							{
+								role: "user",
+								content: task.slice(0, 4000),
+								timestamp: Date.now(),
+							},
+						],
+						tools: [
+							{
+								name: "route_model",
+								description: "Choose the model slot for this coding task.",
+								parameters: schema as never,
+								constrainedSampling: {
+									type: "json_schema",
+									strict: "require",
+								},
+							},
+						],
+					},
+					options as never,
+				);
+				const call = response.content.find(
+					(part) => part.type === "toolCall" && part.name === "route_model",
+				);
+				const selected =
+					call?.type === "toolCall" ? call.arguments.model : undefined;
+				const rationale =
+					call?.type === "toolCall" ? call.arguments.rationale : undefined;
+				if (
+					typeof selected === "string" &&
+					menu.includes(selected) &&
+					typeof rationale === "string"
+				) {
+					return { model: selected, rationale };
+				}
+				last = "judge returned no valid route_model call";
+			} catch (e) {
+				if (signal?.aborted) throw new Error("judge cancelled");
+				last = `transport: ${e}`;
+			}
+		}
+		throw new Error(
+			`judge ${model.provider}/${model.id} returned no verdict twice (last: ${last})`,
+		);
+	};
+}
+
+export interface RouteRuntime {
+	models?: readonly ModelTarget[];
+	judge?: JudgeRunner;
+}
+
 /** Routing verdict for one task. The judge always sees seven stable slots;
- * configured targets replace their prompt labels and execution CPA IDs.
- * Quota is checked after the verdict and can swap to a partner slot. */
+ * configured targets replace their prompt labels and execution models.
+ * Availability is checked after the verdict and can swap to a partner slot. */
 export async function route(
 	cfg: Config,
 	task: string,
 	signal?: AbortSignal,
+	runtime: RouteRuntime = {},
 ): Promise<Verdict> {
 	const instructions = applyJudgeModelOverrides(
 		cfg,
 		RUBRIC + exemplarNote(cfg, task),
 	);
-	const modelIds = Object.fromEntries(
-		(Object.keys(ARMS) as Arm[]).map((arm) => [arm, judgeCpaModel(cfg, arm)]),
-	) as Record<Arm, string>;
+	const targets = runtime.models
+		? armTargets(cfg, runtime.models, true)
+		: legacyCpaTargets(cfg, true);
 	const t0 = Date.now();
-	// availability probes run while the judge thinks
+	const judge = runtime.judge ?? ((...args) => judgeCall(cfg, ...args));
 	const [judged, avail] = await Promise.all([
-		judgeCall(cfg, instructions, task, Object.keys(ARMS), signal),
-		armAvailability(cfg, modelIds),
+		judge(instructions, task, Object.keys(ARMS), signal),
+		armAvailability(cfg, targets),
 	]);
+	const { final, swapped } = resolveVerdictModel(judged.model, avail);
+	const target = targets[final];
+	if (!target) throw new Error(`no available model for ${final}`);
 	const verdict: Verdict = {
-		...judged,
-		cpa_model: "",
+		arm: final,
+		provider: target.provider,
+		model: target.id,
+		rationale: judged.rationale,
 		latency_s: Math.round((Date.now() - t0) / 100) / 10,
 	};
-
-	const { final, swapped } = resolveVerdictModel(verdict.model, avail);
-	if (swapped) {
-		verdict.swapped_from = verdict.model;
-		verdict.model = final;
-	}
-	const cpaModel = modelIds[final];
-	if (cpaModel !== ARMS[final].cpa) {
-		verdict.overridden_from = final;
-		verdict.model = cpaModel;
-	}
-	verdict.cpa_model = cpaModel;
+	if (swapped) verdict.swapped_from = judged.model;
+	if (judgeOverrides(cfg).has(final)) verdict.overridden_from = final;
 	const down = Object.keys(avail)
 		.filter((arm) => !avail[arm]?.available)
 		.sort();
-	if (down.length) verdict.arms_out_of_quota = down;
-	// cached: free second call — flags a configured-but-inactive gate
-	if (cfg.quotaMaxPct != null && !(await cachedAccountUsages(cfg))) {
+	if (down.length) verdict.arms_unavailable = down;
+	const usesCpa = Object.values(targets).some(
+		(target) => target?.provider === CPA_PROVIDER,
+	);
+	if (usesCpa && cfg.quotaMaxPct != null && !(await cachedAccountUsages(cfg))) {
 		verdict.quota_gate_skipped = true;
 	}
 	return verdict;
@@ -1005,37 +1238,71 @@ const yellow = (s: string) => fgc(33, s);
 const cyan = (s: string) => fgc(36, s);
 const dim = (s: string) => `\x1b[2m${s}\x1b[22m`;
 
-/** Apply the quota gate to an already-decided arm (sentinel or command
- * pin): swap to the partner when it is out of quota, and — probe down or
- * both sides dead — keep the pick with a visible notice rather than
- * blocking the prompt. Returns the arm plus a notice suffix. */
-async function quotaFinal(
+/** Resolve an already-decided arm through configured providers. Direct
+ * routes fail open: if no swap is usable, keep the requested target. */
+async function directFinal(
 	cfg: Config,
 	arm: Arm,
-): Promise<{ final: Arm; extra: string }> {
+	models: readonly ModelTarget[],
+): Promise<{ final: Arm; target?: ModelTarget; extra: string }> {
+	const targets = armTargets(cfg, models, false);
 	try {
-		const r = resolveVerdictModel(arm, await armAvailability(cfg));
+		const r = resolveVerdictModel(arm, await armAvailability(cfg, targets));
+		const target = targets[r.final];
 		return {
 			final: r.final,
-			extra: r.swapped ? yellow(` (swapped from ${arm}: no quota)`) : "",
+			...(target ? { target } : {}),
+			extra: r.swapped ? yellow(` (swapped from ${arm}: unavailable)`) : "",
 		};
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : String(e);
+		const target = targets[arm];
 		return {
 			final: arm,
-			extra: yellow(` [quota check skipped: ${msg.slice(0, 60)}]`),
+			...(target ? { target } : {}),
+			extra: yellow(` [availability check skipped: ${msg.slice(0, 60)}]`),
 		};
 	}
 }
 
 export default function (pi: ExtensionAPI) {
-	function findCpaModel(ctx: ExtensionContext, id: string) {
-		return (
-			ctx.modelRegistry.find(CPA_PROVIDER, id) ??
-			ctx.modelRegistry
-				.getAll()
-				.find((m) => m.provider === CPA_PROVIDER && m.id.startsWith(`${id}-`))
-		);
+	function availableModels(ctx: ExtensionContext): RegistryModel[] {
+		return ctx.modelRegistry
+			.getAvailable()
+			.filter((model) => model.provider !== PROVIDER);
+	}
+
+	function findTarget(ctx: ExtensionContext, target: ModelTarget | undefined) {
+		return target
+			? ctx.modelRegistry.find(target.provider, target.id)
+			: undefined;
+	}
+
+	function findConfiguredModel(
+		ctx: ExtensionContext,
+		name: string,
+		models: readonly RegistryModel[],
+	) {
+		return findTarget(ctx, resolveModelTarget(name, models));
+	}
+
+	function runtimeFor(
+		ctx: ExtensionContext,
+		cfg: Config,
+		models: readonly RegistryModel[],
+	): RouteRuntime {
+		const useRegistryJudge =
+			!cpaConfigured(models) || cfg.judge.model.includes("/");
+		const judgeTarget = useRegistryJudge
+			? resolveModelTarget(cfg.judge.model, models)
+			: undefined;
+		const judgeModel = findTarget(ctx, judgeTarget);
+		return {
+			models,
+			...(judgeModel
+				? { judge: registryJudgeRunner(ctx, cfg, judgeModel) }
+				: {}),
+		};
 	}
 
 	pi.on("session_start", async (event, ctx) => {
@@ -1087,13 +1354,13 @@ export default function (pi: ExtensionAPI) {
 		if (/^\/llm-router\b/.test(event.text)) return { action: "continue" };
 
 		const cfg = loadConfig();
-		// pinned slash command (/file, /implement-ready, …): the model is
-		// configured, so skip the judge entirely — but keep the quota swap
-		// so a dead arm still degrades to its partner
+		const models = availableModels(ctx);
+		// Pinned slash command (/file, /implement-ready, …): skip the judge,
+		// then use the requested arm or its available partner.
 		const pin = commandPin(cfg, event.text);
 		if (pin) {
-			const { final, extra } = await quotaFinal(cfg, pin.arm);
-			const model = findCpaModel(ctx, ARMS[final].cpa);
+			const { final, target, extra } = await directFinal(cfg, pin.arm, models);
+			const model = findTarget(ctx, target);
 			if (model && (await pi.setModel(model))) {
 				// after setModel: pi clamps the level to the new model
 				// (older pi has no setThinkingLevel — pin the model anyway)
@@ -1109,7 +1376,7 @@ export default function (pi: ExtensionAPI) {
 				return { action: "continue" };
 			}
 			ctx.ui.notify(
-				`llm-router: pinned model ${ARMS[final].cpa} not switchable — routing normally`,
+				`llm-router: pinned arm ${final} has no switchable model — routing normally`,
 				"error",
 			);
 		}
@@ -1117,7 +1384,7 @@ export default function (pi: ExtensionAPI) {
 		// bare slash command: no task text to judge — switch to the fallback
 		// so nothing ever reaches the llm-router/auto placeholder endpoint
 		if (/^\/\S+\s*$/.test(event.text)) {
-			const fb = findCpaModel(ctx, cfg.fallbackModel);
+			const fb = findConfiguredModel(ctx, cfg.fallbackModel, models);
 			if (fb && (await pi.setModel(fb))) {
 				ctx.ui.notify(
 					`llm-router: bare command, no task to judge — using ${cfg.fallbackModel}`,
@@ -1129,7 +1396,7 @@ export default function (pi: ExtensionAPI) {
 
 		// [[llm-router: <model>]] — forced pick from the spawning session
 		// (or the user): honor it instead of consulting the judge, but keep
-		// the post-verdict quota swap so a dead arm degrades to its partner
+		// the post-verdict availability swap so a dead arm uses its partner
 		// instead of failing a retry the same way. Unknown names fall
 		// through to the judge; the marker is stripped either way.
 		const sentinel = parseSentinel(event.text);
@@ -1143,10 +1410,10 @@ export default function (pi: ExtensionAPI) {
 					"warning",
 				);
 			} else {
-				// forced means forced: a down probe degrades to an ungated
-				// switch with a notice, never to a blocked prompt
-				const { final, extra } = await quotaFinal(cfg, arm);
-				const forced = findCpaModel(ctx, ARMS[final].cpa);
+				// Forced means forced: an unavailable target can swap once, but
+				// a failed availability check never blocks the prompt.
+				const { final, target, extra } = await directFinal(cfg, arm, models);
+				const forced = findTarget(ctx, target);
 				if (forced && (await pi.setModel(forced))) {
 					ctx.ui.notify(
 						`llm-router: ${cyan(final)} ${dim("(forced)")}${extra}`,
@@ -1159,7 +1426,7 @@ export default function (pi: ExtensionAPI) {
 					};
 				}
 				ctx.ui.notify(
-					`llm-router: forced model ${ARMS[final].cpa} not switchable — asking the judge instead`,
+					`llm-router: forced arm ${final} has no switchable model — asking the judge instead`,
 					"error",
 				);
 			}
@@ -1182,12 +1449,20 @@ export default function (pi: ExtensionAPI) {
 						return { consume: true };
 					})
 				: undefined;
-		let targetId = cfg.fallbackModel;
+		let target: ModelTarget | undefined = resolveModelTarget(
+			cfg.fallbackModel,
+			models,
+		);
 		let note: string;
 		let failed = false;
 		try {
-			const v = await route(cfg, taskText, cancel.signal);
-			targetId = v.cpa_model;
+			const v = await route(
+				cfg,
+				taskText,
+				cancel.signal,
+				runtimeFor(ctx, cfg, models),
+			);
+			target = { provider: v.provider, id: v.model };
 			// clean pick: neutral, model in cyan; swap: model + clause in
 			// amber — a subtle warning, not an error. Rationale is capped
 			// instead of slicing the composed string (ANSI-safe).
@@ -1195,9 +1470,10 @@ export default function (pi: ExtensionAPI) {
 				v.rationale.length > 150
 					? `${v.rationale.slice(0, 149)}…`
 					: v.rationale;
-			const picked = v.swapped_from ? yellow(v.model) : cyan(v.model);
+			const pickedName = `${v.provider}/${v.model}`;
+			const picked = v.swapped_from ? yellow(pickedName) : cyan(pickedName);
 			const swap = v.swapped_from
-				? yellow(` (swapped from ${v.swapped_from}: no quota)`)
+				? yellow(` (swapped from ${v.swapped_from}: unavailable)`)
 				: "";
 			const override = v.overridden_from
 				? dim(` (override for ${v.overridden_from})`)
@@ -1226,14 +1502,12 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		const model =
-			findCpaModel(ctx, targetId) ?? findCpaModel(ctx, cfg.fallbackModel);
+			findTarget(ctx, target) ??
+			findConfiguredModel(ctx, cfg.fallbackModel, models);
 		if (model && (await pi.setModel(model))) {
 			ctx.ui.notify(note, failed ? "error" : "info");
 		} else {
-			ctx.ui.notify(
-				`${note} (no switchable cliproxyapi model found!)`,
-				"error",
-			);
+			ctx.ui.notify(`${note} (no switchable configured model found!)`, "error");
 		}
 		return sentinel
 			? {
@@ -1309,6 +1583,17 @@ export default function (pi: ExtensionAPI) {
 		});
 	}
 
+	function configForEditor(cfg: Config, showCpa: boolean): Partial<Config> {
+		if (showCpa) return cfg;
+		const visible: Partial<Config> = { ...cfg };
+		delete visible.cpaBase;
+		delete visible.cpaKeyEnv;
+		delete visible.quotaMaxPct;
+		delete visible.cpaManagementKey;
+		delete visible.cpaManagementKeyEnv;
+		return visible;
+	}
+
 	// /llm-router: switch the session back to llm-router/auto so the next
 	// prompt routes again.
 	pi.registerCommand("llm-router", {
@@ -1340,24 +1625,27 @@ export default function (pi: ExtensionAPI) {
 			if (!ctx.hasUI) return;
 			for (;;) {
 				const cfg = loadConfig();
+				const models = availableModels(ctx);
+				const cpaOn = cpaConfigured(models);
 				const keySource = cfg.cpaManagementKey
 					? "config"
 					: process.env[cfg.cpaManagementKeyEnv]
 						? `env $${cfg.cpaManagementKeyEnv}`
 						: "unset";
+				const cpaSummary = cpaOn
+					? ` | quota gate: ${cfg.quotaMaxPct == null ? "off" : `${cfg.quotaMaxPct}%`}` +
+						` | key: ${keySource}`
+					: "";
 				const summary =
 					`judge: ${cfg.judge.model}@${cfg.judge.effort ?? "no-effort"}${cfg.judge.fast ? "+fast" : ""} via ${cfg.judge.baseUrl}\n` +
-					`fallback: ${cfg.fallbackModel}` +
-					` | quota gate: ${cfg.quotaMaxPct == null ? "off" : `${cfg.quotaMaxPct}%`}` +
-					` | key: ${keySource}` +
+					`fallback: ${cfg.fallbackModel}${cpaSummary}` +
 					` | overrides: ${judgeOverrides(cfg).size}` +
 					` | pinned commands: ${Object.keys(cfg.commandPins ?? {}).length}`;
 				let action = await ctx.ui.select(`llm-router config\n${summary}`, [
 					"Judge",
 					"Overrides",
 					"Pinned commands",
-					"Quota threshold",
-					"CPA management key",
+					...(cpaOn ? ["Quota threshold", "CPA management key"] : []),
 					"Edit full config (JSON)",
 					"Test judge",
 					"Done",
@@ -1374,44 +1662,35 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				if (action === "Judge model") {
-					let ids: string[] = [];
-					try {
-						const key = process.env[cfg.judge.apiKeyEnv] ?? "";
-						const models = await fetchJson<{ data?: Array<{ id: string }> }>(
-							`${cfg.judge.baseUrl.replace(/\/+$/, "")}/models`,
-							{
+					let items: string[] = [];
+					if (!cpaOn) {
+						items = models
+							.map((model) => `${model.provider}/${model.id}`)
+							.sort()
+							.slice(0, 80)
+							.map((model) => model + (model === cfg.judge.model ? CHECK : ""));
+					} else {
+						let ids: string[] = [];
+						try {
+							const key = process.env[cfg.judge.apiKeyEnv] ?? "";
+							const catalog = await fetchJson<{
+								data?: Array<{ id: string }>;
+							}>(`${cfg.judge.baseUrl.replace(/\/+$/, "")}/models`, {
 								headers: key ? { Authorization: `Bearer ${key}` } : {},
-							},
+							});
+							ids = (catalog.data ?? []).map((model) => model.id).sort();
+						} catch {
+							// provider unreachable: fall through to manual entry
+						}
+						const armIds = new Set<string>(
+							Object.values(ARMS).map((arm) => arm.model),
 						);
-						ids = (models.data ?? []).map((model) => model.id).sort();
-					} catch {
-						// provider unreachable: fall through to manual entry
+						const armOnly = ids.filter((id) => armIds.has(id));
+						if (armOnly.length) ids = armOnly;
+						items = ids
+							.slice(0, 40)
+							.map((id) => id + (id === cfg.judge.model ? CHECK : ""));
 					}
-					// only offer the arm models the router is calibrated on; a
-					// non-CPA provider (no arm ids in its listing) keeps its full
-					// catalog, and "(enter manually)" always allows any id
-					const armIds = new Set<string>(
-						Object.values(ARMS).map((arm) => arm.cpa),
-					);
-					const armOnly = ids.filter((id) => armIds.has(id));
-					if (armOnly.length) ids = armOnly;
-					// "id [provider]" like /model: pi registry provider when the id
-					// is registered there, else the judge endpoint's host
-					const providerOf = new Map<string, string>(
-						ctx.modelRegistry.getAll().map((m) => [m.id, m.provider]),
-					);
-					let host = "judge endpoint";
-					try {
-						host = new URL(cfg.judge.baseUrl).host;
-					} catch {
-						// keep placeholder for unparseable baseUrl
-					}
-					const items = ids
-						.slice(0, 40)
-						.map(
-							(id) =>
-								`${id} [${providerOf.get(id) ?? host}]${id === cfg.judge.model ? CHECK : ""}`,
-						);
 					const pick = await ctx.ui.select(
 						`Judge model (current: ${cfg.judge.model})`,
 						[...items, "(enter manually)"],
@@ -1419,8 +1698,13 @@ export default function (pi: ExtensionAPI) {
 					if (!pick) continue;
 					const model =
 						pick === "(enter manually)"
-							? (await ctx.ui.editor("Judge model id", cfg.judge.model))?.trim()
-							: stripCheck(pick).replace(/ \[[^\]]*\]$/, "");
+							? (
+									await ctx.ui.editor(
+										"Judge model id or provider/id",
+										cfg.judge.model,
+									)
+								)?.trim()
+							: stripCheck(pick);
 					if (model) saveConfig({ ...cfg, judge: { ...cfg.judge, model } });
 				} else if (action === "Judge effort") {
 					const efforts = [
@@ -1456,53 +1740,34 @@ export default function (pi: ExtensionAPI) {
 					saveConfig({ ...cfg, judge: { ...cfg.judge, fast } });
 				} else if (action === "Overrides") {
 					const arms = Object.keys(ARMS) as Arm[];
-					const rows = arms.map((arm) => `${arm} → ${judgeCpaModel(cfg, arm)}`);
+					const resolved = armTargets(cfg, models, true);
+					const rows = arms.map((arm) => {
+						const target = resolved[arm];
+						return `${arm} → ${target ? `${target.provider}/${target.id}` : `${judgeModelName(cfg, arm)} (unavailable)`}`;
+					});
 					const row = await ctx.ui.select("Judge model slot to override", rows);
 					if (!row) continue;
 					const arm = arms[rows.indexOf(row)];
 					if (!arm) continue;
-					let ids: string[];
-					try {
-						const key = process.env[cfg.cpaKeyEnv] ?? "";
-						const models = await fetchJson<{
-							data?: Array<{ id?: string }>;
-						}>(`${cfg.cpaBase}/v1/models`, {
-							headers: key ? { Authorization: `Bearer ${key}` } : {},
-						});
-						ids = [
-							...new Set<string>(
-								(models.data ?? [])
-									.map((model: { id?: string }) => model.id)
-									.filter(
-										(id: unknown): id is string => typeof id === "string",
-									),
-							),
-						].sort((a, b) => a.localeCompare(b));
-					} catch (e) {
-						ctx.ui.notify(`llm-router: model list failed (${e})`, "error");
-						continue;
-					}
-					if (!ids.length) {
-						ctx.ui.notify(
-							"llm-router: CPA reported no enabled models",
-							"error",
-						);
-						continue;
-					}
-					const current = judgeCpaModel(cfg, arm);
-					const reset = `(use default: ${ARMS[arm].cpa})`;
-					const pick = await ctx.ui.select(
-						`Enabled CPA model for ${arm} (current: ${current})`,
-						[...ids.map((id) => (id === current ? id + CHECK : id)), reset],
-					);
+					const current = resolved[arm];
+					const refs = models
+						.map((model) => `${model.provider}/${model.id}`)
+						.sort();
+					const reset = `(use default: ${ARMS[arm].model})`;
+					const pick = await ctx.ui.select(`Available model for ${arm}`, [
+						...refs.map((ref) =>
+							ref === `${current?.provider}/${current?.id}` ? ref + CHECK : ref,
+						),
+						reset,
+					]);
 					if (!pick) continue;
-					const target = pick === reset ? ARMS[arm].cpa : stripCheck(pick);
+					const target = pick === reset ? ARMS[arm].model : stripCheck(pick);
 					const overrides = Object.fromEntries(
 						Object.entries(cfg.judgeModelOverrides ?? {}).filter(
 							([name]) => resolveArm(name) !== arm,
 						),
 					);
-					if (target !== ARMS[arm].cpa) overrides[arm] = target;
+					if (target !== ARMS[arm].model) overrides[arm] = target;
 					saveConfig({ ...cfg, judgeModelOverrides: overrides });
 				} else if (action === "Pinned commands") {
 					// slash commands that bypass the judge: pick one (or add
@@ -1514,7 +1779,7 @@ export default function (pi: ExtensionAPI) {
 					);
 					const ADD = "(pin another command)";
 					const row = await ctx.ui.select(
-						"Slash commands pinned to a model (judge skipped; quota swap still applies)",
+						"Slash commands pinned to a model (judge skipped; availability swap still applies)",
 						[...rows, ADD],
 					);
 					if (!row) continue;
@@ -1545,9 +1810,10 @@ export default function (pi: ExtensionAPI) {
 					}
 					const SESSION = "(leave session default)";
 					const selectedArm = resolveArm(stripCheck(modelPick));
-					const selectedModel = selectedArm
-						? findCpaModel(ctx, ARMS[selectedArm].cpa)
+					const selectedTarget = selectedArm
+						? armTargets(cfg, models, false)[selectedArm]
 						: undefined;
+					const selectedModel = findTarget(ctx, selectedTarget);
 					const efforts = thinkingLevelsForModel(
 						selectedModel as unknown as UltraModel,
 					);
@@ -1608,13 +1874,14 @@ export default function (pi: ExtensionAPI) {
 				} else if (action === "Edit full config (JSON)") {
 					const edited = await ctx.ui.editor(
 						"llm-router config",
-						JSON.stringify(cfg, null, 2),
+						JSON.stringify(configForEditor(cfg, cpaOn), null, 2),
 					);
 					if (edited === undefined) continue;
 					try {
 						const parsed = JSON.parse(edited);
+						const base = cpaOn ? DEFAULTS : cfg;
 						saveConfig({
-							...DEFAULTS,
+							...base,
 							...parsed,
 							judge: { ...DEFAULTS.judge, ...(parsed.judge ?? {}) },
 						});
@@ -1628,9 +1895,14 @@ export default function (pi: ExtensionAPI) {
 				} else if (action === "Test judge") {
 					ctx.ui.notify(`llm-router: testing ${cfg.judge.model}…`, "info");
 					try {
-						const v = await route(cfg, "fix typo in README.md: 'teh' -> 'the'");
+						const v = await route(
+							cfg,
+							"fix typo in README.md: 'teh' -> 'the'",
+							undefined,
+							runtimeFor(ctx, cfg, models),
+						);
 						ctx.ui.notify(
-							`llm-router: judge OK (${v.latency_s}s) — picked ${v.model}: ${v.rationale}`.slice(
+							`llm-router: judge OK (${v.latency_s}s) — picked ${v.provider}/${v.model}: ${v.rationale}`.slice(
 								0,
 								220,
 							),

@@ -1,14 +1,14 @@
 # Model arms and rubric
 
-The router exposes seven stable arm keys and maps each key to the CPA model identifier used for the session switch.
+The router exposes seven stable arm keys and maps each key to a default model identifier resolved through Pi's authenticated model registry.
 
 ## Arm catalog
 
-Arm keys are internal routing names; CPA identifiers are provider model IDs.
+Arm keys are internal routing names; default identifiers may resolve under CPA or another configured Pi provider.
 
-| Arm key | CPA model ID | Lane | Intended tier |
+| Arm key | Default model ID | Lane | Intended tier |
 | --- | --- | --- | --- |
-| `claude-haiku-4-5` | `claude-haiku-4-5-20251001` | repository and agentic | narrow fixes and mechanical edits |
+| `claude-haiku-4-5` | `claude-haiku-4-5` | repository and agentic | narrow fixes and mechanical edits |
 | `claude-sonnet-5` | `claude-sonnet-5` | repository and agentic | routine multi-file work and test suites |
 | `claude-opus-5` | `claude-opus-5` | repository and agentic | cross-component diagnosis and high-impact changes |
 | `claude-fable-5` | `claude-fable-5` | repository and agentic | ambiguous architecture and protocol-level work |
@@ -16,7 +16,7 @@ Arm keys are internal routing names; CPA identifiers are provider model IDs.
 | `gpt-5-6-terra` | `gpt-5.6-terra` | self-contained | well-specified functions, endpoints, or classes |
 | `gpt-5-6-sol` | `gpt-5.6-sol` | self-contained | subtle algorithms, performance work, and tricky local logic |
 
-`resolveArm()` accepts an arm key, a CPA ID, or a unique fragment. Unknown and ambiguous names return no arm rather than guessing.
+`resolveArm()` accepts an arm key, its default model ID, a dated variant, or a unique fragment. Unknown and ambiguous names return no arm rather than guessing.
 
 ## Lane decision
 
@@ -50,17 +50,17 @@ The resolver normalizes dots and spaces to hyphens. It also accepts dated CPA ID
 
 ## Judge model overrides
 
-Overrides replace the execution model occupying a semantic arm slot without changing that slot's calibrated lane or tier.
+Overrides replace the execution model occupying a semantic arm slot without changing that slot's calibrated lane or tier. Values may be model IDs or explicit `provider/model-id` references.
 
 The judge prompt shows the configured target model in every rubric and exemplar position owned by the source arm. A stable selection key remains beside the target because the strict verdict schema still returns one of the seven arm keys. Several slots may point to the same target.
 
-Overrides apply only to judged routes. Command pins and sentinels continue to name and execute their configured arms directly. A quota swap moves between semantic slots first, then applies the target configured for the final slot.
+Overrides apply only to judged routes. Command pins and sentinels continue to name and execute their configured arms directly. An availability swap moves between semantic slots first, then applies the target configured for the final slot.
 
 ## Availability does not change the rubric
 
-The judge reasons about capability slots, not current subscription state.
+The judge reasons about capability slots, not current provider or subscription state.
 
-The seven semantic arm slots remain fixed. The swap-resolution contract in `availability.md` applies quota and availability after the verdict, using each slot's effective target model when overrides are configured. This keeps the rubric's use cases stable while allowing the execution model set to change.
+The seven semantic arm slots remain fixed. The swap-resolution contract in `availability.md` applies registry availability and optional CPA quota after the verdict, using each slot's effective target model when overrides are configured. This keeps the rubric stable while providers change.
 
 The lane rule constrains the source slot, not necessarily the final execution model. Fixed swaps cross providers, and an arbitrary override target can belong to either provider without changing the source slot's rubric role.
 
@@ -68,4 +68,4 @@ The lane rule constrains the source slot, not necessarily the final execution mo
 
 Adding, renaming, or retiring an arm requires coordinated changes because the catalog is repeated in routing policy, fallback policy, fixtures, and measured data.
 
-Update the `ARMS` mapping, Claude lane membership, fixed `SWAP` graph, rubric menu and tier text, smoke fixture arm list and expectations, exemplar `rates` keys, and the catalog and swap tables in `lat.md/`. Every arm needs a registry-resolvable CPA ID and a deliberate one-hop swap target.
+Update the `ARMS` mapping, Claude lane membership, fixed `SWAP` graph, rubric menu and tier text, smoke fixture arm list and expectations, exemplar `rates` keys, and the catalog and swap tables in `lat.md/`. Every arm needs a registry-resolvable default ID and a deliberate one-hop swap target.

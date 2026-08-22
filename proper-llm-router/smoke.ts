@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import llmRouter, {
 	applyJudgeModelOverrides,
 	commandPin,
-	judgeCpaModel,
+	judgeModelName,
 	loadConfig,
 	parseSentinel,
 	quotaBlockedArms,
@@ -109,11 +109,11 @@ assert.deepStrictEqual(parseSentinel("[[ LLM-Router : Sol ]] fix it"), {
 	name: "Sol",
 	stripped: "fix it",
 }); // case/space tolerant
-assert.strictEqual(resolveArm("gpt-5.6-sol"), "gpt-5-6-sol"); // CPA id
+assert.strictEqual(resolveArm("gpt-5.6-sol"), "gpt-5-6-sol"); // model id
 assert.strictEqual(resolveArm("claude-opus-5"), "claude-opus-5"); // arm key
 assert.strictEqual(resolveArm("Sol"), "gpt-5-6-sol"); // unique fragment
 assert.strictEqual(resolveArm("haiku"), "claude-haiku-4-5");
-assert.strictEqual(resolveArm("claude-haiku-4-5-20251001"), "claude-haiku-4-5"); // dated CPA id
+assert.strictEqual(resolveArm("claude-haiku-4-5-20251001"), "claude-haiku-4-5"); // dated id
 assert.strictEqual(resolveArm("claude"), null); // ambiguous
 assert.strictEqual(resolveArm("gpt-9"), null); // unknown
 
@@ -138,17 +138,17 @@ assert.strictEqual(
 		"custom-frontier-v2 [selection key: claude-opus-5] / gpt-5-6-sol",
 );
 assert.strictEqual(
-	judgeCpaModel(overrideCfg, "claude-fable-5"),
+	judgeModelName(overrideCfg, "claude-fable-5"),
 	"claude-opus-5",
 );
-assert.strictEqual(judgeCpaModel(overrideCfg, "gpt-5-6-sol"), "gpt-5.6-sol");
+assert.strictEqual(judgeModelName(overrideCfg, "gpt-5-6-sol"), "gpt-5.6-sol");
 
 // pure-logic check: pinned slash commands bypass the judge
 const pinCfg = {
 	...cfg,
 	commandPins: {
 		file: { model: "claude-fable-5", effort: "xhigh" as const },
-		"/implement-ready": { model: "gpt-5.6-sol", effort: null }, // "/" + CPA id
+		"/implement-ready": { model: "gpt-5.6-sol", effort: null }, // "/" + model id
 		bogus: { model: "gpt-9", effort: null },
 	},
 };
@@ -189,12 +189,15 @@ llmRouter({
 } as unknown as Parameters<typeof llmRouter>[0]);
 const handleAliasInput = aliasInputHandler;
 assert.ok(handleAliasInput);
+const aliasModel = { provider: "cliproxyapi", id: "gpt-5.6-terra" };
 aliasCtx = {
 	model: { provider: "llm-router", id: "auto" },
 	modelRegistry: {
 		find: (provider: string, id: string) =>
-			provider === "cliproxyapi" ? { provider, id } : undefined,
-		getAll: () => [],
+			provider === aliasModel.provider && id === aliasModel.id
+				? aliasModel
+				: undefined,
+		getAvailable: () => [aliasModel],
 	},
 	ui: { notify() {} },
 };
@@ -223,7 +226,7 @@ const menus: string[][] = [];
 const replies: Array<string | undefined> = ["Judge", undefined, "Done"];
 await handleConfig("", {
 	hasUI: true,
-	modelRegistry: { getAll: () => [] },
+	modelRegistry: { getAvailable: () => [] },
 	ui: {
 		notify() {},
 		select: async (_title: string, items: string[]) => {
@@ -239,10 +242,10 @@ assert.deepStrictEqual(
 assert.ok((menus[0] ?? []).includes("Overrides"));
 assert.deepStrictEqual(menus[1] ?? [], ["Model", "Effort", "Fast"]);
 
-// live check: full route() against the configured judge + CPA quota probe
+// live check: legacy standalone route against configured judge + CPA probe
 const task =
 	(globalThis as typeof globalThis & { process?: { argv: string[] } }).process
 		?.argv[2] ?? "fix typo in README.md: 'teh' -> 'the'";
 const v = await route(cfg, task);
-assert.ok(v.model && v.cpa_model && v.rationale, JSON.stringify(v));
+assert.ok(v.provider && v.model && v.rationale, JSON.stringify(v));
 console.log(JSON.stringify(v, null, 2));

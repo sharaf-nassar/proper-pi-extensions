@@ -1,0 +1,231 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, test } from "node:test";
+
+const originalHome = process.env.HOME;
+const testHome = mkdtempSync(join(tmpdir(), "proper-llm-router-test-"));
+process.env.HOME = testHome;
+const { default: llmRouter, resolveModelTarget } = await import(
+	"../llm-router.ts"
+);
+after(() => {
+	if (originalHome === undefined) delete process.env.HOME;
+	else process.env.HOME = originalHome;
+	rmSync(testHome, { recursive: true, force: true });
+});
+
+const directModels = [
+	{
+		provider: "openai-codex",
+		id: "gpt-5.6-terra",
+		api: "openai-codex-responses",
+	},
+	{
+		provider: "anthropic",
+		id: "claude-haiku-4-5",
+		api: "anthropic-messages",
+	},
+	{
+		provider: "anthropic",
+		id: "claude-sonnet-5",
+		api: "anthropic-messages",
+	},
+	{
+		provider: "anthropic",
+		id: "claude-opus-5",
+		api: "anthropic-messages",
+	},
+	{
+		provider: "anthropic",
+		id: "claude-fable-5",
+		api: "anthropic-messages",
+	},
+];
+
+// @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]
+test("model targets resolve across configured Pi providers", () => {
+	assert.equal(resolveModelTarget("", directModels), undefined);
+	assert.equal(
+		resolveModelTarget("openai/gpt-5.6-terra", directModels),
+		undefined,
+	);
+	assert.deepEqual(
+		resolveModelTarget("claude-opus-5", directModels),
+		directModels[3],
+	);
+	assert.deepEqual(
+		resolveModelTarget("anthropic/claude-opus-5", directModels),
+		directModels[3],
+	);
+
+	const withCpa = [
+		...directModels,
+		{ provider: "cliproxyapi", id: "claude-opus-5", api: "openai-responses" },
+		{
+			provider: "cliproxyapi",
+			id: "claude-haiku-4-5-20251001",
+			api: "openai-responses",
+		},
+	];
+	assert.equal(
+		resolveModelTarget("claude-opus-5", withCpa)?.provider,
+		"cliproxyapi",
+	);
+	assert.equal(
+		resolveModelTarget("claude-haiku-4-5", withCpa)?.provider,
+		"cliproxyapi",
+	);
+});
+
+// @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]
+test("first input routes through Pi providers without CPA", async () => {
+	let inputHandler:
+		| ((event: any, ctx: any) => Promise<{ action: string }>)
+		| undefined;
+	let switched: any;
+	let completed = 0;
+	const notices: string[] = [];
+	const pi = {
+		on(name: string, handler: typeof inputHandler) {
+			if (name === "input") inputHandler = handler;
+		},
+		registerCommand() {},
+		async setModel(model: unknown) {
+			switched = model;
+			return true;
+		},
+	};
+	llmRouter(pi as unknown as Parameters<typeof llmRouter>[0]);
+	assert.ok(inputHandler);
+
+	const originalFetch = globalThis.fetch;
+	globalThis.fetch = async (input) => {
+		throw new Error(`unexpected network request: ${input}`);
+	};
+	try {
+		const models = directModels.map((model) => ({ ...model }));
+		const ctx = {
+			model: { provider: "llm-router", id: "auto" },
+			modelRegistry: {
+				getAvailable: () => models,
+				find: (provider: string, id: string) =>
+					models.find(
+						(model) => model.provider === provider && model.id === id,
+					),
+				async complete() {
+					completed += 1;
+					return {
+						content: [
+							{
+								type: "toolCall",
+								name: "route_model",
+								arguments: {
+									model: "claude-opus-5",
+									rationale: "localized repository fix",
+								},
+							},
+						],
+					};
+				},
+			},
+			ui: {
+				notify(message: string) {
+					notices.push(message);
+				},
+				onTerminalInput: undefined,
+			},
+		};
+		await inputHandler({ text: "fix typo in README.md", images: [] }, ctx);
+		assert.equal(completed, 1);
+		assert.equal(switched?.provider, "anthropic", notices.join("\n"));
+		assert.equal(switched?.id, "claude-opus-5");
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+});
+
+// @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]
+test("pinned commands switch direct providers without CPA", async () => {
+	let inputHandler:
+		| ((event: any, ctx: any) => Promise<{ action: string }>)
+		| undefined;
+	let switched: any;
+	llmRouter({
+		on(name: string, handler: typeof inputHandler) {
+			if (name === "input") inputHandler = handler;
+		},
+		registerCommand() {},
+		async setModel(model: unknown) {
+			switched = model;
+			return true;
+		},
+	} as unknown as Parameters<typeof llmRouter>[0]);
+	assert.ok(inputHandler);
+
+	const models = directModels.map((model) => ({ ...model }));
+	await inputHandler(
+		{ text: "/file diagnose the parser", images: [] },
+		{
+			model: { provider: "llm-router", id: "auto" },
+			modelRegistry: {
+				getAvailable: () => models,
+				find: (provider: string, id: string) =>
+					models.find(
+						(model) => model.provider === provider && model.id === id,
+					),
+			},
+			ui: { notify() {} },
+		},
+	);
+	assert.equal(switched?.provider, "anthropic");
+	assert.equal(switched?.id, "claude-fable-5");
+});
+
+// @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA config fixture]]
+test("config UI hides CPA-only controls and JSON fields without CPA", async () => {
+	let configHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
+	llmRouter({
+		on() {},
+		registerCommand(name: string, command: { handler: typeof configHandler }) {
+			if (name === "llm-router-config") configHandler = command.handler;
+		},
+	} as unknown as Parameters<typeof llmRouter>[0]);
+	assert.ok(configHandler);
+
+	const menus: string[][] = [];
+	const replies: Array<string | undefined> = [
+		"Edit full config (JSON)",
+		"Done",
+	];
+	let edited = "";
+	await configHandler("", {
+		hasUI: true,
+		modelRegistry: { getAvailable: () => directModels },
+		ui: {
+			notify() {},
+			select: async (_title: string, items: string[]) => {
+				menus.push(items);
+				return replies.shift();
+			},
+			editor: async (_title: string, value: string) => {
+				edited = value;
+				return undefined;
+			},
+		},
+	});
+
+	assert.equal((menus[0] ?? []).includes("Quota threshold"), false);
+	assert.equal((menus[0] ?? []).includes("CPA management key"), false);
+	const visible = JSON.parse(edited);
+	for (const key of [
+		"cpaBase",
+		"cpaKeyEnv",
+		"quotaMaxPct",
+		"cpaManagementKey",
+		"cpaManagementKeyEnv",
+	]) {
+		assert.equal(key in visible, false, key);
+	}
+});

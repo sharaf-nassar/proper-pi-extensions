@@ -4,7 +4,7 @@ The proper-llm-router package uses Node's built-in test runner for offline compa
 
 ## Harness structure
 
-`npm run test:unit` runs `test/*.test.ts`, while `npm run test:smoke` runs `smoke.ts`. Both use Node's experimental TypeScript type stripping; `npm test` runs them in that order.
+`npm run test:unit` runs `test/*.test.ts`, while `npm run test:smoke` runs `smoke.ts`. Both use Node's experimental TypeScript type stripping; `npm test` runs them in that order. Unit tests include a no-CPA provider route and conditional config UI.
 
 `smoke.ts` imports the extension and its public pure functions, runs deterministic assertions, then calls one live route. A deterministic assertion failure stops before network work. The harness first loads a guaranteed-missing config path and verifies that `exemplarsPath` resolves beside the moved extension, then uses normal config, accepts an optional CLI task, calls `route()`, and requires non-empty verdict fields.
 
@@ -50,9 +50,9 @@ These assertions exercise `parseSentinel()` and `resolveArm()`.
 
 The override fixtures verify prompt replacement and stable arm-slot execution mapping without network calls.
 
-They cover arbitrary CPA target IDs, simultaneous replacement when one target names another source arm, preserved selection keys, unchanged labels for unconfigured slots, overridden CPA lookup, and default CPA lookup.
+They cover arbitrary target IDs, simultaneous replacement when one target names another source arm, preserved selection keys, unchanged labels for unconfigured slots, overridden target lookup, and default lookup.
 
-These assertions exercise `applyJudgeModelOverrides()` and `judgeCpaModel()`. They do not exercise live target availability, quota behavior for arbitrary targets, registry switching, or persistence from the override picker.
+These assertions exercise `applyJudgeModelOverrides()` and `judgeModelName()`. They do not exercise live target availability, quota behavior for arbitrary CPA-backed targets, or persistence from the override picker.
 
 ## Command pin fixtures
 
@@ -74,6 +74,18 @@ The config-menu fixture registers the extension against a minimal pi API and rec
 
 It verifies that the top-level menu has one `Judge` entry plus a top-level `Overrides` entry, and that the `Judge` entry opens `Model`, `Effort`, and `Fast` choices. It exits before any picker performs provider work or writes config.
 
+## Non-CPA routing fixture
+
+The non-CPA fixture verifies provider-aware model resolution and one complete first-input route without CPA.
+
+It checks that unqualified duplicate IDs prefer CPA when available, provider-qualified values resolve exactly, and direct Anthropic/OpenAI Codex models handle judge selection, availability, pinned commands, and `pi.setModel()` while the judged fixture rejects every raw network request.
+
+## Non-CPA config fixture
+
+The non-CPA config fixture verifies that CPA-only controls disappear when Pi has no authenticated `cliproxyapi` model.
+
+It records the real `/llm-router-config` menu, requires quota and management-key actions to be absent, opens the JSON editor, and requires `cpaBase`, `cpaKeyEnv`, quota, and management-key fields to be omitted.
+
 ## Ultra compatibility fixtures
 
 `test/ultra-thinking.test.ts` exercises the reload-safe prototype helpers against fake classes without editing pi internals. Its payload check imports the Pi 0.84.2 runtime pinned by the package lock.
@@ -88,7 +100,7 @@ The final check runs the complete rubric, exemplar, judge, availability, quota, 
 
 Its default task is a README typo. Passing a CLI argument replaces that task. The script prints the full verdict as formatted JSON after validating required fields.
 
-This check is intentionally live and can fail because of credentials, CPA health, judge health, strict-schema support, quota, exemplar data, or configuration. The live route itself does not read pi's model registry or call `pi.setModel`.
+This check is intentionally live and can fail because of credentials, CPA health, judge health, strict-schema support, quota, exemplar data, or configuration. The live route itself has no Pi registry context, so it retains the legacy CPA target path and does not call `pi.setModel`.
 
 There is no fixture-only flag. Every invocation that passes the deterministic assertions proceeds to the external live route, which prevents an offline CI job from using the current harness unchanged.
 
@@ -102,7 +114,7 @@ Strict compiler, lint, and coverage checks prevent new dynamic-data shortcuts fr
 
 The smoke harness does not exercise every extension behavior.
 
-There are no automated fixtures for successful management API usage parsing, exact CPA ID matching, cache expiry and cached failures, config schema errors, exemplar similarity thresholds, malformed corpus handling, exact threshold equality, judge retries, network timeouts, Esc cancellation, repeated or empty sentinels, router-command namespace bypass, notice text, full pi dispatch ordering, registry fallback and failed `setModel`, complete native thinking-picker interaction, live override availability, override picker persistence, judge picker persistence, masked secret input, JSON editor behavior, or placeholder safety when models are absent.
+There are no automated fixtures for successful management API usage parsing, cache expiry and cached failures, config schema errors, exemplar similarity thresholds, malformed corpus handling, exact threshold equality, judge retries, network timeouts, Esc cancellation, repeated or empty sentinels, router-command namespace bypass, notice text, full pi dispatch ordering, failed `setModel`, complete native thinking-picker interaction, live override availability, override-picker persistence, judge-picker persistence, masked secret input, JSON editor saving, or placeholder safety when models are absent.
 
 The live route proves one integrated verdict, but it does not isolate which external contract failed. The repository has no CI workflow to run it. Changes in these uncovered areas need focused manual checks or new pure fixtures.
 
