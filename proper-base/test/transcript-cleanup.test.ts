@@ -108,6 +108,78 @@ test("agent settlement restores the collapsed process-detail default", async () 
 	assert.equal(expanded, false);
 });
 
+// @lat: [[lat.md/proper-base/tests#Verification#Settled render memoization]]
+test("settled re-renders reuse cached content instead of rebuilding", () => {
+	const chat = new Container();
+	const document = new Container();
+	document.addChild(new Container());
+	document.addChild(new Container());
+	document.addChild(chat);
+	const tui = {
+		children: [document],
+		inputListeners: new Set<(data: string) => unknown>(),
+		requestRender() {},
+		addInputListener() {
+			return () => {};
+		},
+		terminal: { rows: 24 },
+	};
+	const ctx = {
+		isIdle: () => true,
+		ui: {
+			getToolsExpanded: () => false,
+			theme: {
+				fg: (_color: string, text: string) => text,
+				italic: (text: string) => text,
+			},
+		},
+	};
+	const controller = installTranscriptCleanup(tui as never, ctx as never, {
+		getKeys: () => [],
+	});
+	assert.ok(controller);
+
+	const assistant = new AssistantMessageComponent({
+		content: [
+			{ type: "thinking", thinking: "plan" },
+			{ type: "text", text: "Working on it." },
+			{ type: "toolCall" },
+		],
+		stopReason: "toolUse",
+	});
+	let rebuilds = 0;
+	const updateContent = assistant.updateContent.bind(assistant);
+	assistant.updateContent = (message: Message) => {
+		rebuilds++;
+		updateContent(message);
+	};
+	const tool = new ToolExecutionComponent("tool-memo");
+	let expandCalls = 0;
+	const setExpanded = tool.setExpanded.bind(tool);
+	tool.setExpanded = (expanded: boolean) => {
+		expandCalls++;
+		setExpanded(expanded);
+	};
+	chat.addChild(new UserMessageComponent("go"));
+	chat.addChild(assistant);
+	chat.addChild(tool);
+	controller.settle();
+
+	chat.render(100);
+	const afterFirst = rebuilds;
+	const expandAfterFirst = expandCalls;
+	chat.render(100);
+	chat.render(100);
+	assert.equal(rebuilds, afterFirst);
+	assert.equal(expandCalls, expandAfterFirst);
+
+	// Width changes must recompute rather than serve stale lines.
+	const wide = chat.render(120).map(stripTerminalSequences).join("\n");
+	assert.match(wide, /thinking: plan/);
+	assert.ok(rebuilds > afterFirst);
+	controller.uninstall();
+});
+
 // @lat: [[lat.md/proper-base/tests#Verification#Settled transcript fixture]]
 test("settled transcript keeps thoughts and updates visible", () => {
 	let idle = false;

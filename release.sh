@@ -1,0 +1,1 @@
+tools/release-me/release.sh

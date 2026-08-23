@@ -43,6 +43,12 @@ type State = {
 	ids: WeakMap<object, string>;
 	nextId: number;
 	globalExpanded: boolean;
+	assistantCache: WeakMap<AssistantComponent, AssistantRenderCache>;
+};
+type AssistantRenderCache = {
+	message: AssistantMessage;
+	width: number;
+	lines: Map<string, string[]>;
 };
 type DetailKind = "tool" | "error";
 type Detail = {
@@ -55,6 +61,7 @@ type ToolComponent = Component & {
 	toolName?: string;
 	args?: unknown;
 	result?: { isError?: boolean };
+	expanded?: boolean;
 	setExpanded?(expanded: boolean): void;
 };
 type MouseTui = TUI & {
@@ -96,8 +103,10 @@ export function installTranscriptCleanup(
 		ids: new WeakMap(),
 		nextId: 0,
 		globalExpanded: ctx.ui.getToolsExpanded(),
+		assistantCache: new WeakMap(),
 	};
 	const render = chat.render;
+	const invalidate = chat.invalidate;
 	const listener: TuiInputListener = (data) => handleClick(data, state);
 	const unsubscribe = tui.addInputListener(listener);
 	prioritize(tui, listener);
@@ -166,8 +175,15 @@ export function installTranscriptCleanup(
 			if (chat[INSTALLED] !== controller) return;
 			unsubscribe();
 			chat.render = render;
+			chat.invalidate = invalidate;
 			delete chat[INSTALLED];
 		},
+	};
+	// Theme or terminal changes rebuild component content, so drop memoized
+	// assistant lines along with the native caches.
+	chat.invalidate = () => {
+		state = { ...state, assistantCache: new WeakMap() };
+		invalidate.call(chat);
 	};
 	chat.render = (width: number) => {
 		const globalExpanded = state.ctx.ui.getToolsExpanded();
@@ -278,13 +294,13 @@ function renderGroup(
 			message.content.forEach((part) => {
 				if (part.type === "thinking" && part.thinking?.trim()) {
 					lines.push(
-						...renderAssistantContent(assistant, message, [part], width),
+						...renderAssistantContent(assistant, message, [part], width, state),
 					);
 				}
 				if (hasToolCall && part.type === "text" && part.text?.trim()) {
 					lines.push(
 						...withVerticalSpacing(
-							renderAssistantContent(assistant, message, [part], width),
+							renderAssistantContent(assistant, message, [part], width, state),
 						),
 					);
 				}
@@ -314,7 +330,7 @@ function renderGroup(
 				);
 				if (direct.length) {
 					lines.push(
-						...renderAssistantContent(assistant, message, direct, width),
+						...renderAssistantContent(assistant, message, direct, width, state),
 					);
 				}
 			}
@@ -351,12 +367,26 @@ function renderAssistantContent(
 	message: AssistantMessage,
 	content: AssistantMessage["content"],
 	width: number,
+	state: State,
 ): string[] {
 	if (!assistant.updateContent) return assistant.render(width);
+	// The updateContent swap below rebuilds the component's children and
+	// discards their internal render caches, so re-running it every frame
+	// re-parses the whole transcript's markdown. Memoize per content subset.
+	let cache = state.assistantCache.get(assistant);
+	if (!cache || cache.message !== message || cache.width !== width) {
+		cache = { message, width, lines: new Map() };
+		state.assistantCache.set(assistant, cache);
+	}
+	const key = content.map((part) => message.content.indexOf(part)).join(",");
+	const cached = cache.lines.get(key);
+	if (cached) return cached;
 	const { errorMessage: _errorMessage, ...rest } = message;
 	assistant.updateContent({ ...rest, content, stopReason: "stop" }, false);
 	try {
-		return assistant.render(width);
+		const lines = assistant.render(width);
+		cache.lines.set(key, lines);
+		return lines;
 	} finally {
 		assistant.updateContent(message, false);
 	}
@@ -400,7 +430,9 @@ function renderDetail(detail: Detail, width: number, state: State): string[] {
 		`${header}${" ".repeat(Math.max(0, width - visibleWidth(header)))}`,
 	];
 	const expandable = detail.component as ToolComponent;
-	expandable.setExpanded?.(expanded);
+	// setExpanded rebuilds the tool's result renderer even when the state is
+	// unchanged, which re-sanitizes full outputs on every frame. Skip no-ops.
+	if (expandable.expanded !== expanded) expandable.setExpanded?.(expanded);
 	if (expanded) {
 		lines.push(...detail.component.render(width));
 		const button = `\x1b[7m ${state.ctx.ui.theme.fg(detailColor(detail.kind), "collapse")} \x1b[27m`;
