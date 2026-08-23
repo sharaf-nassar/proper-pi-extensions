@@ -39,7 +39,7 @@ A package install replaces any legacy direct-file registration for the same exte
 
 [PI_SETUP.md](../PI_SETUP.md) is the agent-facing runbook for reproducing the repository maintainer's public Pi environment without copying machine secrets or private integrations.
 
-The runbook installs the repository packages and Beads support, the verified public npm extension set, `lat.md`, Beads, UI/UX Pro Max, Unslop, and Ponytail. Package installs remain unpinned so Pi can update them; the documented list records sources and user-facing purpose.
+The runbook always installs `proper-base`, `proper-llm-router`, the verified public npm extension set, `lat.md`, UI/UX Pro Max, Unslop, and Ponytail. `proper-flow` and `beads-flow` install only when the `bd` CLI is present, because all five proper-flow prompts run `bd` and the beads-flow installer hard-fails without it. Package installs remain unpinned so Pi can update them; the documented list records sources and user-facing purpose.
 
 Settings changes are merge-only and limited to fullscreen TUI, skill commands, and the safe default for subagent worker context. Provider, trust, telemetry, proxy, image model, and credential choices remain user decisions.
 

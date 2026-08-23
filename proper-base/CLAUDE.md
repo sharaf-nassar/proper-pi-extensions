@@ -34,7 +34,6 @@ the scrolled-up jump-to-bottom button in `src/jump-to-bottom.ts`, history
 filtering in `src/history-guard.ts`, ordering in `src/history.ts`, submit
 interception in `src/recorder.ts`, and the private append-only JSONL store in
 `src/store.ts`.
-`install.mjs` is the npm `postinstall` hook and is not loaded by the extension.
 
 ## Conventions
 
@@ -77,7 +76,6 @@ interception in `src/recorder.ts`, and the private append-only JSONL store in
   processing; processed turns keep Pi's normal cancellation behavior.
 - Abort the turn only for a questionnaire the user actually dismissed; let
   questionnaire failures reach the model.
-- Never write user settings from a running session. Install-time defaults
-  belong in `install.mjs`, only when the key is absent, and an unreadable
-  settings file is left alone.
+- Never write user settings from a running session or package lifecycle script.
+  Environment setup belongs in `../PI_SETUP.md` and must merge existing JSON.
 - Keep pure history and storage logic covered by `node:test` fixtures.

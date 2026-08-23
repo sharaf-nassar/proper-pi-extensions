@@ -169,9 +169,12 @@ pi install npm:proper-llm-router
 For extension development, install a local checkout instead:
 
 ```bash
-npm --prefix /path/to/proper-pi-extensions/proper-llm-router install
 pi install /path/to/proper-pi-extensions/proper-llm-router
 ```
+
+The package has no runtime dependencies and no build step, so a local
+install needs no `npm install`; that command only prepares the development
+checks below.
 
 Add a placeholder provider and model to `~/.pi/agent/models.json`:
 

@@ -35,13 +35,11 @@
   "type": "module",
   "files": [
     "index.ts",
-    "install.mjs",
     "src",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "postinstall": "node install.mjs",
     "prepack": "npm test && npm run typecheck",
     "test": "node --test test/*.test.ts",
     "test:coverage": "node --experimental-test-coverage --test --test-coverage-lines=93 --test-coverage-branches=78 --test-coverage-functions=90 test/*.test.ts",

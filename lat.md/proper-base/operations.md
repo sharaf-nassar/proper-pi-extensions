@@ -16,15 +16,13 @@ Runtime `Symbol.for` keys and private process links retain their `pi-proper-base
 
 Releases run from the repository root with `./tools/release-me/release.sh bump <major|minor|patch> proper-base`. The script commits the manifest version and creates `proper-base-vMAJOR.MINOR.PATCH`; [[lat#Package releases]] verifies and publishes that exact tarball through npm trusted publishing.
 
-## Seeded user settings
+## User settings boundary
 
-Pi has no package install hook, so a default that another extension reads only from `~/.pi/agent/settings.json` is written by the npm `postinstall` script. No session ever writes it.
+proper-base does not write Pi settings during package installation or runtime, and its npm package has no install-time scripts; only the `prepack` validation gate remains.
 
-One default is seeded: `subagents.agentOverrides.worker.defaultContext` becomes `fresh`. pi-subagents ships its packaged `worker` agent with `defaultContext: fork`, which replays the parent transcript into every child; when the router resolves a child to the parent's own provider, api, and model, pi keeps the inherited signed thinking blocks and Anthropic rejects the request. Forked workers also carry the parent's whole token cost for a task whose prompt already states everything it needs.
+The complete environment setup in [PI_SETUP.md](../../PI_SETUP.md) asks the setup agent to merge `subagents.agentOverrides.worker.defaultContext: fresh` when no worker override exists. Existing worker overrides remain user-owned because they may deliberately select forked context.
 
-Pi installs npm sources with scripts enabled and runs `npm install` inside a cloned git source, so both fire the hook. A local path is only recorded in settings, so that checkout seeds when its own `npm install` runs. The target directory comes from `PI_CODING_AGENT_DIR` and falls back to `~/.pi/agent`, matching pi's own resolution.
-
-Seeding is skipped whenever a `worker` key already exists under `subagents.agentOverrides`, regardless of its value, so a deliberate `fork` is never reverted. A missing or unparseable settings file is left untouched rather than replaced, and every other key is preserved because the file is re-read, merged, and renamed into place. Pi merges only its own modified fields when it saves, so an added key survives later settings writes. A write that fails prints a warning and still exits zero: a convenience default must not fail an install.
+Fresh worker context avoids replaying the parent transcript and its token cost for self-contained tasks. Current pi-subagents versions sanitize signed Anthropic thinking blocks in forked sessions, so this preference is setup policy rather than a proper-base correctness dependency.
 
 ## Runtime requirements
 

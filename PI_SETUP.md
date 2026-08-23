@@ -22,11 +22,13 @@ auth files, private endpoints, or machine-specific paths from another user.
 
 Install:
 
-- `proper-base`, `proper-flow`, and `proper-llm-router` from npm.
-- `beads-flow` from this repository.
+- `proper-base` and `proper-llm-router` from npm — always.
+- `proper-flow` from npm and `beads-flow` from this repository — only when
+  the `bd` CLI is installed locally (`command -v bd` succeeds).
 - The other public Pi packages listed below.
 - `ui-ux-pro-max`, `unslop`, and Ponytail's bundled skills.
-- The public `lat.md` and Beads CLIs required by this repository.
+- The public `lat.md` CLI required by this repository. The Beads CLI is
+  optional; it gates the two Beads workflow bundles above.
 
 Do not install:
 
@@ -42,7 +44,7 @@ node --version
 pi list
 
 command -v git
-command -v jq
+command -v jq || true
 command -v bd || true
 command -v lat || true
 ```
@@ -62,12 +64,23 @@ for file in settings.json models.json mcp.json; do
 done
 ```
 
-If `bd` or `lat` is missing, ask before using these public install commands:
+If `lat` is missing, ask before using this public install command:
+
+```bash
+npm install --global lat.md
+```
+
+`bd` is optional and may already exist from a non-npm install (a Go or
+binary build also counts); `command -v bd` is the only check that matters.
+If it is missing, ask whether the user wants the Beads workflow. If yes,
+ask before installing:
 
 ```bash
 npm install --global @beads/bd
-npm install --global lat.md
 ```
+
+If the user declines, skip `proper-flow` in step 2 and `beads-flow` in
+step 3.
 
 ## 2. Install public Pi packages
 
@@ -88,7 +101,7 @@ These were verified as public npm Pi packages. Install unpinned sources so
 | `pi-context-view` | Adds context usage and hidden-injection inspection. |
 | `proper-base` | Adds this repository's baseline transcript, editor, history, image, cancellation, title, and footer behavior. |
 | `proper-llm-router` | Routes each session's first task to a configured model and applies quota-aware swaps. |
-| `proper-flow` | Adds this repository's `/triage`, `/file`, `/spec`, and `/implement-ready` prompts. |
+| `proper-flow` | Adds this repository's `/triage`, `/file`, `/spec`, `/backlog`, and `/implement-ready` prompts. All five run `bd`; install only when `bd` exists. |
 
 ```bash
 packages=(
@@ -104,23 +117,31 @@ packages=(
   'npm:pi-context-view'
   'npm:proper-base'
   'npm:proper-llm-router'
-  'npm:proper-flow'
 )
 
 for package in "${packages[@]}"; do
   pi install "$package"
 done
+
+if command -v bd >/dev/null 2>&1; then
+  pi install npm:proper-flow
+else
+  echo "bd not found: skipping proper-flow and beads-flow"
+fi
 ```
 
 ## 3. Install repository-local resources
 
-Install the Beads formulas and implementation rail. The links point into this
+Install the Beads formulas and implementation rail only when `bd` exists;
+`beads-flow/install.sh` hard-fails without `bd` or `jq`. The links point into this
 checkout, so moving or deleting the checkout breaks them.
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-"$REPO_ROOT/beads-flow/install.sh" link
-"$REPO_ROOT/beads-flow/install.sh" check
+if command -v bd >/dev/null 2>&1; then
+  "$REPO_ROOT/beads-flow/install.sh" link
+  "$REPO_ROOT/beads-flow/install.sh" check
+fi
 ```
 
 For extension development, local installs may replace the three npm packages:
@@ -129,8 +150,6 @@ For extension development, local installs may replace the three npm packages:
 pi remove npm:proper-base
 pi remove npm:proper-llm-router
 pi remove npm:proper-flow
-npm --prefix "$REPO_ROOT/proper-base" install
-npm --prefix "$REPO_ROOT/proper-llm-router" install
 pi install "$REPO_ROOT/proper-base"
 pi install "$REPO_ROOT/proper-llm-router"
 pi install "$REPO_ROOT/proper-flow"
@@ -164,7 +183,9 @@ second Ponytail skill directory.
 
 ## 5. Merge baseline Pi settings
 
-Preserve all existing keys. Apply these values unless the user chooses
+Package installation never edits Pi settings. The setup agent must preserve all
+existing keys and merge these values into
+`${PI_CODING_AGENT_DIR:-~/.pi/agent}/settings.json` unless the user chooses
 otherwise:
 
 ```json
@@ -183,12 +204,11 @@ otherwise:
 
 Rules:
 
-- Do not overwrite an existing `subagents.agentOverrides.worker` object. The
-  user may deliberately use forked worker context.
+- If `subagents.agentOverrides.worker` is absent, add the shown fresh-context
+  override. If it exists, leave it unchanged unless the user explicitly
+  approves an edit; they may deliberately use forked worker context.
 - Do not change `defaultProvider`, `defaultModel`, project trust, telemetry,
   proxy, or tool settings without asking.
-- `proper-base` seeds the fresh worker default during npm installation when a
-  readable settings file exists; verify the result instead of assuming it ran.
 
 ## 6. Configure CLIProxyAPI and the router
 
@@ -301,8 +321,8 @@ Remove:
 
 - Old direct `llm-router.ts` registrations.
 - Legacy `proper-customs`, `proper-history`, or duplicate `proper-base` paths.
-- Loose `~/.pi/agent/prompts/{triage,file,spec,implement-ready}.md` files when
-  `proper-flow` supplies those commands.
+- Loose `~/.pi/agent/prompts/{triage,file,spec,backlog,implement-ready}.md`
+  files when `proper-flow` supplies those commands.
 - Duplicate skill copies that produce Pi name-collision warnings.
 
 Use `pi remove <exact-source>` for package entries. Use `pi config` to disable
@@ -313,12 +333,14 @@ one resource from a package without uninstalling the whole package.
 Restart Pi or run `/reload`, then verify:
 
 ```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 pi list
-"$REPO_ROOT/beads-flow/install.sh" check
 lat check
+command -v bd >/dev/null 2>&1 && "$REPO_ROOT/beads-flow/install.sh" check
 
 test -f "$HOME/.agents/skills/ui-ux-pro-max/SKILL.md"
-test -f "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/skills/unslop/SKILL.md"
+test -f "$HOME/.agents/skills/unslop/SKILL.md" ||
+  test -f "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/skills/unslop/SKILL.md"
 ```
 
 Inside Pi:
@@ -333,12 +355,14 @@ Inside Pi:
 /ponytail-help
 ```
 
-Also verify autocomplete contains:
+Also verify autocomplete contains (the first five only when `proper-flow`
+was installed):
 
 ```text
 /triage
 /file
 /spec
+/backlog
 /implement-ready
 /skill:ui-ux-pro-max
 /skill:unslop
@@ -363,4 +387,5 @@ npx --yes skills update unslop --global --yes
 ```
 
 Update this repository before relinking `beads-flow`, and rerun its `check`
-command after the checkout moves.
+command after the checkout moves. Both apply only when `beads-flow` was
+installed.

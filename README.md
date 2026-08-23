@@ -44,17 +44,15 @@ pi install npm:proper-flow
 Local checkout:
 
 ```bash
-npm --prefix proper-base install
-
 pi install ./proper-base
 pi install ./proper-llm-router
 pi install ./proper-flow
 ```
 
-Pi supplies the extensions' core peer packages. proper-base's local
-`npm install` prepares development tooling and seeds the optional pi-subagents
-worker default. Each package README lists its remaining setup and runtime
-requirements.
+Pi supplies the extensions' core peer packages, and no package has runtime
+npm dependencies, so local installs need no `npm install`; it only prepares
+the development gates below. Each package README lists its remaining setup
+and runtime requirements.
 
 ## Release npm packages
 

@@ -1,6 +1,6 @@
 # Verification
 
-The package uses 75 `node:test` cases across session naming, model-preserving clearing, history, prompt display, editor, image markers, model context, transcript cleanup, fullscreen, cancellation, footer, and filesystem behavior.
+The package uses `node:test` cases across session naming, model-preserving clearing, history, prompt display, editor, image markers, model context, transcript cleanup, fullscreen, cancellation, footer, and filesystem behavior.
 
 ## Session-title fixture
 
@@ -123,14 +123,6 @@ An errored assistant message whose text matches the CPA `empty_stream` pattern m
 Store tests use temporary directories and real Node filesystem operations.
 
 They verify project-key encoding, path selection, round trips, whitespace and length limits, multiline JSONL, private file permissions, fail-open writes, missing and damaged data, bounded tail reads, compaction thresholds, newest-entry retention, and repeated multi-session appends.
-
-## Settings seed fixtures
-
-Settings-seed tests import the `postinstall` module directly and write real settings files into temporary agent directories.
-
-They verify the override is added without disturbing unrelated top-level keys, that sibling `subagents` and `agentOverrides` entries survive the merge, that an existing `worker` override is returned unchanged even when it says `fork`, that a second run is a no-op, that a missing or malformed settings file is neither created nor overwritten, and that the agent directory follows `PI_CODING_AGENT_DIR` including its tilde form.
-
-The module runs its seed only when invoked as the main script, so importing it in a test cannot touch the real settings file. Whether npm fires the hook is an install-time check rather than a fixture.
 
 ## Strict validation
 

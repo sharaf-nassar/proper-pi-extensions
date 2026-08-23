@@ -137,18 +137,14 @@ pi install npm:proper-base
 From a local checkout:
 
 ```bash
-npm install
 pi install /path/to/proper-pi-extensions/proper-base
 ```
 
 Pi supplies the core `@earendil-works/pi-coding-agent` and
-`@earendil-works/pi-tui` peer packages. Local `npm install` prepares development
-tooling and runs the install-time settings seed; it is not a runtime build.
-
-When an existing `settings.json` is readable, the postinstall hook sets
-`subagents.agentOverrides.worker.defaultContext` to `fresh` if no worker
-override exists. It leaves existing overrides, missing files, and unreadable
-settings untouched. Installing with `--ignore-scripts` skips that default.
+`@earendil-works/pi-tui` peer packages. The package has no runtime
+dependencies, no build step, and no install-time npm scripts, and it does
+not modify Pi settings during installation or runtime. `npm install` only
+prepares the development checks below.
 
 This package replaces the former local `proper-customs` identity. Keep only one
 registration. Existing data under the legacy `proper-history` path remains
@@ -171,6 +167,7 @@ compatible.
 ## Development
 
 ```bash
+npm install
 npm test
 npm run typecheck
 npm run test:coverage

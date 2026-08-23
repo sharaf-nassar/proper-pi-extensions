@@ -54,9 +54,6 @@ exact artifact from a protected `npm-release` environment.
 
 ## Gotchas
 
-- `proper-base` npm postinstall mutates `~/.pi/agent/settings.json`
-  (sets worker defaultContext to fresh); `--ignore-scripts` skips it.
-  `PI_CODING_AGENT_DIR` redirects the target.
 - Install into Pi with `pi install ./<package>`; stale direct-file
   registrations can double-load an extension.
 - `beads-flow/install.sh link` symlinks into THIS checkout — moving the
