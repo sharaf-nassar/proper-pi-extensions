@@ -80,6 +80,8 @@ The non-CPA fixture verifies provider-aware model resolution and one complete fi
 
 It checks that unqualified duplicate IDs prefer CPA when available, provider-qualified values resolve exactly, and direct Anthropic/OpenAI Codex models handle judge selection, availability, pinned commands, and `pi.setModel()` while the judged fixture rejects every raw network request.
 
+It also verifies that the factory self-registers exactly one `llm-router` provider whose model list contains `auto` and whose base URL stays on the dead port-1 placeholder.
+
 ## Non-CPA config fixture
 
 The non-CPA config fixture verifies that CPA-only controls disappear when Pi has no authenticated `cliproxyapi` model.

@@ -80,6 +80,25 @@ test("model targets resolve across configured Pi providers", () => {
 });
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]
+test("factory self-registers the llm-router/auto placeholder", () => {
+	const registered: Array<
+		[string, { baseUrl: string; models: { id: string }[] }]
+	> = [];
+	llmRouter({
+		on() {},
+		registerCommand() {},
+		registerProvider(name: string, config: unknown) {
+			registered.push([name, config as (typeof registered)[0][1]]);
+		},
+	} as unknown as Parameters<typeof llmRouter>[0]);
+	assert.equal(registered.length, 1);
+	const [name, config] = registered[0] ?? [];
+	assert.equal(name, "llm-router");
+	assert.equal(config?.models[0]?.id, "auto");
+	assert.ok(config?.baseUrl.startsWith("http://127.0.0.1:1/"));
+});
+
+// @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]
 test("first input routes through Pi providers without CPA", async () => {
 	let inputHandler:
 		| ((event: any, ctx: any) => Promise<{ action: string }>)

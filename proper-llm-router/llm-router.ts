@@ -58,9 +58,10 @@
  *
  * session_start forces fresh sessions back to llm-router/auto because pi
  * persists the last-set model as the default (LLM_ROUTER_OFF=1 disables).
- * llm-router/auto is a declarative placeholder in ~/.pi/agent/models.json;
- * no request should ever reach its endpoint — routing switches the session
- * before the agent loop runs.
+ * The factory self-registers llm-router/auto via pi.registerProvider();
+ * a manual ~/.pi/agent/models.json entry is optional and composes above
+ * it. No request should ever reach the placeholder endpoint — routing
+ * switches the session before the agent loop runs.
  *
  * Env hooks kept from the python stack: JUDGE_EXEMPLARS=0 (skip few-shot),
  * CPA_MANAGEMENT_KEY (per-account usage checks),
@@ -1266,6 +1267,31 @@ async function directFinal(
 }
 
 export default function (pi: ExtensionAPI) {
+	// Self-register the llm-router/auto placeholder so `pi install` alone
+	// is enough — no manual models.json edit on install or update. The
+	// port-1 baseUrl is an intentional dead end; routing switches away
+	// before any request. Older hosts without registerProvider fall back
+	// to the documented manual models.json entry.
+	if (typeof pi.registerProvider === "function") {
+		pi.registerProvider(PROVIDER, {
+			name: "LLM Router",
+			baseUrl: "http://127.0.0.1:1/v1",
+			apiKey: "unused",
+			api: "openai-completions",
+			models: [
+				{
+					id: "auto",
+					name: "auto",
+					reasoning: false,
+					input: ["text", "image"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 128000,
+					maxTokens: 16384,
+				},
+			],
+		});
+	}
+
 	function availableModels(ctx: ExtensionContext): RegistryModel[] {
 		return ctx.modelRegistry
 			.getAvailable()

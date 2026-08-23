@@ -176,7 +176,11 @@ The package has no runtime dependencies and no build step, so a local
 install needs no `npm install`; that command only prepares the development
 checks below.
 
-Add a placeholder provider and model to `~/.pi/agent/models.json`:
+The extension registers the `llm-router/auto` placeholder provider itself
+at load, so no `~/.pi/agent/models.json` edit is needed on install or
+update. An existing manual entry keeps working — Pi composes it with the
+registration — and remains the fallback for hosts without
+`pi.registerProvider()`:
 
 ```json
 {
@@ -191,10 +195,9 @@ Add a placeholder provider and model to `~/.pi/agent/models.json`:
 }
 ```
 
-The placeholder must be available in `/model`, but a healthy route switches
-away before any request reaches its URL. If you omit the inline dummy key,
-configure equivalent placeholder authentication through Pi. Missing execution
-or fallback registry models can leave the placeholder selected; fix the model
+The placeholder appears in `/model`, but a healthy route switches away
+before any request reaches its dead port-1 URL. Missing execution or
+fallback registry models can leave the placeholder selected; fix the model
 registry before retrying.
 
 The seven execution model IDs, `fallbackModel`, and active override targets

@@ -61,6 +61,7 @@ exact artifact from a protected `npm-release` environment.
   `${XDG_STATE_HOME:-~/.local/state}/bd-orchestrate`; prompt history:
   `~/.pi/agent/proper-history/`; router config:
   `~/.pi/agent/llm-router.json`.
-- Router models.json needs an `llm-router/auto` placeholder; its port-1
-  URL is an intentional dead placeholder, not a service.
+- Router self-registers the `llm-router/auto` placeholder at load; a
+  manual models.json entry is optional. Its port-1 URL is an intentional
+  dead placeholder, not a service.
 - Toolchain: Node 22.19+, Pi 0.84.2 compatibility, TypeScript 6.

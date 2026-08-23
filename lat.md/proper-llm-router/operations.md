@@ -8,7 +8,7 @@ The repository directory and public npm package are both named `proper-llm-route
 
 Install the published package with `pi install npm:proper-llm-router`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-llm-router`. The manifest registers `llm-router.ts`, limits the tarball to runtime source, the exemplar corpus, user documentation, and required license notices, and declares Pi's coding-agent API as a host-supplied peer.
 
-Remove any former direct `extensions` entry for `llm-router.ts` so only one package source loads. Define provider `llm-router` with model `auto` in `~/.pi/agent/models.json`, and provide Pi's required dummy authentication entry.
+Remove any former direct `extensions` entry for `llm-router.ts` so only one package source loads. The extension factory self-registers provider `llm-router` with model `auto` through `pi.registerProvider()`, including a dead port-1 base URL and dummy key, so installation needs no `~/.pi/agent/models.json` edit. Hosts without `registerProvider` fall back to a manual `models.json` placeholder entry with dummy authentication; an existing manual entry composes with the registration and stays harmless.
 
 The model IDs named in [[models]], the configured fallback, and active override targets must resolve among Pi's authenticated models. Values may use unqualified IDs or explicit `provider/model-id`; CPA remains the preferred provider for duplicate unqualified IDs.
 
@@ -78,7 +78,7 @@ The extension switches before the agent loop on a pinned, forced, judged, or fal
 
 The judged path reports an error when neither the verdict's effective target nor the fallback resolves. An unpinned bare command returns silently instead, so a missing fallback entry leaves that prompt on the placeholder. The registry-lookup section in `routing.md` covers the dated-ID tolerance applied before declaring a model absent.
 
-Automatic startup activation also fails silently when `llm-router/auto` is absent: the session stays on its current model and no routing occurs. The `/llm-router` command performs the same lookup interactively and reports the missing placeholder.
+Automatic startup activation also fails silently when `llm-router/auto` is absent: the session stays on its current model and no routing occurs. Self-registration makes this state reachable only on hosts without `pi.registerProvider()` and no manual entry. The `/llm-router` command performs the same lookup interactively and reports the missing placeholder.
 
 ## User notices
 
