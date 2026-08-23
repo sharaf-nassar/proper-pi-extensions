@@ -96,8 +96,9 @@ before creating tasks.
 
 - Resolves an epic id, one task id or unique title, or `all`. The worker limit
   defaults to 12 and never exceeds 12.
-- If `LLM_ROUTER_OFF=1`, asks whether to continue without routing or stop for a
-  restart. Users can hold named tasks out of the run at any time.
+- Users can hold named tasks out of the run at any time. Routing state is
+  infrastructure-owned: when `LLM_ROUTER_OFF=1`, proper-llm-router gates the
+  command with a confirm dialog; the prompts never probe routing state.
 - Refuses P4 items and P0 to P3 items without acceptance criteria instead of
   letting workers invent scope.
 - Uses the package rail for claims, hook-free task worktrees, declared-file

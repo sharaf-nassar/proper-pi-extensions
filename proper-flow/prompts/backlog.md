@@ -24,12 +24,10 @@ integration commits. The final Beads audit log still lands through `absorb`.
 
 1. Parse the optional worker count. Default `POOL_LIMIT=12`, reject values below
    1, and clamp values above 12 to 12 while reporting the effective limit.
-2. Run `printenv LLM_ROUTER_OFF`. If it prints `1`, ask whether to continue with
-   routing disabled or stop for a Pi restart. Do not silently lose routing.
-3. Verify `bd`, the `speckit` formula, pi-subagents, and the implementation rail
+2. Verify `bd`, the `speckit` formula, pi-subagents, and the implementation rail
    exist. Missing tools or formula files are environment failures; report them
    instead of inventing substitutes.
-4. Acquire one atomic repository run lock BEFORE reading the backlog. Set
+3. Acquire one atomic repository run lock BEFORE reading the backlog. Set
    `BACKLOG_RUN_ID=backlog-<UTC timestamp>-<session suffix>`, resolve the common
    Git directory, and atomically create
    `<git-common-dir>/backlog-refinement.lock` with `mkdir`. Store the run id,
@@ -37,7 +35,7 @@ integration commits. The final Beads audit log still lands through `absorb`.
    Existing lock → show its owner and stop. Resume only when the user explicitly
    chooses the same inactive run; adopt its `BACKLOG_RUN_ID`. Never steal or
    overwrite a lock owned by another live or uncertain run.
-5. Snapshot the baseline once:
+4. Snapshot the baseline once:
 
    ```bash
    bd list --status=open,deferred --priority=4 --json --limit=0
@@ -47,7 +45,7 @@ integration commits. The final Beads audit log still lands through `absorb`.
    `ADOPTED_SOURCE_IDS=[]` and `RUN_SOURCE_IDS=INITIAL_BACKLOG_IDS`. Empty means
    the backlog is clean: release the owned lock, report that, and stop without
    creating wisps.
-6. Read every baseline record with `bd show <id> --json`, including its parent,
+5. Read every baseline record with `bd show <id> --json`, including its parent,
    dependencies, labels, notes, design, acceptance, and provenance links. A P4
    epic is a cluster container, not a task to convert into type=task.
 

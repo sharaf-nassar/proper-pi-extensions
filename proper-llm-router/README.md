@@ -260,7 +260,7 @@ The full JSON editor writes a complete merged config.
 
 | Variable | Effect |
 | --- | --- |
-| `LLM_ROUTER_OFF=1` | Stops automatic startup activation and sentinel help. A session already on `llm-router/auto` can still route. |
+| `LLM_ROUTER_OFF=1` | Stops automatic startup activation and sentinel help. A session already on `llm-router/auto` can still route. A pinned workflow command in an interactive session opens a confirm dialog: continue unrouted, or stop the run before the agent starts. |
 | `JUDGE_EXEMPLARS=0` | Skips measured exemplar retrieval. |
 | `CPA_SIMULATE_UNAVAILABLE="arm1,arm2"` | Treats exact arm keys as down for swap testing. |
 | `CPA_MANAGEMENT_KEY` | Default management-key fallback. |

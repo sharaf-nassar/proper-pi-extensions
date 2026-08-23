@@ -1372,6 +1372,34 @@ export default function (pi: ExtensionAPI) {
 	// natively from the routed model, the footer shows it, and workflow
 	// children inherit it. llm-router/auto must never serve a request.
 	pi.on("input", async (event, ctx) => {
+		// Routing state is infrastructure's problem, never the model's: when
+		// LLM_ROUTER_OFF=1 a pinned workflow command would run unpinned and
+		// its spawned workers would inherit the variable and never route, so
+		// gate the run with a real dialog here. Declining stops the input
+		// before the agent sees it. hasUI guard: with no dialog surface,
+		// confirm() auto-returns false and would silently block headless
+		// runs, so those proceed unrouted instead — OFF was set on purpose.
+		// (Dialogs are safe in input handlers; session_start would hang.)
+		if (
+			process.env.LLM_ROUTER_OFF === "1" &&
+			ctx.hasUI &&
+			commandPin(loadConfig(), event.text)
+		) {
+			const proceed = await ctx.ui.confirm(
+				"llm-router is disabled (LLM_ROUTER_OFF=1)",
+				"This command normally pins its model and routes every spawned " +
+					"worker per task. With the router off it runs on the current " +
+					"session model and workers are not routed. Continue without " +
+					"routing?",
+			);
+			if (!proceed) {
+				ctx.ui.notify(
+					"llm-router: run stopped — unset LLM_ROUTER_OFF and restart pi to route",
+					"info",
+				);
+				return { action: "handled" };
+			}
+		}
 		if (ctx.model?.provider !== PROVIDER) return { action: "continue" };
 		if (!event.text.trim()) return { action: "continue" };
 

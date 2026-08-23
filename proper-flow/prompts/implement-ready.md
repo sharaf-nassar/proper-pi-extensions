@@ -41,13 +41,6 @@ first input (its task) gets its own judge verdict, and any model option in the
 spawn call is ignored. Your only model lever is the `[[llm-router: <model>]]`
 task prefix, applied per the ROUTING NOTES below.
 
-FIRST — routing precheck, before anything else (including the scope prompt):
-run `printenv LLM_ROUTER_OFF`. If it prints `1`, llm-router will NOT route
-workers — children keep whatever model pi-subagents resolves, and sentinel
-prefixes are never stripped or honored. Tell the user, and ask (A) continue
-with routing disabled, or (B) stop so they can unset it and restart pi. If
-unset: routing works normally, proceed.
-
 ROUTING NOTES — llm-router judges each worker's task text, so give it signal:
 every dispatched task string must lead with the bead title and a one-line
 scope summary before the protocol boilerplate (the judge reads the first

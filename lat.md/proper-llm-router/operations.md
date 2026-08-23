@@ -70,6 +70,8 @@ Environment variables provide credentials and test controls.
 
 `LLM_ROUTER_OFF` is not a global input-handler kill switch. It prevents automatic activation; a session already on `llm-router/auto` still meets the routing condition.
 
+Routing state stays an infrastructure concern: when the variable is set and a pinned workflow command arrives in an interactive session, the extension shows a confirmation dialog — continuing runs the command unrouted, declining stops the input before the agent starts. Sessions without a dialog surface proceed unrouted. Prompts and models never probe the environment or the system prompt for routing state.
+
 ## Placeholder safety
 
 `llm-router/auto` must never handle an inference request in a healthy setup.
