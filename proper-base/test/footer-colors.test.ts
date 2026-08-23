@@ -204,3 +204,107 @@ test("footer layout, colors, and shutdown restoration stay composed", async () =
 		await rm(cwd, { recursive: true, force: true });
 	}
 });
+
+test("footer layout reclaims usage width so model tags survive", async () => {
+	const cwd = await mkdtemp(join(tmpdir(), "proper-base-footer-fast-"));
+	type SessionHandler = (event: unknown, ctx: any) => void | Promise<void>;
+	let onSessionStart: SessionHandler | undefined;
+	let installedFactory:
+		| ((tui: any, theme: any, keybindings: any) => any)
+		| undefined;
+
+	properBase({
+		on(event: string, handler: SessionHandler) {
+			if (event === "session_start") onSessionStart = handler;
+		},
+		getCommands: () => [],
+	} as unknown as Parameters<typeof properBase>[0]);
+
+	const statsLeft =
+		"\u219110M \u2193261K R114M W2M CH99.5% $115.997 55.5%/1.0M (auto)";
+	const right = "gpt-5.6-sol \u2022 xhigh \u2022 fast";
+	class FooterComponent {
+		render(width: number) {
+			// Mimic pi's footer: right-align the model side and cut it with
+			// no ellipsis when the one-line stats row does not fit.
+			let stats: string;
+			if (statsLeft.length + 2 + right.length <= width) {
+				const pad = " ".repeat(width - statsLeft.length - right.length);
+				stats = `${statsLeft}${pad}${right}`;
+			} else {
+				const cut = right.slice(0, Math.max(0, width - statsLeft.length - 2));
+				const pad = " ".repeat(
+					Math.max(0, width - statsLeft.length - cut.length),
+				);
+				stats = `${statsLeft}${pad}${cut}`;
+			}
+			return ["~/work/scribe (main)", stats, "mcp ok"];
+		}
+		invalidate() {}
+		dispose() {}
+	}
+
+	const footer = new FooterComponent();
+	const editor = {
+		onSubmit: undefined,
+		addToHistory() {},
+		render: () => ["editor"],
+	};
+	const tui = {
+		children: [{ children: [editor] }, { children: [footer] }],
+		requestRender() {},
+		terminal: { rows: 24 },
+		showOverlay() {
+			return { hide() {} };
+		},
+	};
+	const theme = {
+		fg: (_name: string, text: string) => text,
+		getThinkingBorderColor: () => (text: string) => text,
+		getFgAnsi: () => "",
+	};
+	const ctx = {
+		cwd,
+		model: { id: "gpt-5.6-sol" },
+		thinkingLevel: "xhigh",
+		sessionManager: {
+			getBranch: () => [],
+			getSessionFile: () => undefined,
+		},
+		ui: {
+			getEditorComponent: () => () => editor,
+			setEditorComponent: (factory: typeof installedFactory) => {
+				installedFactory = factory;
+			},
+			theme,
+		},
+	};
+
+	try {
+		await onSessionStart?.({}, ctx);
+		installedFactory?.(
+			tui,
+			{
+				borderColor: (text: string) => text,
+				selectList: { description: (text: string) => text },
+			},
+			new KeybindingsManager(),
+		);
+
+		// At width 76 pi's own render drops " \u2022 fast"; the wide
+		// re-render must reclaim the usage columns so the tag survives.
+		assert.ok(
+			stripTerminalSequences(
+				new FooterComponent().render(76)[1] ?? "",
+			).endsWith("gpt-5.6-sol \u2022 xhigh"),
+		);
+		const lines = footer.render(76).map(stripTerminalSequences);
+		assert.ok(lines[0]?.endsWith("$115.997"));
+		assert.ok(lines[1]?.endsWith("gpt-5.6-sol \u2022 xhigh \u2022 fast"));
+		assert.equal(lines[1]?.length, 75);
+		assert.equal(lines[2], "mcp ok");
+	} finally {
+		footer.dispose();
+		await rm(cwd, { recursive: true, force: true });
+	}
+});

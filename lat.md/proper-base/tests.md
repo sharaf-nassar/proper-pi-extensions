@@ -106,6 +106,8 @@ A session integration fixture verifies the rearranged footer keeps its model, ef
 
 The same fixture verifies distinct colors for path, branch, input, output, cache read/write/hit, cost, context, model, and effort; context changes at warning and danger thresholds; a narrow row retains `xhigh`; max and ultra animate; and shutdown restores the native footer without stale context access. It also replaces an inherited prototype renderer after shutdown and verifies the reused footer picks up the replacement instead of retaining proper-base's stale captured function.
 
+A second fixture models pi's width-sensitive native render, which silently drops trailing model tags such as CLIProxyAPI's `fast` label when the one-line stats row overflows. It proves the layout's wide re-render recovers the full tag on the realigned model row at the original terminal width while extra status lines stay bounded.
+
 ## Early cancellation fixture
 
 A session integration fixture verifies editable recovery of an unprocessed cancelled prompt.

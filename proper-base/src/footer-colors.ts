@@ -114,12 +114,17 @@ export function installFooterColors(
 		if (level === "max" || level === "ultra") startAnimation();
 		else stopAnimation();
 		const theme = state.ctx.ui.theme;
-		return colorFooter(layoutFooter(render.call(footer, width), width, theme), {
-			level,
-			model: state.ctx.model?.id,
-			now: Date.now(),
-			theme,
-		});
+		return colorFooter(
+			layoutFooter(render.call(footer, width), width, theme, (wide) =>
+				render.call(footer, wide),
+			),
+			{
+				level,
+				model: state.ctx.model?.id,
+				now: Date.now(),
+				theme,
+			},
+		);
 	};
 	footer.dispose = () => {
 		controller.uninstall();
@@ -133,12 +138,13 @@ function layoutFooter(
 	lines: string[],
 	width: number,
 	theme: FooterTheme,
+	reRender?: (width: number) => string[],
 ): string[] {
 	if (lines.length < 2 || !Number.isFinite(width) || width < 20) return lines;
 
-	const statsLine = lines[1];
+	let statsLine = lines[1];
 	if (!statsLine) return lines;
-	const match = stripTerminalSequences(statsLine).match(USAGE_THROUGH_COST);
+	let match = stripTerminalSequences(statsLine).match(USAGE_THROUGH_COST);
 	const usage = match?.[1];
 	if (!match || !usage) return lines;
 
@@ -146,6 +152,22 @@ function layoutFooter(
 	const usageWidth = visibleWidth(usage);
 	const availablePathWidth = contentWidth - usageWidth - 1;
 	if (availablePathWidth < 8) return lines;
+
+	// Pi right-aligns the model segment against the original width and cuts
+	// its tail (thinking level, fast, paused) with no ellipsis when the
+	// one-line stats row overflows. This layout frees exactly the usage
+	// block's columns, so re-render at that width to recover the cut tags.
+	if (reRender) {
+		const wide = reRender(width + usageWidth);
+		const wideStats = wide[1] ?? "";
+		const wideMatch =
+			stripTerminalSequences(wideStats).match(USAGE_THROUGH_COST);
+		if (wideMatch?.[1] === usage) {
+			lines = wide;
+			statsLine = wideStats;
+			match = wideMatch;
+		}
+	}
 
 	const result = [...lines];
 	const path = truncateToWidth(
@@ -166,6 +188,13 @@ function layoutFooter(
 		true,
 	);
 	result[1] = realignFooterRemainder(remainder, contentWidth, theme);
+	for (let index = 2; index < result.length; index++) {
+		result[index] = truncateToWidth(
+			result[index] ?? "",
+			width,
+			theme.fg("dim", "..."),
+		);
+	}
 	return result;
 }
 
