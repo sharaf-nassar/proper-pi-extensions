@@ -33,9 +33,8 @@ Mechanism lives in the rail, not in this file:
 Treat its help output as the source of truth for arguments. It owns run state,
 claims, worktrees, the integration lock, squash preparation, integration
 verification, cleanup, the acceptance gate, the overlap report, the retry gate,
-and audit-log staging. It never launches agents and never commits. The same rail
-drives the Claude and Codex versions of this command; only the agent runtime and
-the routing model differ. Everything below is judgement the rail cannot make.
+and audit-log staging. It never launches agents and never commits.
+Everything below is judgement the rail cannot make.
 
 Worker model selection is llm-router's job, not yours: every spawned worker's
 first input (its task) gets its own judge verdict, and any model option in the
@@ -362,10 +361,9 @@ flow: `survey` is a rail command YOU run directly between pool events.)
    Ponytail debt (BEFORE the absorb — it runs `bd create`). Workers under
    ponytail mark deliberate shortcuts with `ponytail: <ceiling>, <upgrade path>`
    comments that squash onto main where nobody sees them again. Invoke the
-   `ponytail-debt` skill for the ledger — do NOT hand-roll the scan. (On pi the
-   skill id is bare `ponytail-debt`, from `npm:@dietrichgebert/ponytail`; the
-   `ponytail:` prefix in the Claude and Codex copies of this command is that
-   host's plugin namespacing and does not resolve here.) Ponytail is an optional
+   `ponytail-debt` skill for the ledger — do NOT hand-roll the scan (the
+   skill id is bare `ponytail-debt`, from `npm:@dietrichgebert/ponytail`).
+   Ponytail is an optional
    package: if unavailable, report `ponytail_debt: skill unavailable` and move
    on; never substitute your own grep. Otherwise:
    - Keep only rows this run introduced: a row's `<file>:<line>` must appear in

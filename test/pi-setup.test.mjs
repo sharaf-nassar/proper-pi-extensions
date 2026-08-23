@@ -33,7 +33,7 @@ test("complete Pi setup covers public packages and explicit exclusions", async (
 	assert.match(setup, /skills add cursor\/plugins/);
 	assert.match(setup, /--skill unslop/);
 	assert.match(setup, /proper-llm-router/);
-	assert.match(setup, /beads-flow\/install\.sh/);
+	assert.match(setup, /proper-flow\/install\.sh/);
 	assert.match(setup, /npm install --global lat\.md/);
 	assert.match(setup, /npm install --global @beads\/bd/);
 	assert.match(setup, /Do not install:[\s\S]*quill\.ts/);

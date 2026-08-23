@@ -23,8 +23,8 @@ auth files, private endpoints, or machine-specific paths from another user.
 Install:
 
 - `proper-base` and `proper-llm-router` from npm — always.
-- `proper-flow` from npm and `beads-flow` from this repository — only when
-  the `bd` CLI is installed locally (`command -v bd` succeeds).
+- `proper-flow` from npm, plus its repository-linked Beads resources — only
+  when the `bd` CLI is installed locally (`command -v bd` succeeds).
 - The other public Pi packages listed below.
 - `ui-ux-pro-max`, `unslop`, and Ponytail's bundled skills.
 - The public `lat.md` CLI required by this repository. The Beads CLI is
@@ -79,8 +79,8 @@ ask before installing:
 npm install --global @beads/bd
 ```
 
-If the user declines, skip `proper-flow` in step 2 and `beads-flow` in
-step 3.
+If the user declines, skip `proper-flow` in step 2 and its Beads resources
+in step 3.
 
 ## 2. Install public Pi packages
 
@@ -126,21 +126,21 @@ done
 if command -v bd >/dev/null 2>&1; then
   pi install npm:proper-flow
 else
-  echo "bd not found: skipping proper-flow and beads-flow"
+  echo "bd not found: skipping proper-flow and its Beads resources"
 fi
 ```
 
 ## 3. Install repository-local resources
 
 Install the Beads formulas and implementation rail only when `bd` exists;
-`beads-flow/install.sh` hard-fails without `bd` or `jq`. The links point into this
-checkout, so moving or deleting the checkout breaks them.
+`proper-flow/install.sh` hard-fails without `bd` or `jq`. The links point into
+this checkout, so moving or deleting the checkout breaks them.
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 if command -v bd >/dev/null 2>&1; then
-  "$REPO_ROOT/beads-flow/install.sh" link
-  "$REPO_ROOT/beads-flow/install.sh" check
+  "$REPO_ROOT/proper-flow/install.sh" link
+  "$REPO_ROOT/proper-flow/install.sh" check
 fi
 ```
 
@@ -336,7 +336,7 @@ Restart Pi or run `/reload`, then verify:
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 pi list
 lat check
-command -v bd >/dev/null 2>&1 && "$REPO_ROOT/beads-flow/install.sh" check
+command -v bd >/dev/null 2>&1 && "$REPO_ROOT/proper-flow/install.sh" check
 
 test -f "$HOME/.agents/skills/ui-ux-pro-max/SKILL.md"
 test -f "$HOME/.agents/skills/unslop/SKILL.md" ||
@@ -386,6 +386,6 @@ npx --yes ui-ux-pro-max-cli@latest \
 npx --yes skills update unslop --global --yes
 ```
 
-Update this repository before relinking `beads-flow`, and rerun its `check`
-command after the checkout moves. Both apply only when `beads-flow` was
-installed.
+Update this repository before relinking the proper-flow Beads resources, and
+rerun `proper-flow/install.sh check` after the checkout moves. Both apply only
+when those links were installed.

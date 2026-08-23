@@ -1,9 +1,9 @@
 # proper-pi-extensions — repo guide for agents
 
 Independently installable local Pi packages: `proper-base/` (TS extension),
-`proper-llm-router/` (TS routing extension + exemplar corpus),
-`proper-flow/` (prompt-only package), `beads-flow/` (Beads formulas +
-implementation rail). Root is NOT an npm package/workspace — use
+`proper-llm-router/` (TS routing extension + exemplar corpus), and
+`proper-flow/` (workflow prompts + Beads formulas + implementation rail).
+Root is NOT an npm package/workspace — use
 `npm --prefix <pkg>` or cd into each package.
 
 ## Ground rules
@@ -56,7 +56,7 @@ exact artifact from a protected `npm-release` environment.
 
 - Install into Pi with `pi install ./<package>`; stale direct-file
   registrations can double-load an extension.
-- `beads-flow/install.sh link` symlinks into THIS checkout — moving the
+- `proper-flow/install.sh link` symlinks into THIS checkout — moving the
   repo breaks `~/.beads/` links. Rail state:
   `${XDG_STATE_HOME:-~/.local/state}/bd-orchestrate`; prompt history:
   `~/.pi/agent/proper-history/`; router config:

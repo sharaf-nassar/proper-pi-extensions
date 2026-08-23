@@ -12,19 +12,12 @@ Current packages:
 
 - [proper-llm-router](../proper-llm-router/) — npm package `proper-llm-router`, routing each session's first task to an appropriate model.
 - [proper-base](../proper-base/) — npm package `proper-base`, providing baseline history, prompt editing, cancellation, fullscreen navigation, image previews, and footer layout.
-- [proper-flow](../proper-flow/) — npm package `proper-flow`, containing triage, bug investigation, specification, and implementation workflow prompts.
-
-## Support bundles
-
-Repository-owned support bundles remain separate from Pi package discovery.
-
-- [beads-flow](../beads-flow/) — versions and installs the Beads formulas and implementation rail used by proper-flow.
+- [proper-flow](../proper-flow/) — npm package `proper-flow`, containing triage, bug investigation, specification, and implementation workflow prompts plus the Beads formulas and implementation rail they drive.
 
 <!-- lat-index
 - [[proper-llm-router]] — repository index entry
 - [[proper-base]] — repository index entry
 - [[proper-flow]] — repository index entry
-- [[beads-flow]] — Beads workflow support
 -->
 
 ## Installation model
@@ -39,7 +32,7 @@ A package install replaces any legacy direct-file registration for the same exte
 
 [PI_SETUP.md](../PI_SETUP.md) is the agent-facing runbook for reproducing the repository maintainer's public Pi environment without copying machine secrets or private integrations.
 
-The runbook always installs `proper-base`, `proper-llm-router`, the verified public npm extension set, `lat.md`, UI/UX Pro Max, Unslop, and Ponytail. `proper-flow` and `beads-flow` install only when the `bd` CLI is present, because all five proper-flow prompts run `bd` and the beads-flow installer hard-fails without it. Package installs remain unpinned so Pi can update them; the documented list records sources and user-facing purpose.
+The runbook always installs `proper-base`, `proper-llm-router`, the verified public npm extension set, `lat.md`, UI/UX Pro Max, Unslop, and Ponytail. `proper-flow` and its linked Beads resources install only when the `bd` CLI is present, because all five proper-flow prompts run `bd` and the proper-flow installer hard-fails without it. Package installs remain unpinned so Pi can update them; the documented list records sources and user-facing purpose.
 
 Settings changes are merge-only and limited to fullscreen TUI, skill commands, and the safe default for subagent worker context. Provider, trust, telemetry, proxy, image model, and credential choices remain user decisions.
 

@@ -3,9 +3,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-T="$(mktemp -d /tmp/beads-flow-install.XXXXXX)"
+T="$(mktemp -d /tmp/proper-flow-install.XXXXXX)"
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/home"
+
+# A legacy beads-flow install leaves symlinks into a checkout path that no
+# longer exists; link must redirect them instead of failing.
+mkdir -p "$T/home/.beads/rail"
+ln -s /old-checkout/beads-flow/rail/implement-ready.sh \
+  "$T/home/.beads/rail/implement-ready.sh"
 
 HOME="$T/home" "$ROOT/install.sh" link >/dev/null
 HOME="$T/home" "$ROOT/install.sh" check >/dev/null
@@ -24,6 +30,12 @@ done
   exit 1
 }
 printf 'ok: link installs managed files and a real no-hooks directory\n'
+
+[[ "$(readlink "$T/home/.beads/rail/implement-ready.sh")" == "$ROOT/rail/implement-ready.sh" ]] || {
+  printf 'FAIL: legacy beads-flow link was not redirected\n' >&2
+  exit 1
+}
+printf 'ok: link redirects dangling legacy beads-flow symlinks\n'
 
 rm "$T/home/.beads/formulas/speckit.formula.toml"
 printf 'local override\n' >"$T/home/.beads/formulas/speckit.formula.toml"

@@ -7,7 +7,7 @@ BEADS_HOME="$HOME/.beads"
 FORMULAS=(constitution speckit)
 
 fail() {
-  printf 'beads-flow: %s\n' "$*" >&2
+  printf 'proper-flow: %s\n' "$*" >&2
   exit 1
 }
 
@@ -49,7 +49,7 @@ check_formulas() {
   local scratch output name destination source
   command -v bd >/dev/null 2>&1 || fail "required tool not found: bd"
   command -v jq >/dev/null 2>&1 || fail "required tool not found: jq"
-  scratch="$(mktemp -d /tmp/beads-flow-check.XXXXXX)"
+  scratch="$(mktemp -d /tmp/proper-flow-check.XXXXXX)"
   trap 'rm -rf "$scratch"' RETURN
 
   for name in "${FORMULAS[@]}"; do
@@ -78,7 +78,7 @@ check_all() {
     fail "rail is not executable: $ROOT/rail/implement-ready.sh"
   check_no_hooks
   check_formulas
-  printf 'beads-flow: links and formula resolution are current\n'
+  printf 'proper-flow: links and formula resolution are current\n'
 }
 
 link_all() {

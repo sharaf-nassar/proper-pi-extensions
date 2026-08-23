@@ -1,7 +1,7 @@
 {
   "name": "proper-flow",
   "version": "0.1.1",
-  "description": "Beads workflow prompt templates for triage, investigation, specification, and implementation",
+  "description": "Beads workflow bundle: prompt templates, formulas, and the implementation rail for triage, investigation, specification, and implementation",
   "keywords": [
     "pi-package",
     "pi",
@@ -26,6 +26,9 @@
   },
   "files": [
     "prompts",
+    "formulas",
+    "rail",
+    "install.sh",
     "README.md",
     "LICENSE"
   ],

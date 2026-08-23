@@ -1,10 +1,11 @@
 # proper-flow
 
 Five [Pi](https://pi.dev) prompt templates that take Beads work from intake to
-verified implementation. The package contains prompts only; it installs no
-runtime extension code, skills, or npm dependencies. Prompt-only describes the
-package loading boundary, not the workflows' Beads, Git, worktree, and commit
-side effects.
+verified implementation, plus the Beads resources behind them: the
+`constitution` and `speckit` formulas and the `implement-ready.sh` safety
+rail. The package installs no runtime extension code, skills, or npm
+dependencies; Pi loads only the prompts, while `install.sh` links the formulas
+and rail into `~/.beads/`.
 
 ## Commands
 
@@ -99,7 +100,7 @@ before creating tasks.
   restart. Users can hold named tasks out of the run at any time.
 - Refuses P4 items and P0 to P3 items without acceptance criteria instead of
   letting workers invent scope.
-- Uses the `beads-flow` rail for claims, hook-free task worktrees, declared-file
+- Uses the package rail for claims, hook-free task worktrees, declared-file
   overlap checks, worker result validation, integration locks, squash
   preparation, quality gates, cleanup, and audit staging.
 - Keeps a rolling async pool. A finished task can integrate and unblock the next
@@ -126,6 +127,15 @@ Common report states:
 | `stranded` | Work remains blocked by a stuck task. |
 | `held` | User excluded the task from this run. |
 
+## Implementation rail
+
+`rail/implement-ready.sh` never launches agents and never commits. It owns run
+state, task claims, hook-free task worktrees, declared-file overlap checks,
+worker result validation, the integration lock, squash preparation,
+integration verification, retry evidence, cleanup, and Beads audit staging.
+The `/implement-ready` prompt supplies all judgement; `--help` documents the
+rail's commands and stays the source of truth for arguments.
+
 ## Install
 
 From npm:
@@ -144,13 +154,19 @@ Remove same-named files from `~/.pi/agent/prompts/` so Pi discovers only one
 source for each command. Confirm the package with `pi list`, then reload Pi
 after prompt edits.
 
-## Runtime requirements
-
-Install the support bundle first:
+Then link the Beads resources (requires `bd` and `jq`; symlinks point into the
+checkout, so keep it in place):
 
 ```bash
-/path/to/proper-pi-extensions/beads-flow/install.sh link
+/path/to/proper-pi-extensions/proper-flow/install.sh link
+/path/to/proper-pi-extensions/proper-flow/install.sh check
 ```
+
+`link` creates `~/.beads/formulas/` and `~/.beads/rail/` links plus the real
+empty `~/.beads/no-hooks/` directory, refuses to overwrite different existing
+files, and `check` verifies links, rail executability, and formula resolution.
+
+## Runtime requirements
 
 The prompts expect:
 
@@ -174,12 +190,14 @@ npm pack --dry-run
 npm publish --dry-run
 ```
 
-`prepack` runs the test before a tarball or publish. The test protects package
-discovery, autocomplete metadata, questionnaire use, structured acceptance,
-backlog clustering, task scope, rolling-pool behavior, and integration
-sequencing. It does not
-execute Beads formulas, the rail, subagents, or live model routing. Node 22.19
-or newer is required for development checks.
+`prepack` runs the Node test before a tarball or publish. The Node test
+protects package discovery, autocomplete metadata, questionnaire use,
+structured acceptance, backlog clustering, task scope, rolling-pool behavior,
+and integration sequencing. Dependency-free shell suites under `test/` cover
+the installer, the rail's survey filtering, integration recovery, retry and
+rebase behavior, audit absorption, and both Speckit formula contracts; the
+repository root gate runs them through `test.sh`. Node 22.19 or newer is
+required for development checks.
 
 ## License
 

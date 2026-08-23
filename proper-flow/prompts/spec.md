@@ -3,10 +3,6 @@ description: Run the global speckit beads formula from an idea, epic, or P4 back
 argument-hint: <feature idea, problem statement, existing epic id, or P4 issue id>
 ---
 
-Pi port of `~/.claude/commands/spec.md` (itself twin-maintained with the
-Codex skill at `~/.codex/skills/spec/SKILL.md`) — mirror any substantive
-edit across all three (platform-specific wording aside).
-
 Drive the global `speckit` beads formula end to end for: $ARGUMENTS
 
 You run ALL bd commands yourself — the user never touches the bd CLI.

@@ -14,12 +14,16 @@ Beads (`bd`) is managed from the repository root.
 
 ```bash
 npm test
+bash test.sh
 ```
 
 ## Architecture
 
-This is a prompt-only Pi package. `package.json` registers `prompts/`; there is
-no runtime extension entrypoint or dependency tree.
+Pi loads only `prompts/` (registered in `package.json`); there is no runtime
+extension entrypoint or dependency tree. The package also owns the Beads
+resources the prompts drive: `formulas/` (constitution, speckit), the
+`rail/implement-ready.sh` safety rail, and `install.sh`, which links them into
+`~/.beads/` as symlinks to this checkout.
 
 ## Conventions
 
@@ -30,7 +34,8 @@ no runtime extension entrypoint or dependency tree.
   investigates bugs, spec refines scope, backlog drains P4 work into
   implement-ready clusters, and implement-ready executes one task, an epic
   frontier, or the whole board.
-- `spec.md` is twin-maintained with the Claude command and Codex skill named in
-  that prompt; mirror substantive workflow changes across all copies.
-- Shared Beads formulas and the implementation rail remain external user tools,
-  not files copied into this package.
+- The rail never launches agents and never commits; agent orchestration and
+  judgement stay in the prompts.
+- Formulas and the rail deploy only through `install.sh` symlinks; runtime
+  Beads state (databases, locks, audit logs, `no-hooks`) never enters the
+  package.

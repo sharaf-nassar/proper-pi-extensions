@@ -31,7 +31,7 @@ Usage:
   implement-ready.sh cleanup --run-dir DIR --task ID
   implement-ready.sh unlock --run-dir DIR --task ID [--abort]
 
-The root Codex orchestrator owns all bd and primary-checkout mutations.
+The root orchestrator owns all bd and primary-checkout mutations.
 Workers only edit, test, and commit in worktrees created by `worktree`.
 All successful commands emit one JSON object. Errors are nonzero and are never
 converted into an empty frontier. `prepare` holds the integration lock across
@@ -255,7 +255,7 @@ cmd_init() {
   mkdir -p "$state_root"
   run_dir="$(mktemp -d "${state_root}/${repo_base}.run-$(date -u +%Y%m%dT%H%M%S).XXXXXX")"
   run_id="$(basename "$run_dir" | sed 's/^[^.]*\.//')"
-  actor="codex-implement-ready-${run_id}"
+  actor="implement-ready-${run_id}"
   token="${run_id}-$$-${RANDOM}${RANDOM}"
   mkdir "$run_dir/tasks" "$run_dir/attempts" "$run_dir/integrations"
   json="$(jq -cn \

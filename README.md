@@ -15,11 +15,10 @@ credentials or private integrations.
 | --- | --- | --- |
 | [proper-base](./proper-base/README.md) | Pi extension | Improves transcripts, session titles, `/clear`, prompt history and search, editor keys, autocomplete, fullscreen navigation, image handling, cancellation, and footer layout. |
 | [proper-llm-router](./proper-llm-router/README.md) | Pi extension | Routes each session's first task to one of seven model tiers, then handles command pins, per-task overrides, quota swaps, fallbacks, and `ultra` thinking support. |
-| [proper-flow](./proper-flow/README.md) | Pi prompt package | Adds `/triage`, `/file`, `/spec`, `/backlog`, and `/implement-ready` for filing, refining, and implementing Beads work. |
-| [beads-flow](./beads-flow/README.md) | Beads support bundle | Installs the `constitution` and `speckit` formulas plus the worktree, retry, integration, and audit rail used by `proper-flow`. |
+| [proper-flow](./proper-flow/README.md) | Pi prompt package | Adds `/triage`, `/file`, `/spec`, `/backlog`, and `/implement-ready` for filing, refining, and implementing Beads work, and ships the `constitution` and `speckit` formulas plus the worktree, retry, integration, and audit rail behind them. |
 
-`proper-base` and `proper-llm-router` work independently. `proper-flow` expects
-`beads-flow`; it can also use pi-subagents for parallel workers and
+`proper-base` and `proper-llm-router` work independently. `proper-flow`
+can also use pi-subagents for parallel workers and
 `proper-llm-router` for per-task model selection. With both runtime extensions
 installed, proper-base's `/clear` keeps the outgoing model instead of re-arming
 the router. The tested Pi compatibility target is 0.84.2; dependency-backed
@@ -35,10 +34,11 @@ pi install npm:proper-llm-router
 pi install npm:proper-flow
 ```
 
-`proper-flow` still expects the Beads resources from this repository:
+`proper-flow` also links its Beads resources (formulas and rail) into
+`~/.beads/`:
 
 ```bash
-./beads-flow/install.sh link
+./proper-flow/install.sh link
 ```
 
 Local checkout:
@@ -95,7 +95,7 @@ npm package to disallow token publishing.
 | Folder | Purpose |
 | --- | --- |
 | [`lat.md/`](./lat.md/) | Architecture, protocol, and verification documentation. |
-| [`.beads/`](./.beads/) | Repository task state and Git hook shims. This is separate from the user-facing `beads-flow/` bundle. |
+| [`.beads/`](./.beads/) | Repository task state and Git hook shims. This is separate from the user-facing resources `proper-flow/install.sh` links into `~/.beads/`. |
 | [`scripts/`](./scripts/) | Shared repository validation and policy checks. |
 | [`test/`](./test/) | Cross-package regression tests. |
 
