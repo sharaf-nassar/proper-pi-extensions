@@ -214,7 +214,9 @@ Rules:
 
 The router requires a reachable CLIProxyAPI service and user-supplied
 credentials. If the user does not have one, skip router activation or launch Pi
-with `LLM_ROUTER_OFF=1`.
+with `LLM_ROUTER_OFF=1`. With that variable set, pinned workflow commands such
+as `/implement-ready` open a router confirmation dialog offering to continue
+unrouted or stop; headless sessions proceed unrouted without a dialog.
 
 Add the harmless placeholder model to
 `${PI_CODING_AGENT_DIR:-~/.pi/agent}/models.json`, merging with existing

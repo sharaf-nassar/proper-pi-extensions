@@ -62,7 +62,7 @@ Environment variables provide credentials and test controls.
 | variable named by `judge.apiKeyEnv` | bearer token for judge requests |
 | variable named by `cpaKeyEnv` | bearer token for CPA model listing |
 | variable named by `cpaManagementKeyEnv` | management-key fallback when the config value is empty |
-| `LLM_ROUTER_OFF=1` | stops startup from forcing `llm-router/auto` and omits sentinel help; explicit selection of `auto` can still route |
+| `LLM_ROUTER_OFF=1` | stops startup from forcing `llm-router/auto` and omits sentinel help; explicit selection of `auto` can still route; pinned workflow commands gate through a confirm dialog in dialog-capable sessions |
 | `JUDGE_EXEMPLARS=0` | disables exemplar retrieval |
 | `CPA_SIMULATE_UNAVAILABLE` | comma-separated exact arm keys treated as down |
 | `PI_SUBAGENT_CHILD` | identifies child sessions for sentinel-help suppression |
