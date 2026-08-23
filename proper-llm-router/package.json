@@ -1,6 +1,6 @@
 {
   "name": "proper-llm-router",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Route each Pi session's first task to an appropriate model",
   "keywords": [
     "pi-package",
