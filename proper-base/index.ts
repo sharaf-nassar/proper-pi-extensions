@@ -40,6 +40,7 @@ import {
 import { type HistoryGuard, installHistoryGuard } from "./src/history-guard.ts";
 import { omitPriorTurnImages } from "./src/image-context.ts";
 import {
+	enableScribeImageCapability,
 	type ImagePreviewController,
 	installImagePreview,
 } from "./src/image-preview.ts";
@@ -210,6 +211,8 @@ function decodeModelReference(value: string): ModelReference | undefined {
 }
 
 export default function (pi: ExtensionAPI) {
+	enableScribeImageCapability();
+
 	let removeFooterColors: (() => void) | undefined;
 	let removeJumpToBottom: (() => void) | undefined;
 	let removePromptClear: (() => void) | undefined;
@@ -579,7 +582,10 @@ export default function (pi: ExtensionAPI) {
 			removeJumpToBottom?.();
 			removeJumpToBottom = installJumpToBottom(editor, tui);
 			imagePreview?.dispose();
-			imagePreview = installImagePreview(editor, tui);
+			imagePreview = installImagePreview(editor, tui, {
+				fallbackColor: (value) => ctx.ui.theme.fg("dim", value),
+				loadingColor: (value) => ctx.ui.theme.fg("accent", value),
+			});
 			installEditorNavigation(editor, keybindings);
 			installInlineSlashAutocomplete(editor);
 			installRecorder(

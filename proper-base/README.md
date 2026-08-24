@@ -106,15 +106,25 @@ dragging.
 ### Clipboard and model image context
 
 Ctrl+V and Ctrl+Shift+V both use Pi's image-or-text clipboard action. Readable
-clipboard image paths appear as short `[image N]` markers, while a text-only
-panel shows their source paths. Deleting inside a marker removes the whole
-marker. On submit, each marker expands back to the path the agent can read.
+clipboard image paths appear as short `[image N]` markers. Image-capable
+terminals render compact previews; text-only terminals show marker source paths.
+Oversized sources are converted to pixel-bounded PNG thumbnails with the
+package's asynchronous `sharp` dependency instead of transmitting the full image
+for a tiny preview. `sharp` ships prebuilt macOS arm64/x64 and Linux binaries, so
+no external image command is required. Pi's accent braille loader animates while conversion runs; the
+marker and path appear only if conversion is unavailable or fails. When terminal
+focus returns, active Kitty previews are retransmitted so a lost terminal-side
+scene cannot remain blank behind Pi's upload cache. Left and Right treat each
+intact `[image N]` marker as one cursor token. When the cursor lands on it, Pi
+inverse-highlights the complete marker; Backspace removes the whole highlighted
+token. On submit, each marker expands back to the original path the agent can
+read.
 
-proper-base never enables Kitty rendering or changes terminal image
-capabilities. Images remain in model context for every tool loop in the turn
-that introduced them. A later user message replaces older image blocks only in
-the outbound context copy, so saved sessions, exports, resumes, and branches
-retain the originals.
+Under `TERM_PROGRAM=Scribe`, proper-base enables Kitty capability before Pi's
+renderer starts. Other terminals keep Pi's detected capabilities. Images remain
+in model context for every tool loop in the turn that introduced them. A later
+user message replaces older image blocks only in the outbound context copy, so
+saved sessions, exports, resumes, and branches retain the originals.
 
 ### Footer
 

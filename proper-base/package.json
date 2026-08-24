@@ -62,5 +62,8 @@
     "extensions": [
       "./index.ts"
     ]
+  },
+  "dependencies": {
+    "sharp": "0.35.3"
   }
 }

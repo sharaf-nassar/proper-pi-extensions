@@ -36,11 +36,17 @@ A focused wrapper fixture starts with draft text and proves the first Ctrl+C onl
 
 ## Clipboard image fixture
 
-A session integration fixture verifies text-only image markers remain usable downstream.
+A session integration fixture verifies Scribe Kitty previews and text fallback remain usable downstream.
 
-It starts with text-only capabilities, loads proper-base under `TERM_PROGRAM=Scribe`, and verifies capabilities remain unchanged. A real one-pixel PNG becomes `[image 1]`; a non-capturing overlay shows the marker and source path without Kitty escapes; submission expands the marker so Pi's downstream handler receives the original path.
+It starts with text-only capabilities, loads proper-base under `TERM_PROGRAM=Scribe`, and verifies Kitty capability is enabled before the fake fullscreen renderer snapshots it. A real one-pixel PNG becomes `[image 1]`; the non-capturing overlay emits a Kitty image sequence, then a forced text-only capability renders the marker and source path without Kitty escapes. Submission expands the marker so Pi's downstream handler receives the original path.
 
-A focused cursor fixture uses a fake editor whose `setText()` moves to prompt end. It proves path-to-marker replacement restores the cursor after the marker and deleting one marker character removes the full marker while restoring its former start position. A history fixture recalls an image prompt followed by an older plain prompt and verifies marker replacement does not reset Pi's history index, so repeated Up presses keep moving backward.
+A thumbnail fixture gives the dimension parser a 4096-by-2160 PNG header and proves the plan is bounded to the 24-by-6-cell pixel envelope while an already-small image bypasses conversion. An asynchronous fixture injects a deterministic thumbnailer, verifies Pi's braille loader renders without exposing the source path, then observes the completed bounded PNG replace it with a Kitty preview. Waiting past one animation interval proves the loader timer stopped after completion.
+
+A real `sharp` fixture generates oversized PNG, JPEG, GIF, and WebP files, passes each through the default runtime thumbnailer, and requires every marker to promote from the loader to a Kitty sequence. A lockfile fixture verifies `@img/sharp-darwin-arm64` and `@img/sharp-darwin-x64` remain optional Darwin artifacts with matching CPU selectors, preventing Linux lock regeneration from silently dropping macOS installation support.
+
+A focus-return fixture models pi-tui's fullscreen upload cache and viewport input handler. With an active Kitty preview, `CSI I` delegates to the original handler, clears the cached upload identities, requests one forced redraw, and disposal restores the original method.
+
+A focused cursor fixture uses a fake editor whose `setText()` moves to prompt end. It proves path-to-marker replacement restores the cursor after the marker and deleting one marker character removes the full marker while restoring its former start position. An editor-navigation fixture proves Left and Right jump across a complete multi-digit marker from either boundary or interior, while movement outside it and malformed marker-like text remain native. A real pi-tui `Editor` fixture places the cursor on a complete marker, observes Pi inverse-highlight the whole token, presses Backspace, and verifies native deletion removes the marker and leaves the cursor at its former start; a zero-id malformed marker retains one-character highlighting. A history fixture recalls an image prompt followed by an older plain prompt and verifies marker replacement does not reset Pi's history index, so repeated Up presses keep moving backward.
 
 ## Image context fixture
 

@@ -13,6 +13,7 @@ const REVERSE_SEARCH_INSTALLED = Symbol.for(
 );
 const PROMPT_CLEAR_INSTALLED = Symbol.for("pi-proper-base.prompt-clear");
 const CLEAR_EXIT_WINDOW_MS = 500;
+const IMAGE_MARKER = /\[image [1-9]\d*\]/g;
 
 type Keybindings = {
 	matches(data: string, action: string): boolean;
@@ -34,6 +35,12 @@ type PromptClearController = {
 	): void;
 };
 
+type TextSegment = {
+	segment: string;
+	index: number;
+	input: string;
+};
+
 type NavigableEditor = Component & {
 	borderColor?(text: string): string;
 	handleInput?(data: string): void;
@@ -49,6 +56,7 @@ type NavigableEditor = Component & {
 		cursorCol: number;
 	};
 	setCursorCol?(column: number): void;
+	segment?(text: string, mode: "grapheme" | "word"): Iterable<TextSegment>;
 	lastWidth?: number;
 	buildVisualLineMap?(width: number): Array<{
 		logicalLine: number;
@@ -72,6 +80,55 @@ export type ReverseHistorySearchController = {
 	reset(prompts: readonly string[]): void;
 };
 
+function segmentImageMarkers(
+	text: string,
+	segments: Iterable<TextSegment>,
+): TextSegment[] {
+	const markers = [...text.matchAll(IMAGE_MARKER)].map((match) => ({
+		start: match.index,
+		end: match.index + match[0].length,
+	}));
+	if (markers.length === 0) return [...segments];
+
+	const result: TextSegment[] = [];
+	let markerIndex = 0;
+	for (const segment of segments) {
+		while (
+			markerIndex < markers.length &&
+			(markers[markerIndex]?.end ?? 0) <= segment.index
+		) {
+			markerIndex += 1;
+		}
+		const marker = markers[markerIndex];
+		if (marker && segment.index >= marker.start && segment.index < marker.end) {
+			if (segment.index === marker.start) {
+				result.push({
+					segment: text.slice(marker.start, marker.end),
+					index: marker.start,
+					input: text,
+				});
+			}
+			continue;
+		}
+		result.push(segment);
+	}
+	return result;
+}
+
+function imageMarkerCursorTarget(
+	line: string,
+	column: number,
+	direction: "left" | "right",
+): number | undefined {
+	for (const match of line.matchAll(IMAGE_MARKER)) {
+		const start = match.index;
+		const end = start + match[0].length;
+		if (direction === "left" && column > start && column <= end) return start;
+		if (direction === "right" && column >= start && column < end) return end;
+	}
+	return undefined;
+}
+
 export function installEditorNavigation(
 	editor: Component,
 	keybindings: Keybindings,
@@ -86,16 +143,58 @@ export function installEditorNavigation(
 		return;
 	}
 
+	const segment = target.segment?.bind(target);
+	if (segment) {
+		target.segment = (text, mode) =>
+			segmentImageMarkers(text, segment(text, mode));
+	}
 	const handleInput = target.handleInput.bind(target);
 	target.handleInput = (data: string) => {
 		const home = keybindings.matches(data, "tui.editor.cursorLineStart");
 		const end = keybindings.matches(data, "tui.editor.cursorLineEnd");
+		const left = keybindings.matches(data, "tui.editor.cursorLeft");
+		const right = keybindings.matches(data, "tui.editor.cursorRight");
+		const backspace = keybindings.matches(
+			data,
+			"tui.editor.deleteCharBackward",
+		);
 		const previous =
 			keybindings.matches(data, "tui.editor.cursorUp") ||
 			keybindings.matches(data, "tui.editor.historyPrevious");
 		if (target.isShowingAutocomplete?.()) {
 			handleInput(data);
 			return;
+		}
+		if (backspace) {
+			const cursor = target.getCursor?.();
+			const state = target.state;
+			const line = cursor ? target.getLines?.()[cursor.line] : undefined;
+			const marker = line
+				? [...line.matchAll(IMAGE_MARKER)].find(
+						(match) => match.index === cursor?.col,
+					)
+				: undefined;
+			if (cursor && state && marker) {
+				const end = marker.index + marker[0].length;
+				if (target.setCursorCol) target.setCursorCol(end);
+				else state.cursorCol = end;
+				handleInput(data);
+				return;
+			}
+		}
+		if (left || right) {
+			const cursor = target.getCursor?.();
+			const state = target.state;
+			const line = cursor ? target.getLines?.()[cursor.line] : undefined;
+			const column =
+				cursor && line !== undefined
+					? imageMarkerCursorTarget(line, cursor.col, left ? "left" : "right")
+					: undefined;
+			if (column !== undefined && state) {
+				if (target.setCursorCol) target.setCursorCol(column);
+				else state.cursorCol = column;
+				return;
+			}
 		}
 		if (previous) {
 			const before = target.getLines?.().join("\n");

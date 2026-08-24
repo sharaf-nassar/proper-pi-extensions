@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { Editor } from "@earendil-works/pi-tui";
+import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import {
 	installEditorNavigation,
 	installPromptClear,
@@ -35,6 +37,94 @@ test("history recall with Up leaves the cursor at the prompt start", () => {
 	editor.handleInput("up");
 
 	assert.deepEqual(editor.getCursor(), { line: 0, col: 0 });
+});
+
+test("image markers move as one cursor token", () => {
+	const state = {
+		lines: ["a [image 12] b"],
+		cursorLine: 0,
+		cursorCol: 0,
+	};
+	const delegated: string[] = [];
+	const editor = {
+		state,
+		getCursor: () => ({ line: state.cursorLine, col: state.cursorCol }),
+		getLines: () => [...state.lines],
+		handleInput(data: string) {
+			delegated.push(data);
+			if (data === "left") state.cursorCol = Math.max(0, state.cursorCol - 1);
+			if (data === "right") {
+				state.cursorCol = Math.min(
+					state.lines[0]?.length ?? 0,
+					state.cursorCol + 1,
+				);
+			}
+		},
+		render: () => [],
+		invalidate() {},
+	};
+	const keybindings = {
+		matches(data: string, action: string) {
+			return (
+				(data === "left" && action === "tui.editor.cursorLeft") ||
+				(data === "right" && action === "tui.editor.cursorRight")
+			);
+		},
+	};
+	const markerStart = state.lines[0]?.indexOf("[image 12]") ?? -1;
+	const markerEnd = markerStart + "[image 12]".length;
+
+	installEditorNavigation(editor, keybindings);
+
+	state.cursorCol = markerEnd;
+	editor.handleInput("left");
+	assert.equal(state.cursorCol, markerStart);
+	state.cursorCol = markerStart;
+	editor.handleInput("right");
+	assert.equal(state.cursorCol, markerEnd);
+	state.cursorCol = markerStart + 4;
+	editor.handleInput("left");
+	assert.equal(state.cursorCol, markerStart);
+	state.cursorCol = markerStart + 4;
+	editor.handleInput("right");
+	assert.equal(state.cursorCol, markerEnd);
+	assert.deepEqual(delegated, []);
+
+	state.cursorCol = markerEnd + 1;
+	editor.handleInput("right");
+	assert.equal(state.cursorCol, markerEnd + 2);
+	state.lines = ["a [image 12 b"];
+	state.cursorCol = 8;
+	editor.handleInput("left");
+	assert.equal(state.cursorCol, 7);
+	assert.deepEqual(delegated, ["right", "left"]);
+});
+
+test("active image marker highlights and backspace deletes it", () => {
+	const tui = { terminal: { rows: 24 } };
+	const editor = new Editor(
+		tui as never,
+		{ borderColor: (value: string) => value, selectList: {} } as never,
+	);
+	const mutable = editor as unknown as {
+		state: { lines: string[]; cursorLine: number; cursorCol: number };
+		setCursorCol(column: number): void;
+	};
+	const keybindings = new KeybindingsManager();
+	installEditorNavigation(editor, keybindings);
+
+	editor.setText("a [image 12] b");
+	const markerStart = editor.getText().indexOf("[image 12]");
+	mutable.setCursorCol(markerStart);
+	assert.ok(editor.render(40).join("\n").includes("\x1b[7m[image 12]\x1b[0m"));
+
+	editor.handleInput("\x7f");
+	assert.equal(editor.getText(), "a  b");
+	assert.deepEqual(editor.getCursor(), { line: 0, col: markerStart });
+
+	editor.setText("a [image 0] b");
+	mutable.setCursorCol(editor.getText().indexOf("[image 0]"));
+	assert.ok(!editor.render(40).join("\n").includes("\x1b[7m[image 0]\x1b[0m"));
 });
 
 function reverseSearchFixture(text = "draft prompt") {
