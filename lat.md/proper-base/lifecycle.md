@@ -218,6 +218,14 @@ The same result also reports `cancelled` for host and validation failures, which
 
 The handler is registered once at extension load rather than per `session_start`, so reload, resume, and fork cannot stack it.
 
+## Commit message guard
+
+A `tool_call` handler blocks `bash` and `quill_execute` commands whose `git commit` invocation violates the house commit rules.
+
+The guard is a TypeScript port of the Claude Code `commit_message_validator.py` PreToolUse hook, without its amend guard. Commands that do not mention both `git` and `commit` are never tokenized, so unrelated commands with heredocs or odd quoting pass untouched. When both words appear, a shell tokenizer requires one direct `git … commit …` invocation: wrappers, shell wrappers, env or assignment prefixes, compound shell, and dynamic tokens are rejected, as are message-mutating flags such as `-F`, `-e`, `--signoff`, `--fixup`, and `--no-verify`. The literal `-m`/`--message` paragraphs join with blank lines and must keep the subject and every non-trailer line within 72 characters, a blank second line, and no forbidden attribution lines; the final trailer block is exempt from line length.
+
+A blocked call returns every validation error in one reason so the model can fix the whole message in a single retry, and pi blocks the tool fail-safe if the handler itself throws. Commands naming git commit that the tokenizer cannot parse are denied rather than allowed, because passing on parse failure would let `-F` heredoc forms through.
+
 ## Transient stream retry
 
 A `message_end` handler makes CLIProxyAPI's `empty_stream` failure retryable instead of turn-fatal.

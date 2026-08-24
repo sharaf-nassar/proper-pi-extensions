@@ -23,6 +23,7 @@ import {
 	installModelAutocompleteSubmit,
 	sortModelAutocompleteDescending,
 } from "./src/autocomplete-details.ts";
+import { commitGuardReason } from "./src/commit-guard.ts";
 import {
 	installEditorNavigation,
 	installPromptClear,
@@ -407,6 +408,15 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("agent_start", () => {
 		transcriptCleanup?.start();
+	});
+
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Commit message guard]]
+	pi.on("tool_call", (event) => {
+		if (event.toolName !== "bash" && event.toolName !== "quill_execute") return;
+		const command = (event.input as { command?: unknown } | undefined)?.command;
+		if (typeof command !== "string") return;
+		const reason = commitGuardReason(command);
+		if (reason) return { block: true, reason };
 	});
 
 	pi.on("tool_execution_start", () => {

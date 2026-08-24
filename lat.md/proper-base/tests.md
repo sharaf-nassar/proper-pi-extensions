@@ -126,6 +126,12 @@ The transient-retry fixture verifies CLIProxyAPI transient stream errors become 
 
 An errored assistant message whose text matches the CPA `empty_stream` pattern must return a copy whose `errorMessage` gains the `network error:` prefix pi treats as retryable. User messages, non-error stops, unrelated error text, and already-prefixed messages must pass through by reference so the `message_end` handler performs no transform.
 
+## Commit guard fixtures
+
+Commit-guard tests exercise the ported validator's command and message rules.
+
+They verify that valid direct commits and non-commit commands pass; that compound, wrapped, env-prefixed, and assignment-prefixed invocations, dynamic tokens, unsupported flags, and missing literal messages are rejected with the hook's wording; that multiple and attached `-m` values extract and join as paragraphs; that message rules cover subject and body length, the blank second line, trailer-block exemption, and forbidden attribution lines; that blocked reasons aggregate every error at once; and that unparseable commands naming git commit block fail-safe.
+
 ## Store fixtures
 
 Store tests use temporary directories and real Node filesystem operations.

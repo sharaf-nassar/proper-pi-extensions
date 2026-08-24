@@ -4,7 +4,7 @@ proper-base combines cross-session history and reverse search with focused edito
 
 ## Purpose
 
-The package groups local pi behavior in one extension: automatic session naming, model-preserving session clearing, cross-session prompt history, autocomplete details, fullscreen compatibility, footer styling, and cancellation.
+The package groups local pi behavior in one extension: automatic session naming, model-preserving session clearing, cross-session prompt history, autocomplete details, fullscreen compatibility, footer styling, cancellation, and commit-message gating.
 
 Pi session messages contain model-facing expansions rather than trustworthy raw input. The extension records editor submissions in a private append-only store and rejects replayed session messages, while keeping autocomplete descriptions compact and visible above the prompt.
 
@@ -12,8 +12,9 @@ Pi session messages contain model-facing expansions rather than trustworthy raw 
 
 The runtime is split by responsibility.
 
-- `index.ts` wires `session_start`, first-response session naming, model-preserving `/clear`, editor replacement, early-cancel branch recovery, base keybinding overrides, `ask_user_question` cancellation, and the package entry point.
+- `index.ts` wires `session_start`, first-response session naming, model-preserving `/clear`, editor replacement, early-cancel branch recovery, base keybinding overrides, `ask_user_question` cancellation, the commit-guard `tool_call` handler, and the package entry point.
 - `src/autocomplete-details.ts` owns overlay lifecycle, boxed rendering, terminal positioning, selected-description updates, descending `/model` argument ordering, and immediate submission of selected model completions.
+- `src/commit-guard.ts` ports the commit-message validator hook: shell tokenization, direct-invocation and literal-message checks, and 72-column, blank-second-line, trailer, and attribution rules.
 - `src/editor-navigation.ts` implements three-stage Ctrl+C clearing and exit, terminal-style Ctrl+R reverse history search, recalled-history cursor placement, and two-stage Home/End behavior while preserving configured keybindings and custom editor fallback.
 - `src/footer-colors.ts` rearranges Pi's built-in footer statistics, applies model and effort colors, and owns the bounded maximum-effort animation timer.
 - `src/jump-to-bottom.ts` renders the scrolled-up jump-to-bottom button as an editor row and claims mouse input ahead of the alternate-screen renderer.
@@ -59,12 +60,13 @@ These rules preserve history and autocomplete details without destabilizing the 
 24. Ctrl+R searches recorder-trusted prompts newest-first by incremental substring; repeated Ctrl+R walks older matches, Ctrl+G restores the draft and cursor, Esc accepts for editing, Enter submits, and modal controls outside the prompt editor keep their native shortcuts.
 25. Ctrl+C on non-empty text only clears and disarms exit; the first empty-prompt press shows the exit warning, and only a second empty-prompt press within 500 ms shuts down, making a non-empty prompt require three quick presses.
 26. Fullscreen double-click selection expands recognized one-row URLs, paths, flags, qualified identifiers, and quoted values only inside transcript scroll views; every unknown token or incompatible renderer falls back to Pi's native selection unchanged.
+27. A `bash` or `quill_execute` command naming `git commit` executes only as one direct invocation whose literal `-m` text passes the 72-column, blank-second-line, and attribution rules; parse failures block fail-safe, and commands not naming git commit are never inspected.
 
 ## Documentation map
 
 Each document owns one runtime concern.
 
-- [lifecycle](./lifecycle.md) — startup, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, smart selection, the jump-to-bottom button, autocomplete details, footer decoration, and transient stream retry.
+- [lifecycle](./lifecycle.md) — startup, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, smart selection, the jump-to-bottom button, autocomplete details, footer decoration, the commit message guard, and transient stream retry.
 - [storage](./storage.md) — project paths, JSONL format, permissions, bounded reads, limits, and compaction.
 - [operations](./operations.md) — package identity, installation, runtime requirements, and data removal.
 - [tests](./tests.md) — deterministic history, recorder, autocomplete, fullscreen key routing, footer styling, and real-filesystem store coverage.
