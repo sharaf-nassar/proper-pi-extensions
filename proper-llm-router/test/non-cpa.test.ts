@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -200,6 +200,94 @@ test("pinned commands switch direct providers without CPA", async () => {
 	);
 	assert.equal(switched?.provider, "anthropic");
 	assert.equal(switched?.id, "claude-fable-5");
+});
+
+// @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA config fixture]]
+test("config UI preselects values and wraps backward", async () => {
+	let configHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
+	llmRouter({
+		on() {},
+		registerCommand(name: string, command: { handler: typeof configHandler }) {
+			if (name === "llm-router-config") configHandler = command.handler;
+		},
+	} as unknown as Parameters<typeof llmRouter>[0]);
+	assert.ok(configHandler);
+
+	let wrapped: string | undefined;
+	await configHandler("", {
+		hasUI: true,
+		mode: "tui",
+		modelRegistry: { getAvailable: () => directModels },
+		ui: {
+			notify() {},
+			select: async () => {
+				throw new Error("config picker should use custom UI in TUI mode");
+			},
+			custom: async (factory: any) => {
+				const component = factory(
+					{ requestRender() {} },
+					{
+						fg: (_color: string, text: string) => text,
+						bold: (text: string) => text,
+					},
+					{},
+					(value: string | undefined) => {
+						wrapped = value;
+					},
+				);
+				component.handleInput("\x1b[A");
+				component.handleInput("\r");
+				return wrapped;
+			},
+		},
+	});
+	assert.equal(wrapped, "Done");
+
+	mkdirSync(join(testHome, ".pi", "agent"), { recursive: true });
+	const picks: string[] = [];
+	let menu = 0;
+	const inputs = [
+		["\r"],
+		["\r"],
+		["\r"],
+		["\r"],
+		["\x1b[B", "\x1b[B", "\r"],
+		["\r"],
+		["\x1b[B", "\x1b[B", "\x1b[B", "\x1b[B", "\x1b[B", "\r"],
+	];
+	await configHandler("", {
+		hasUI: true,
+		mode: "tui",
+		modelRegistry: { getAvailable: () => directModels },
+		ui: {
+			notify() {},
+			select: async () => {
+				throw new Error("config picker should use custom UI in TUI mode");
+			},
+			custom: async (factory: any) => {
+				let selected: string | undefined;
+				const component = factory(
+					{ requestRender() {} },
+					{
+						fg: (_color: string, text: string) => text,
+						bold: (text: string) => text,
+					},
+					{},
+					(value: string | undefined) => {
+						selected = value;
+					},
+				);
+				for (const input of inputs[menu++] ?? []) component.handleInput(input);
+				if (selected) picks.push(selected);
+				return selected;
+			},
+		},
+	});
+	assert.deepEqual(picks.slice(0, 2), ["Judge", "Model"]);
+	assert.equal(picks[2]?.startsWith("openai-codex/gpt-5.6-terra"), true);
+	assert.deepEqual(picks.slice(3, 5), ["Judge", "Fast"]);
+	assert.equal(picks[5]?.startsWith("off"), true);
+	assert.equal(picks[6], "Done");
 });
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA config fixture]]

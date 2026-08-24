@@ -86,7 +86,7 @@ It also verifies that the factory self-registers exactly one `llm-router` provid
 
 The non-CPA config fixture verifies that CPA-only controls disappear when Pi has no authenticated `cliproxyapi` model.
 
-It records the real `/llm-router-config` menu, requires quota and management-key actions to be absent, opens the JSON editor, and requires `cpaBase`, `cpaKeyEnv`, quota, and management-key fields to be omitted.
+It records the real `/llm-router-config` menu, requires quota and management-key actions to be absent, opens the JSON editor, and requires `cpaBase`, `cpaKeyEnv`, quota, and management-key fields to be omitted. Its TUI picker case proves Up wraps from the first menu entry to `Done`, and Enter accepts the stored direct judge model and `off` fast setting rather than the first displayed choice.
 
 ## Ultra compatibility fixtures
 

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
+import properBase from "../index.ts";
+import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import { installJumpToBottom } from "../src/jump-to-bottom.ts";
 
 function harness(editorLines: string[], footerLines: string[]) {
@@ -74,6 +79,77 @@ test("the button appears only while the viewport is scrolled up", () => {
 
 	app.setFollowing(true);
 	assert.deepEqual(app.editor.render(40), ["> prompt"]);
+});
+
+// @lat: [[lat.md/proper-base/tests#Verification#Jump-to-bottom fixture]]
+test("sending an interactive prompt follows transcript output", async () => {
+	const cwd = await mkdtemp(join(tmpdir(), "proper-base-jump-submit-"));
+	let onSessionStart: ((event: unknown, ctx: any) => Promise<void>) | undefined;
+	let onInput: ((event: unknown, ctx: any) => Promise<void>) | undefined;
+	let factory: ((tui: any, theme: any, keybindings: any) => any) | undefined;
+	properBase({
+		on(event: string, handler: typeof onSessionStart) {
+			if (event === "session_start") onSessionStart = handler;
+			if (event === "input") onInput = handler;
+		},
+		getCommands: () => [],
+		registerCommand() {},
+		registerMarkdownTransformer() {},
+		getSessionName: () => undefined,
+	} as unknown as Parameters<typeof properBase>[0]);
+
+	let scrolls = 0;
+	const editor = {
+		onSubmit: undefined as ((text: string) => void) | undefined,
+		addToHistory() {},
+		getText: () => "",
+		setText() {},
+		render: () => ["editor"],
+	};
+	const tui = {
+		children: [editor],
+		terminal: { rows: 24 },
+		scrollToBottom() {
+			scrolls++;
+		},
+	};
+	const ctx = {
+		cwd,
+		sessionManager: {
+			getBranch: () => [],
+			getSessionFile: () => undefined,
+		},
+		ui: {
+			addAutocompleteProvider() {},
+			getEditorComponent: () => () => editor,
+			setEditorComponent(next: typeof factory) {
+				factory = next;
+			},
+			onTerminalInput() {
+				return () => {};
+			},
+		},
+	};
+
+	try {
+		await onSessionStart?.({}, ctx);
+		factory?.(
+			tui,
+			{
+				borderColor: (text: string) => text,
+				selectList: { description: (text: string) => text },
+			},
+			new KeybindingsManager(),
+		);
+		assert.ok(onInput);
+
+		await onInput({ source: "interactive", text: "new prompt" }, ctx);
+		assert.equal(scrolls, 1);
+		await onInput({ source: "extension", text: "new prompt" }, ctx);
+		assert.equal(scrolls, 1);
+	} finally {
+		await rm(cwd, { recursive: true, force: true });
+	}
 });
 
 test("a click on the button scrolls to the bottom before the renderer sees it", () => {

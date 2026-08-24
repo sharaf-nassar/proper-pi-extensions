@@ -146,7 +146,9 @@ function installKeybindings(keybindings: EditorKeybindings): void {
 	controller.apply();
 }
 
-type EditorTui = Parameters<EditorFactory>[0];
+type EditorTui = Parameters<EditorFactory>[0] & {
+	scrollToBottom?(): void;
+};
 type PromptEditor = ReturnType<EditorFactory> & {
 	isShowingAutocomplete?(): boolean;
 };
@@ -306,6 +308,8 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("input", (event) => {
 		if (event.source === "interactive") {
+			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Pinned transcript scrolling]]
+			if (event.text.trim()) activeTui?.scrollToBottom?.();
 			promptDisplay.captureInput(event.text, pi.getCommands());
 		}
 		if (

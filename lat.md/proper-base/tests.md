@@ -98,7 +98,7 @@ Pure cases cover wrapped URLs, source paths with line and column suffixes, comma
 
 A fake alternate-screen TUI verifies the button's visibility rule, geometry, and mouse priority.
 
-One case proves the extra row appears only while the viewport is scrolled away from output, spans the full width, shrinks to a bare arrow on a narrow terminal, and disappears when even the arrow cannot fit. A second case registers a renderer-style consuming listener first, then verifies the installed listener still receives a press on the button's computed row, scrolls to the end once, swallows the matching release, leaves a press on the prompt row to the renderer, and stops responding after disposal.
+One case proves the extra row appears only while the viewport is scrolled away from output, spans the full width, shrinks to a bare arrow on a narrow terminal, and disappears when even the arrow cannot fit. A second case initializes the extension's editor factory and proves an interactive submission calls the native bottom-scroll method once, while extension-origin input does not. A third case registers a renderer-style consuming listener first, then verifies the installed listener still receives a press on the button's computed row, scrolls to the end once, swallows the matching release, leaves a press on the prompt row to the renderer, and stops responding after disposal.
 
 ## Footer fixture
 

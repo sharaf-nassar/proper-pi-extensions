@@ -75,6 +75,13 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { DynamicBorder } from "@earendil-works/pi-coding-agent";
+import {
+	Container,
+	type SelectItem,
+	SelectList,
+	Text,
+} from "@earendil-works/pi-tui";
 
 const PROVIDER = "llm-router";
 const CPA_PROVIDER = "cliproxyapi";
@@ -1579,6 +1586,61 @@ export default function (pi: ExtensionAPI) {
 	const stripCheck = (s: string) =>
 		s.endsWith(CHECK) ? s.slice(0, -CHECK.length) : s;
 
+	// @lat: [[configuration#Interactive command]]
+	const configSelect = async (
+		ctx: ExtensionContext,
+		title: string,
+		options: string[],
+	): Promise<string | undefined> => {
+		if (ctx.mode !== "tui") return ctx.ui.select(title, options);
+		const checked = options.findIndex((option) => option.endsWith(CHECK));
+		return ctx.ui.custom<string | undefined>(
+			(tui, theme, _keybindings, done) => {
+				const items: SelectItem[] = options.map((value) => ({
+					value,
+					label: value,
+				}));
+				const list = new SelectList(items, Math.min(items.length, 10), {
+					selectedPrefix: (text) => theme.fg("accent", text),
+					selectedText: (text) => theme.fg("accent", text),
+					description: (text) => theme.fg("muted", text),
+					scrollInfo: (text) => theme.fg("dim", text),
+					noMatch: (text) => theme.fg("warning", text),
+				});
+				list.setSelectedIndex(checked < 0 ? 0 : checked);
+				list.onSelect = (item) => done(item.value);
+				list.onCancel = () => done(undefined);
+
+				const container = new Container();
+				container.addChild(
+					new DynamicBorder((text: string) => theme.fg("accent", text)),
+				);
+				container.addChild(
+					new Text(theme.fg("accent", theme.bold(title)), 1, 0),
+				);
+				container.addChild(list);
+				container.addChild(
+					new Text(
+						theme.fg("dim", "↑↓ navigate · enter select · esc cancel"),
+						1,
+						0,
+					),
+				);
+				container.addChild(
+					new DynamicBorder((text: string) => theme.fg("accent", text)),
+				);
+				return {
+					render: (width: number) => container.render(width),
+					invalidate: () => container.invalidate(),
+					handleInput(data: string) {
+						list.handleInput(data);
+						tui.requestRender();
+					},
+				};
+			},
+		);
+	};
+
 	// Masked single-line prompt for secrets (ctx.ui.custom component:
 	// render(width) + handleInput(data), done(value) closes). Renders
 	// bullets only; supports typing, backspace, bracketed paste.
@@ -1677,6 +1739,8 @@ export default function (pi: ExtensionAPI) {
 			"Configure llm-router: judge provider/model/effort, fallback; test the judge",
 		handler: async (_args: string, ctx: ExtensionContext) => {
 			if (!ctx.hasUI) return;
+			const select = (title: string, options: string[]) =>
+				configSelect(ctx, title, options);
 			for (;;) {
 				const cfg = loadConfig();
 				const models = availableModels(ctx);
@@ -1695,7 +1759,7 @@ export default function (pi: ExtensionAPI) {
 					`fallback: ${cfg.fallbackModel}${cpaSummary}` +
 					` | overrides: ${judgeOverrides(cfg).size}` +
 					` | pinned commands: ${Object.keys(cfg.commandPins ?? {}).length}`;
-				let action = await ctx.ui.select(`llm-router config\n${summary}`, [
+				let action = await select(`llm-router config\n${summary}`, [
 					"Judge",
 					"Overrides",
 					"Pinned commands",
@@ -1706,7 +1770,7 @@ export default function (pi: ExtensionAPI) {
 				]);
 				if (!action || action === "Done") return;
 				if (action === "Judge") {
-					const judgeAction = await ctx.ui.select("Judge settings", [
+					const judgeAction = await select("Judge settings", [
 						"Model",
 						"Effort",
 						"Fast",
@@ -1718,11 +1782,15 @@ export default function (pi: ExtensionAPI) {
 				if (action === "Judge model") {
 					let items: string[] = [];
 					if (!cpaOn) {
+						const current = resolveModelTarget(cfg.judge.model, models);
+						const currentRef = current
+							? `${current.provider}/${current.id}`
+							: cfg.judge.model;
 						items = models
 							.map((model) => `${model.provider}/${model.id}`)
 							.sort()
 							.slice(0, 80)
-							.map((model) => model + (model === cfg.judge.model ? CHECK : ""));
+							.map((model) => model + (model === currentRef ? CHECK : ""));
 					} else {
 						let ids: string[] = [];
 						try {
@@ -1745,7 +1813,7 @@ export default function (pi: ExtensionAPI) {
 							.slice(0, 40)
 							.map((id) => id + (id === cfg.judge.model ? CHECK : ""));
 					}
-					const pick = await ctx.ui.select(
+					const pick = await select(
 						`Judge model (current: ${cfg.judge.model})`,
 						[...items, "(enter manually)"],
 					);
@@ -1770,7 +1838,7 @@ export default function (pi: ExtensionAPI) {
 						"none (non-reasoning judge)",
 					];
 					const current = cfg.judge.effort ?? "none (non-reasoning judge)";
-					const pick = await ctx.ui.select(
+					const pick = await select(
 						`Judge reasoning effort (current: ${cfg.judge.effort ?? "none"})`,
 						efforts.map((e) => (e === current ? e + CHECK : e)),
 					);
@@ -1785,7 +1853,7 @@ export default function (pi: ExtensionAPI) {
 					});
 				} else if (action === "Judge fast") {
 					const current = cfg.judge.fast ? "on" : "off";
-					const pick = await ctx.ui.select(
+					const pick = await select(
 						`Judge fast mode — priority service tier (current: ${current})`,
 						["on", "off"].map((e) => (e === current ? e + CHECK : e)),
 					);
@@ -1799,7 +1867,7 @@ export default function (pi: ExtensionAPI) {
 						const target = resolved[arm];
 						return `${arm} → ${target ? `${target.provider}/${target.id}` : `${judgeModelName(cfg, arm)} (unavailable)`}`;
 					});
-					const row = await ctx.ui.select("Judge model slot to override", rows);
+					const row = await select("Judge model slot to override", rows);
 					if (!row) continue;
 					const arm = arms[rows.indexOf(row)];
 					if (!arm) continue;
@@ -1808,7 +1876,7 @@ export default function (pi: ExtensionAPI) {
 						.map((model) => `${model.provider}/${model.id}`)
 						.sort();
 					const reset = `(use default: ${ARMS[arm].model})`;
-					const pick = await ctx.ui.select(`Available model for ${arm}`, [
+					const pick = await select(`Available model for ${arm}`, [
 						...refs.map((ref) =>
 							ref === `${current?.provider}/${current?.id}` ? ref + CHECK : ref,
 						),
@@ -1832,7 +1900,7 @@ export default function (pi: ExtensionAPI) {
 							`/${name.replace(/^\//, "")} → ${p.model}${p.effort ? ` @ ${p.effort}` : ""}`,
 					);
 					const ADD = "(pin another command)";
-					const row = await ctx.ui.select(
+					const row = await select(
 						"Slash commands pinned to a model (judge skipped; availability swap still applies)",
 						[...rows, ADD],
 					);
@@ -1846,7 +1914,7 @@ export default function (pi: ExtensionAPI) {
 					if (!name) continue;
 					const current = cfg.commandPins?.[name];
 					const REMOVE = "(remove pin)";
-					const modelPick = await ctx.ui.select(
+					const modelPick = await select(
 						`Model for /${name.replace(/^\//, "")}`,
 						[
 							...Object.keys(ARMS).map((a) =>
@@ -1871,7 +1939,7 @@ export default function (pi: ExtensionAPI) {
 					const efforts = thinkingLevelsForModel(
 						selectedModel as unknown as UltraModel,
 					);
-					const effortPick = await ctx.ui.select(
+					const effortPick = await select(
 						`Thinking effort for /${name.replace(/^\//, "")}`,
 						[...efforts, SESSION].map((e) =>
 							e === (current?.effort ?? SESSION) ? e + CHECK : e,
@@ -1897,7 +1965,7 @@ export default function (pi: ExtensionAPI) {
 							? ""
 							: "\nNOTE: no CPA management key configured — gate is inactive until set");
 					const opts = ["off", "50%", "75%", "80%", "90%", "95%"];
-					const pick = await ctx.ui.select(
+					const pick = await select(
 						title,
 						opts.map((o) => (o === cur ? o + CHECK : o)),
 					);

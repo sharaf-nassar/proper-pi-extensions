@@ -87,6 +87,10 @@ The menu summary reports current override and pin counts. The pin editor offers 
 
 With CPA active, the judge model picker reads `<judge.baseUrl>/models` and preserves the existing endpoint workflow. Without CPA it shows authenticated Pi models as `provider/model-id`. Manual entry remains available in both modes.
 
+### Picker focus and navigation
+
+Every TUI picker opens on its checked current value; menus without one open on their first entry. Up from the first entry wraps to the last, and Down from the last wraps to the first. Non-TUI modes keep Pi's standard selector fallback.
+
 There is no dedicated fallback-model picker. Change `fallbackModel`, endpoint fields, environment-variable names, or `exemplarsPath` through the full JSON editor.
 
 `Test judge` calls the complete `route()` path. It uses the same authenticated model snapshot and judge transport as normal input, applies overrides and swaps, and consults CPA only for CPA-backed targets.
