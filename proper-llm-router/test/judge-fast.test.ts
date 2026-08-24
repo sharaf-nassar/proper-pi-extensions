@@ -14,9 +14,9 @@ const ARM_IDS = [
 ];
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Command pin fixtures]]
-test("defaults pin backlog to the high-judgment arm", () => {
+test("defaults pin refine to the high-judgment arm", () => {
 	const defaults = loadConfig("/__proper-llm-router-missing-config__.json");
-	assert.deepEqual(defaults.commandPins.backlog, {
+	assert.deepEqual(defaults.commandPins.refine, {
 		model: "claude-fable-5",
 		effort: "xhigh",
 	});

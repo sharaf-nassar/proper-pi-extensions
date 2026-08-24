@@ -17,7 +17,7 @@ or fails before displaying its UI.
    - Existing epic: use its title/description as the problem and pass
      `--var epic=<id>` so tasks land under it.
    - Non-epic P4 issue: treat the full issue as required source context, pass
-     `--var source_backlog=<id>`, and use its title/description as the problem.
+     `--var source_issue=<id>`, and use its title/description as the problem.
      Walk its structural parent chain first. If it has no epic ancestor, run
      `bd dep list <id> --direction=down --type=discovered-from --json`, then
      inspect each origin itself and walk its parent chain to the nearest epic.
@@ -27,14 +27,15 @@ or fails before displaying its UI.
      clarify gate requires the human to choose. If none is found, let the
      formula create an epic. A closed/superseded P4 remains retired but still
      requires actionable replacement coverage; never reopen it.
-   - Any other existing issue is not a backlog-refinement input; treat the
-     request as a problem statement unless the user explicitly asks to reuse it.
+   - Any other existing issue is better handled by `/refine <id>` when the card
+     itself needs investigation and planning. Treat it as a problem statement
+     here unless the user explicitly asks to reuse it as the source card.
    Do not snapshot an epic's hierarchy or provenance here. The formula owns
    that live closure during `specify` and refreshes it before materialization;
    pass only the resolved epic/source variables above.
 2. Derive a short kebab-case feature slug and instantiate the molecule as an
    ephemeral wisp (the formula is `phase = "vapor"` — do NOT `bd mol pour` it):
-   `bd mol wisp speckit --var feature=<slug> --var problem="<problem>" --var context="<any extra context the user gave>" [--var epic=<id>] [--var epic_candidates="<comma-separated ids>"] [--var source_backlog=<id>] [--var depth=quick]`
+   `bd mol wisp speckit --var feature=<slug> --var problem="<problem>" --var context="<any extra context the user gave>" [--var epic=<id>] [--var epic_candidates="<comma-separated ids>"] [--var source_issue=<id>] [--var depth=quick]`
    (the underlying beads formula is named `speckit`).
    Depth defaults to `full`. Pass `--var depth=quick` when the user asks for a
    quick/light spec or the feature is plainly small (lighter self-review, merged
@@ -62,8 +63,8 @@ or fails before displaying its UI.
    <gate-id>`. The step then enters `bd ready` — claim it, fold the answers into
    the artifacts, and `bd close <step>` normally, then continue the loop.
    (`bd ready --gated` flags molecules whose gate just closed, for resume.)
-5. Do not treat `create-beads` as finished until its backlog invariants pass:
-   every source P4 is refined in place to P0-P3, promoted while remaining the
+5. Do not treat `create-beads` as finished until its source-scope invariants
+   pass: every source P4 is refined in place to P0-P3, promoted while remaining the
    target epic after child coverage, superseded after replacement coverage,
    covered while already retired, or retired as an explicitly human-approved
    non-goal. Immediately before materialization and again before
@@ -71,7 +72,7 @@ or fails before displaying its UI.
    include any outside direct source. The closure must contain no unresolved
    open or deferred P4, and its ready subset must contain zero P4 items. Report
    the feature epic id, task count, dispatchable ready count (ready P0-P3),
-   blocked count, backlog dispositions, and `Ready P4: 0`.
+   blocked count, source dispositions, and `Ready P4: 0`.
    Only then recommend /implement-ready (or ask any session to work the epic).
 6. Squash the wisp: `bd mol squash <root-id> --summary "<2-4 sentence digest: feature, epic id, task-bead count, both gate outcomes, spec file path (quick: epic-carried)>"`.
    This collapses the spent pipeline scaffolding into one durable digest bead and

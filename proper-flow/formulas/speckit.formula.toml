@@ -2,8 +2,8 @@ formula = "speckit"
 description = """
 Spec-driven feature pipeline for plain beads + Claude Code (no Gas Town runtime).
 
-Turns a raw idea, existing epic, or P4 backlog issue into dependency-wired
-P0-P3 task beads through a disciplined sequence: constitution check, spec,
+Turns a raw idea, existing epic, or existing source card into dependency-wired
+P0-P3 work cards through a disciplined sequence: constitution check, spec,
 parallel spec review, human clarification gate, plan, one auto-fix alignment
 round, a human analyze/approval gate, and finally bead creation.
 Implementation is NOT part of this formula — once the beads exist you work
@@ -82,8 +82,9 @@ shown; the rule is only about writing file CONTENT.
 | specs_dir  | no       | Artifact root (default: specs)                |
 | epic       | no       | Existing epic id to spec out (else new epic)  |
 | epic_candidates | no  | Ambiguous provenance-derived epic ids         |
-| source_backlog | no   | Direct P4 issue being refined                 |
-| backlog    | no       | Comma-separated required P4 source issue ids  |
+| source_issue | no     | Direct existing card being refined            |
+| sources    | no       | Comma-separated source card ids               |
+| source_scope | no     | `closure` (default) or `explicit`             |
 | depth      | no       | `full` (default) or `quick` — pipeline depth  |
 
 ## Depth
@@ -101,7 +102,7 @@ way and BOTH human gates always fire. bd's enum is advisory-only, so treat any
   alignment+quality self-check, an abbreviated chat analysis, and NO artifact
   file — the epic carries the condensed spec and plan. Gates are NOT skipped.
 """
-version = 10
+version = 11
 type = "workflow"
 phase = "vapor"
 
@@ -124,7 +125,7 @@ required = false
 default = "specs"
 
 [vars.epic]
-description = "Existing epic id to spec out (e.g. cue-v35). If set, its title and description seed the spec, and task beads are created under THIS epic instead of a new one."
+description = "Existing epic id to spec out (e.g. cue-v35). If set, its title and description seed the spec, and work cards are created under THIS epic instead of a new one."
 required = false
 default = ""
 
@@ -133,15 +134,21 @@ description = "Comma-separated epic ids inferred from ambiguous discovered-from 
 required = false
 default = ""
 
-[vars.source_backlog]
-description = "Existing non-epic P4 issue supplied directly for refinement. Its full record is required source context."
+[vars.source_issue]
+description = "Existing source card supplied directly for refinement. Its full record is required source context."
 required = false
 default = ""
 
-[vars.backlog]
-description = "Comma-separated ids of open or deferred P4 backlog inputs discovered before the wisp starts. The pipeline must disposition every id."
+[vars.sources]
+description = "Comma-separated existing source card ids. The pipeline must disposition every id."
 required = false
 default = ""
+
+[vars.source_scope]
+description = "Source expansion: 'closure' adds every open or deferred P4 in the target epic closure; 'explicit' limits mutation to source_issue and sources."
+required = false
+default = "closure"
+enum = ["closure", "explicit"]
 
 [vars.depth]
 description = "Pipeline depth: 'full' (6-dimension parallel spec review, separate auto-fix round) or 'quick' (single-pass self-review, merged alignment+analysis) for small features"
@@ -199,17 +206,18 @@ description = """
 Turn `{{problem}}` (plus `{{context}}`) into a first-draft specification.
 Favor breadth over polish — expose uncertainty rather than hiding it.
 
-**Load backlog inputs before drafting.**
+**Load source cards before drafting.**
 
-- If `{{source_backlog}}` is set, inspect its structural parent chain first.
+- If `{{source_issue}}` is set, inspect its structural parent chain first.
   When it has no epic ancestor, run
-  `bd dep list {{source_backlog}} --direction=down
+  `bd dep list {{source_issue}} --direction=down
   --type=discovered-from --json`; inspect each origin itself and walk its
   structural parent chain to the nearest epic. One distinct epic is the
   inferred target. Multiple distinct epics are an ambiguity: merge them with
   `{{epic_candidates}}`, record every candidate, and require the clarify gate
   to select one. Never guess. If there is no candidate, a new epic may be
-  created later.
+  created later. A source that is itself an epic is also a target-epic
+  candidate and must keep its type.
 - If `{{epic}}` is set, run `bd show {{epic}} --json`; its title,
   description, and design notes are primary input alongside `{{problem}}`.
   Compute the full hierarchy-plus-provenance closure:
@@ -220,21 +228,23 @@ Favor breadth over polish — expose uncertainty rather than hiding it.
      SCOPE issue.
   3. Add structural descendants of newly discovered issues, query provenance
      for those new ids, and repeat until no ids are added.
-  This closure—not only parent-child descendants—is the feature scope.
+  This closure provides feature context, not automatic mutation authority.
 - If the clarify gate later selects one of `{{epic_candidates}}`, compute the
   same closure for the selected epic before planning continues.
-- From SCOPE, collect every issue whose stored status is `open` or `deferred`
-  and priority is `4`.
-- Merge those ids with `{{backlog}}` and `{{source_backlog}}`, de-duplicate
-  them, and read every record with `bd show <id> --json`. Treat their title,
-  description, design, notes, acceptance criteria, and dependency context as
-  required source material—not optional future work.
-- Record the resulting id set for every later step. A P4 source may only leave
-  this pipeline refined in place to P0-P3, promoted while remaining the target
-  epic, superseded after replacement coverage exists, or retired after the
-  human explicitly approves it as a non-goal. If it was already retired,
-  preserve that state and produce
-  actionable replacement coverage. Never silently drop or duplicate one.
+- Start SOURCE_IDS with `{{sources}}` and `{{source_issue}}`. When
+  `{{source_scope}}` is `closure`, add every SCOPE issue
+  whose stored status is `open` or `deferred` and priority is `4`. When it is
+  `explicit`, add no unselected card.
+- De-duplicate SOURCE_IDS and read every record with `bd show <id> --json`.
+  Treat title, description, design, notes, acceptance criteria, and dependency
+  context as required source material, not optional future work.
+- Record SOURCE_IDS for every later step. A non-epic source may only leave this
+  pipeline refined in place to P0-P3, superseded after replacement coverage
+  exists, or retired after the human explicitly approves it as a non-goal. A
+  source epic may be planned in place, promoted from P4 after child coverage,
+  or retired as an approved non-goal. If a source was already retired, preserve
+  that state and produce actionable replacement coverage. Never silently drop,
+  duplicate, or reopen one.
 
 **Ground in recorded knowledge.** If the repo has a learnings store
 (`docs/solutions/`) or a `CONCEPTS.md` glossary, grep the store's
@@ -246,8 +256,8 @@ bit us before, which design docs do not record. Absent stores are simply
 skipped — never create one from this pipeline.
 
 **Inventory visual source authority before drafting.** Read every visual
-artifact referenced by `{{problem}}`, `{{context}}`, the target epic, backlog
-inputs, or linked specs (for example HTML mocks, screenshots, prototypes, and
+artifact referenced by `{{problem}}`, `{{context}}`, the target epic, source
+cards, or linked specs (for example HTML mocks, screenshots, prototypes, and
 design files). Record each artifact's path or URL, the statement that grants
 or limits its authority, and exactly which sections are normative,
 reference-only, or unresolved. A section-scoped declaration does not make the
@@ -293,10 +303,10 @@ file later, so keep every section at the flat `##` level:
 ## Non-Goals
 (Explicitly out of scope — prevents scope creep)
 
-## Backlog Inputs
-(For every collected P4 source: id, current intent, missing decisions or
-acceptance detail, and expected refinement. Write "None" when there are no
-sources.)
+## Source Cards
+(For every source card: id, type, priority, status, current intent, missing
+decisions or acceptance detail, and expected refinement. Write "None" when
+there are no sources.)
 
 ## Target Epic
 (Record `{{epic}}` when fixed. If provenance yielded multiple
@@ -324,8 +334,8 @@ hides it.
 
 **Exit criteria:** the spec draft covers all nine sections (full:
 `{{specs_dir}}/NNN-{{feature}}.md` exists and is readable; quick: sections in
-chat and mirrored to root notes), accounts for every P4 source found across
-structural and provenance closure, records the target epic or its ambiguity,
+chat and mirrored to root notes), accounts for every SOURCE_IDS card, records
+the target epic or its ambiguity,
 and classifies every referenced visual artifact's source authority.
 """
 
@@ -359,7 +369,7 @@ must-answer-before-build vs non-blocking.
 1. **requirements** — Are success criteria and acceptance conditions complete?
    Can someone write a test from this? Is "done" verifiable? Non-functional
    requirements (performance, scale, reliability, error states) present? Does
-   every Backlog Input have enough information to become concrete P0-P3 work?
+   every Source Card have enough information to become concrete P0-P3 work?
 2. **gaps** — What is completely absent? Auth/z, migrations, backwards
    compatibility, empty/null states, concurrency, rate limiting, audit logging,
    i18n, accessibility, admin/support tooling, deprecation/cleanup.
@@ -418,7 +428,7 @@ file; quick: chat, mirrored to root notes):
 - ...
 ```
 Aim for a tight, prioritized list — no more than ~7 product questions.
-Any backlog input lacking a concrete, testable outcome is a critical question,
+Any source card lacking a concrete, testable outcome is a critical question,
 not a non-blocking observation. Never defer its criteria with a TBD marker.
 If Target Epic lists multiple candidates, choosing exactly one is also a
 critical question. If visual source authority is unresolved or conflicts with
@@ -481,16 +491,17 @@ Criteria the answers change. A human scope cut affecting a normative artifact
 must change the recorded authority classification explicitly; adding the row
 to Non-Goals alone does not make it non-normative.
 
-For every Backlog Input, obtain enough direction to produce verifiable
+For every Source Card, obtain enough direction to produce verifiable
 acceptance criteria or get explicit human approval to classify it as a
-Non-Goal. Do not let an unresolved backlog item pass this gate.
+Non-Goal. Do not let an unresolved source card pass this gate.
 
 If Target Epic is ambiguous, present every candidate id and its title/context,
 ask the human to select exactly one target epic (or explicitly choose a new
 epic), and record the answer in the spec's Target Epic section. After selection,
-compute that epic's full hierarchy-plus-`discovered-from` closure and merge any
-new open or deferred P4 inputs before this gate exits. Never select an epic
-yourself.
+compute that epic's full hierarchy-plus-`discovered-from` closure. In
+`closure` source scope, merge any new open or deferred P4 inputs before this
+gate exits. In `explicit` scope, keep them as context only. Never select an
+epic yourself.
 
 **Exit criteria:** Human has answered; the spec artifact has a
 `## Clarifications` section, the body reflects the answers, and Source
@@ -557,15 +568,17 @@ Source Authority has no normative visual artifact.)
 |------------------------|-----------------------|---------------------------|--------------------------|---------------------------------|--------|
 | ...                    | ...                   | aligned / contradiction   | ...                      | ...                             | full / gap |
 
-## Backlog Refinement
-(Map every Backlog Input id to its plan work item(s), concrete acceptance
+## Source Card Refinement
+(Map every Source Card id to its plan work item(s), concrete acceptance
 criteria, target P0-P3 priority, and one disposition:
-`refine-in-place`, `promote-epic`, `split-and-supersede`,
+`refine-in-place`, `promote-epic`, `epic-planned`, `split-and-supersede`,
 `already-retired-covered`, or `approved-non-goal`.
-Use `refine-in-place` for a one-to-one task. Use `promote-epic` only when the
-P4 source is the resolved target epic: keep its type, materialize the approved
-P0-P3 child work first, then promote the epic priority. Use
-`split-and-supersede` only when multiple replacement tasks are needed. Use
+Use `refine-in-place` for a one-to-one non-epic card and preserve its issue
+type. Use `promote-epic` only when the P4 source is the resolved target epic:
+keep its type, materialize the approved P0-P3 child work first, then promote
+its priority. Use `epic-planned` for a selected target epic already at P0-P3
+after its durable plan and child coverage are verified. Use
+`split-and-supersede` only when multiple replacement cards are needed. Use
 `already-retired-covered` for a closed/superseded source and create P0-P3 work
 without reopening it. A non-goal requires explicit human approval and remains
 artifact-only.)
@@ -580,9 +593,9 @@ section. Check the learnings store (`docs/solutions/`, when present) the same
 way: a plan that re-attempts an approach a learning documents as failed must
 say explicitly what changed to make it viable now.
 
-Every spec requirement, user story, backlog input, and clarification answer
+Every spec requirement, user story, source card, and clarification answer
 must be traceable to something in this plan. Every implementation work item
-must be concrete enough to become a P0-P3 task with verifiable acceptance
+must be concrete enough to become a P0-P3 work card with verifiable acceptance
 criteria. P3 means low-priority but implement-ready; P4 is forbidden.
 
 Build Normative Visual Coverage from Source Authority and the artifact itself,
@@ -593,11 +606,11 @@ verification owner; they may name the same work item only when that work item's
 acceptance criteria explicitly own both implementation and the stated oracle.
 A row is `full` only when both owner work items exist in Sequencing and their
 acceptance criteria cover the row. A normative row placed in Non-Goals, omitted
-from Sequencing, or contradicted by task acceptance is a blocker until the
+from Sequencing, or contradicted by card acceptance is a blocker until the
 human explicitly changes Source Authority or the plan restores coverage.
 
 **Exit criteria:** all nine plan sections are appended to the spec artifact,
-Target Epic is resolved in place, every backlog source has a disposition,
+Target Epic is resolved in place, every source card has a disposition,
 Normative Visual Coverage has no gap or contradiction, and (if present)
 constitution principles are checked.
 """
@@ -616,7 +629,7 @@ must-fix findings directly.
 
 **Depth branch — if `{{depth}}` is `quick`:** skip the 2-subagent dispatch. Do a
 single self-check pass covering both source/spec↔plan coverage (every
-requirement, goal, non-goal, user story, backlog input, clarification answer,
+requirement, goal, non-goal, user story, source card, clarification answer,
 and normative visual row is covered; no Non-Goal scope creep or authority
 contradiction) and plan quality (completeness, sequencing, testability). Apply
 the obvious must-fixes directly, then still append the
@@ -629,13 +642,13 @@ unavailable, run both passes sequentially yourself):
 
 **Subagent A — source/spec↔plan alignment.** Input:
 `{{specs_dir}}/NNN-{{feature}}.md` plus every artifact classified normative in
-Source Authority. Walk every requirement, goal, non-goal, user story, backlog
-input, clarification answer, normative section, named state, and interaction;
+Source Authority. Walk every requirement, goal, non-goal, user story, source
+card, clarification answer, normative section, named state, and interaction;
 verify the plan sections cover it. Rebuild the normative inventory from the
 artifact and compare it with Normative Visual Coverage rather than trusting
 the table alone. Report each as COVERED / GAP / PARTIAL with a suggested fix,
 classified must-fix or should-fix. Flag plan work that violates a Non-Goal and
-any Source Authority, Goal, Non-Goal, Sequencing, or task-acceptance
+any Source Authority, Goal, Non-Goal, Sequencing, or card-acceptance
 contradiction.
 
 **Subagent B — plan quality.** Input: the same file's plan sections. Check completeness (missing
@@ -651,9 +664,9 @@ should-fix with concrete suggestions.
 **Apply fixes:** Read both reports. Apply every must-fix finding (and clear
 should-fix wins) directly to the plan sections — add missing work items, fix ordering,
 cut scope creep, tighten acceptance criteria, fill every missing normative
-visual row and owner, and ensure every backlog source has a complete
-disposition. Confirm Target Epic is resolved and all provenance closure inputs
-are covered. Never demote a normative row to a Non-Goal to make the table pass,
+visual row and owner, and ensure every source card has a complete
+disposition. Confirm Target Epic is resolved and every SOURCE_IDS card is
+covered. Never demote a normative row to a Non-Goal to make the table pass,
 and never add a P4 work item or placeholder criteria. If a contradiction needs
 a human authority/scope change, leave it as an explicit blocker for analyze
 instead of inventing the decision.
@@ -688,7 +701,7 @@ The gate fires in BOTH depths — never skip it.
 
 **Depth branch — if `{{depth}}` is `quick`** (any value other than exactly
 `quick` is treated as `full`)**:** the report may be abbreviated, but
-Requirement Coverage, Backlog Disposition, Target Epic, Recommendation, and
+Requirement Coverage, Source Card Disposition, Target Epic, Recommendation, and
 the authority/coverage checks below remain required. When Source Authority
 names a normative visual artifact, Normative Visual Coverage and Authority /
 Scope Contradictions are mandatory in full. The coverage check and approval
@@ -714,14 +727,14 @@ Totals: <total> normative; <n>/<total> implementation-owned;
 (When Source Authority has no normative visual artifact: "0 normative rows".)
 
 ## Authority / Scope Contradictions
-| Normative source statement | Conflicts with Goal / Non-Goal / Sequencing / task acceptance | Resolution |
+| Normative source statement | Conflicts with Goal / Non-Goal / Sequencing / card acceptance | Resolution |
 |----------------------------|---------------------------------------------------------------|------------|
 | ...                        | ...                                                           | resolved / blocker |
 (Write "None" only after comparing the source artifacts directly.)
 
-## Backlog Disposition
-| Source P4 id | Plan work item(s) / non-goal | Disposition | Ready to resolve? |
-|--------------|-------------------------------|-------------|-------------------|
+## Source Card Disposition
+| Source card id | Plan work item(s) / non-goal | Disposition | Ready to resolve? |
+|----------------|-------------------------------|-------------|-------------------|
 | ...          | ...                           | ...         | yes / no          |
 
 ## Target Epic
@@ -751,13 +764,13 @@ Report the four totals exactly. A plan that scopes only one rendering while the
 same normative mock contains another replacement rendering has an authority
 and Non-Goal contradiction even if the plan is internally consistent.
 
-Lead with the requirement/normative coverage headline, backlog dispositions,
+Lead with the requirement/normative coverage headline, source dispositions,
 top risks, unresolved questions, contradictions, constitution violations, and
 the GO / GO-WITH-FIXES / NO-GO recommendation. If any normative row lacks an
 implementation owner, verification owner/oracle, or acceptance trace, or any
 authority/scope contradiction remains, the recommendation MUST be NO-GO. Do
 not ask for approval to create beads until the table is fully owned and every
-contradiction is resolved. The same blocking rule applies when a backlog source
+contradiction is resolved. The same blocking rule applies when a source card
 lacks concrete acceptance criteria or an explicit non-goal decision, or Target
 Epic remains ambiguous.
 
@@ -777,8 +790,8 @@ if veto-worthy. Do not append technical multiple-choice questions here.
 - NO-GO → stop; report what needs to change before re-running.
 
 **Exit criteria:** the chat analysis included requirement coverage, normative
-coverage totals, authority/scope contradictions, and backlog disposition;
-Target Epic is resolved; no backlog input, normative row, or contradiction is
+coverage totals, authority/scope contradictions, and source disposition;
+Target Epic is resolved; no source card, normative row, or contradiction is
 unresolved; recommendation is GO; and the human has explicitly approved
 proceeding to beads.
 """
@@ -791,12 +804,12 @@ type = "human"
 
 [[steps]]
 id = "create-beads"
-title = "Convert the approved plan into dependency-wired task beads"
+title = "Convert the approved plan into dependency-wired work cards"
 needs = ["analyze"]
 description = """
-Turn the approved plan into task beads under a feature epic, wired only
-where sequence genuinely matters. Resolve every source backlog item and enforce
-a zero-ready-P4 invariant before completing.
+Turn the approved plan into work cards under a feature epic, wired only
+where sequence genuinely matters. Resolve every source card and enforce the
+selected source-scope invariant before completing.
 
 **0. Run the no-mutation normative coverage preflight.** This runs in BOTH
 quick and full depth before any `bd create`, `bd update`, `bd close`,
@@ -812,7 +825,7 @@ Every owner must name a real Sequencing work item that will materialize as a
 bead, and its acceptance criteria must cite the row or stable artifact locator.
 
 If the four counts differ, any row is missing, any owner work item is absent,
-or an authority/Goal/Non-Goal/Sequencing/task-acceptance contradiction remains,
+or an authority/Goal/Non-Goal/Sequencing/card-acceptance contradiction remains,
 STOP before the first Beads mutation and return to analyze. Human GO cannot
 waive this preflight. When no normative visual artifact exists, record all
 four counts as zero and continue.
@@ -863,7 +876,7 @@ Problem: {{problem}}
 ```
 Note the returned epic id (referred to below as EPIC).
 
-**2. Refresh the required backlog set before changing issues.**
+**2. Refresh the required source set before changing issues.**
 
 Immediately before materialization, recompute scope from current Beads data:
 1. Seed SCOPE with EPIC and recursively add structural descendants using
@@ -874,14 +887,16 @@ Immediately before materialization, recompute scope from current Beads data:
 3. Repeat the provenance query for newly added ids until no ids are added.
    De-duplicate after each round. This is the hierarchy-plus-provenance
    closure.
-4. Add `{{source_backlog}}`, every `{{backlog}}` id, and every id recorded in
-   the spec's Backlog Inputs to the working set even if outside the closure.
+4. Start SOURCE_IDS with `{{source_issue}}`, every `{{sources}}` id, and every
+   id recorded in the spec's Source Cards table. When `{{source_scope}}` is
+   `closure`, add every SCOPE issue whose stored status is `open` or `deferred`
+   and priority is `4`. When it is `explicit`, do not add unselected cards.
 
-Collect every working-set issue whose stored status is `open` or `deferred`
-and priority is `4`, read each with `bd show <id> --json`, and match it to the
-approved plan's Backlog Refinement table. This refresh catches P4 provenance
-dependents added while the wisp was running; parent-only discovery is
-insufficient.
+Read every SOURCE_IDS record with `bd show <id> --json` and match it to the
+approved plan's Source Card Refinement table. Closure mode catches P4
+provenance dependents added while the wisp was running; parent-only discovery
+is insufficient. Explicit mode keeps other closure cards as context only and
+never mutates them.
 
 If any source has no concrete P0-P3 work item with verifiable acceptance
 criteria and is not an explicitly human-approved non-goal, STOP. Do not create
@@ -895,9 +910,9 @@ Why/What. Full depth: `--spec-id` names the feature's spec file (uniform
 across the feature, so `bd list --spec {{specs_dir}}/NNN-{{feature}}` returns
 the whole feature) and `--design` carries the plan-section anchor. Quick
 depth: omit `--spec-id`; `--design` carries a 1-3 line inline design note for
-the task instead of a pointer.
+the card instead of a pointer.
 
-For a work item with no backlog source, create a new task:
+For a work item with no source card, create a new task:
 ```bash
 bd create "<task title>" --type=task --parent=EPIC -p <P0-P3> \
   --spec-id="{{specs_dir}}/NNN-{{feature}}.md" \
@@ -908,12 +923,12 @@ Files: <comma-separated repo-relative paths this work item touches>" \
   --acceptance="<concrete, verifiable conditions>"
 ```
 
-`Files:` is required on every materialized task. It is the input
-/implement-ready's semantic overlap guard reads to decide which tasks may run
-in parallel; tasks without it are dispatched unguarded against each other. Take
+`Files:` is required on every materialized non-epic card. It is the input
+/implement-ready's semantic overlap guard reads to decide which cards may run
+in parallel; cards without it are dispatched unguarded against each other. Take
 the paths from the plan's `## Affected Components` section — if that section
 does not name files concretely enough to fill this line, the plan is not
-implementable yet, so fix the plan rather than filing a task with a guess.
+implementable yet, so fix the plan rather than filing a card with a guess.
 
 Record the resulting bead id for every Sequencing work item. When a work item
 owns normative visual rows, its acceptance field must name those row ids or
@@ -923,10 +938,10 @@ when its acceptance criteria explicitly cover both responsibilities and the
 concrete oracle.
 
 For a one-to-one `refine-in-place` mapping, reuse the source id instead of
-creating a duplicate. Rewrite it as the planned task, attach it to EPIC, clear
-any deferral, and promote it to P0-P3:
+creating a duplicate. Rewrite it as the planned work card, preserve its
+non-epic issue type, attach it to EPIC, clear any deferral, and set it to P0-P3:
 ```bash
-bd update <source-id> --type=task --parent=EPIC -p <P0-P3> \
+bd update <source-id> --parent=EPIC -p <P0-P3> \
   --title="<task title>" \
   --spec-id="{{specs_dir}}/NNN-{{feature}}.md" \
   --design="{{specs_dir}}/NNN-{{feature}}.md#<plan-section>" \
@@ -938,7 +953,7 @@ Files: <comma-separated repo-relative paths this work item touches>" \
 
 For a `split-and-supersede` mapping, create every P0-P3 replacement first and
 verify that their combined acceptance criteria cover the source. Only after
-that coverage exists, retire the P4 source using the primary replacement:
+that coverage exists, retire the source using the primary replacement:
 ```bash
 bd supersede <source-id> --with <primary-replacement-id>
 ```
@@ -953,6 +968,11 @@ bd update EPIC -p <P0-P3> --defer="" --status=open
 ```
 Never convert the epic into a task, and never promote it before its child
 coverage exists.
+
+For an `epic-planned` source, require the source id to equal EPIC and already be
+P0-P3. Keep its type and priority, update its durable spec/plan record, and
+materialize or reuse every approved child card. Do not treat notes alone as
+coverage.
 
 For an `already-retired-covered` source, create the approved P0-P3 replacement
 work and verify its acceptance criteria cover the source. Preserve the source's
@@ -974,7 +994,7 @@ scannable width. Group with `-l` labels, order with `bd dep` + `-p`, and carry
 plan traceability in the `spec_id`/`design` fields above — never in the title
 or the description.
 
-**Set `-p` per plan criticality.** New or refined implementation tasks may only
+**Set `-p` per plan criticality.** New or refined implementation cards may only
 be P0-P3:
 - **P0/P1** — critical-path or foundational items (schema/migrations, shared
   primitives, anything many other beads depend on).
@@ -982,8 +1002,9 @@ be P0-P3:
 - **P3** — low-priority, polish, or phase-2 work that is still fully
   implement-ready.
 
-P4 is forbidden in this pipeline. Every task needs concrete, verifiable
-acceptance criteria in the issue's acceptance field. If criteria cannot be made
+P4 is forbidden for resulting implementation cards. Every materialized
+non-epic card needs concrete, verifiable acceptance criteria in the issue's
+acceptance field. If criteria cannot be made
 concrete, return to the human decision path above or keep the idea only as an
 explicit artifact Non-Goal. Never emit a stub, TBD marker, or vague
 "defined when worked" criterion.
@@ -999,13 +1020,13 @@ unblocked. Verify no accidental chains:
 bd blocked --parent EPIC
 ```
 
-**5. Verify coverage and enforce the backlog invariants.**
+**5. Verify coverage and enforce the source-scope invariants.**
 
 Re-read the plan sections against the resulting issues. For every work item
-confirm exactly one new or refined task exists with why, what, a `design`
+confirm exactly one new or refined card exists with why, what, a `design`
 reference (plus `spec_id` in full depth), a P0-P3 priority, and concrete
-acceptance criteria. Confirm every source backlog id was refined, promoted as
-the target epic only after child coverage, superseded only after replacement
+acceptance criteria. Confirm every source card was refined, planned or promoted
+as the target epic only after child coverage, superseded only after replacement
 coverage, covered while already retired, or retired as an approved non-goal.
 
 Resolve every Normative Visual Coverage owner work item to its materialized
@@ -1019,56 +1040,60 @@ clobbering the quick spec/plan. If any row cannot resolve to both bead ids,
 STOP; do not report completion or squash the wisp.
 
 Full depth — verify native linkage in one query; it must return EPIC and every
-task bead:
+work card:
 ```bash
 bd list --spec "{{specs_dir}}/NNN-{{feature}}" --limit=0 --json
 ```
 Quick depth — no spec_id; confirm instead that EPIC carries the condensed
-spec/plan and every task's design field holds its inline note.
+spec/plan and every work card's design field holds its inline note.
 
 Immediately before the invariant checks, recompute the entire
 hierarchy-plus-`discovered-from` closure from EPIC using the exact fixed-point
-procedure in step 2. Add `{{source_backlog}}`, `{{backlog}}`, and all recorded
-Backlog Input ids. Call the de-duplicated union SCOPE_IDS. Do not reuse the
+procedure in step 2. Rebuild SOURCE_IDS from `{{source_issue}}`, `{{sources}}`,
+and all recorded Source Card ids. When `{{source_scope}}` is `closure`, add
+every current open or deferred P4 in the closure. Do not reuse the
 pre-materialization snapshot.
 
-Then run the structural check and full-closure checks:
+Always verify that no selected or closure-adopted source remains P4:
+```bash
+bd list --id "<comma-separated SOURCE_IDS>" --status=open,deferred --priority=4 --limit=0 --json
+```
+The array must be empty.
+
+When `{{source_scope}}` is `closure`, also run the structural and full-closure
+checks:
 ```bash
 bd ready --parent EPIC --priority=4 --limit=0 --json
-bd list --id "<comma-separated SCOPE_IDS>" --status=open,deferred --priority=4 --limit=0 --json
-bd list --id "<comma-separated SCOPE_IDS>" --ready --priority=4 --limit=0 --json
+bd list --id "<comma-separated CLOSURE_IDS>" --status=open,deferred --priority=4 --limit=0 --json
+bd list --id "<comma-separated CLOSURE_IDS>" --ready --priority=4 --limit=0 --json
 ```
-All three JSON arrays must be empty. The first explicitly verifies structural
-`bd ready`; the second prevents an open or deferred P4 anywhere in the full
-closure from surviving merely because it is outside the ready queue; the third
-applies ready semantics across hierarchy, provenance dependents, and any
-outside direct source.
+All three arrays must be empty. If a check finds a P4, add it to SOURCE_IDS,
+resolve it by refinement, coverage-first supersession, epic promotion, or
+approved non-goal retirement, recompute the fixed-point closure, then rerun
+every check. In `explicit` mode, do not add or mutate unselected closure cards.
+Do not close this step or squash the wisp until the applicable checks are empty.
 
-If any check returns an item, do not warn and continue. Add it to the backlog
-set, resolve it by refinement, coverage-first supersession, or approved
-non-goal retirement, recompute the fixed-point closure again, then rerun every
-check. Do not close this step or squash the wisp until all checks are empty.
-
-Count dispatchable ready work separately:
+Build RESULT_IDS from EPIC and every materialized or reused plan card. Count
+ready and blocked work against that exact set:
 ```bash
-bd list --id "<comma-separated SCOPE_IDS>" --ready --priority-max=3 --limit=0 --json
+bd list --id "<comma-separated RESULT_IDS>" --ready --priority-max=3 --limit=0 --json
 bd blocked --json
 ```
-Intersect the `bd blocked --json` result with SCOPE_IDS for the scoped blocked
-count; provenance dependents are not necessarily structural descendants.
+Intersect `bd blocked --json` with RESULT_IDS for the scoped blocked count.
 
 **6. Final report in chat:**
 ```
 ## Beads created: {{feature}}
 Epic: EPIC
-Task beads: <count>
+Work cards: <count>
 Dispatchable ready (P0-P3): <scoped count>
 Blocked: <scoped count>
-Backlog dispositions: <source id → refined/epic-promoted/superseded/already-retired/non-goal>
+Source dispositions: <source id → refined/epic-promoted/epic-planned/superseded/already-retired/non-goal>
 Normative visual coverage: <fully materialized>/<total> rows
 Implementation owners: <count>/<total>
 Verification owners: <count>/<total>
-Ready P4: 0
+Source P4 remaining: 0
+Ready P4: 0 (closure scope only; explicit scope reports not checked)
 
 Work it with: $implement-ready EPIC
 ```
@@ -1077,7 +1102,7 @@ Work it with: $implement-ready EPIC
 done and its beads are spent scaffolding — collapse them into one durable
 digest. Squash the molecule root:
 ```bash
-bd mol squash <molecule-root> --summary "<2-4 sentence digest: feature, epic id, task-bead count, both gate outcomes (clarify + analyze), normative coverage totals as fully-owned/total with implementation and verification owner counts, and the spec file path (quick: 'epic-carried')>"
+bd mol squash <molecule-root> --summary "<2-4 sentence digest: feature, epic id, work-card count, both gate outcomes (clarify + analyze), normative coverage totals as fully-owned/total with implementation and verification owner counts, and the spec file path (quick: 'epic-carried')>"
 ```
 This leaves a single permanent digest bead and auto-cleans the ephemeral step
 beads. The feature epic and (full depth) the spec file remain the durable
@@ -1085,13 +1110,13 @@ record — the digest just points at them. Sweep any stragglers with
 `bd mol wisp gc`.
 
 **Exit criteria:** Feature epic exists; every plan work item has exactly one
-P0-P3 task with why/what, `design` linkage (plus `spec_id` in full depth),
+P0-P3 work card with why/what, `design` linkage (plus `spec_id` in full depth),
 and acceptance criteria; every normative visual row maps to materialized
 implementation and verification bead ids and the durable map records equal
-fully-owned/total counts; every backlog source has a recorded disposition; the
-freshly recomputed hierarchy-plus-provenance closure (plus any outside direct
-source) has no open, deferred, or ready P4; structural
-`bd ready --parent EPIC --priority=4` is empty; the human has the epic id,
-dispatchable/blocked counts, dispositions, normative coverage totals, and
-`Ready P4: 0`; and the wisp has been squashed into a single digest bead.
+fully-owned/total counts; every source card has a recorded disposition; no
+SOURCE_IDS card remains open or deferred at P4; closure scope also has no open,
+deferred, or ready P4 and an empty structural
+`bd ready --parent EPIC --priority=4`; the human has the epic id,
+dispatchable/blocked counts, dispositions, normative coverage totals, and the
+applicable P4 result; and the wisp has been squashed into a single digest bead.
 """

@@ -119,8 +119,11 @@ runs.run("retry", {
 | `/file` | `claude-fable-5` | `xhigh` |
 | `/triage` | `claude-fable-5` | `xhigh` |
 | `/spec` | `claude-fable-5` | `xhigh` |
-| `/backlog` | `claude-fable-5` | `xhigh` |
+| `/refine` | `claude-fable-5` | `xhigh` |
 | `/implement-ready` | `gpt-5-6-sol` | `xhigh` |
+
+Existing `llm-router.json` files that replace `commandPins` must rename a
+custom `backlog` key to `refine`; custom maps are not merged with defaults.
 
 Pins still use the quota swap. Their effort is applied after the final model
 switch and is clamped to that model's supported levels. A `null` effort leaves

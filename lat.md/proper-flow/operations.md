@@ -6,7 +6,7 @@ proper-flow is installed as a local Pi package and exposes prompt templates with
 
 The repository directory and public npm package are both named `proper-flow`.
 
-Install the published package with `pi install npm:proper-flow`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-flow`. The manifest registers `./prompts`, and Pi derives `/triage`, `/file`, `/spec`, `/backlog`, and `/implement-ready` from the five Markdown filenames.
+Install the published package with `pi install npm:proper-flow`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-flow`. The manifest registers `./prompts`, and Pi derives `/triage`, `/file`, `/spec`, `/refine`, and `/implement-ready` from the five Markdown filenames.
 
 The npm manifest uses the `pi-package` discovery keyword, limits the tarball to prompts, formulas, the rail, the installer, and user documentation, points repository metadata at the `proper-flow` monorepo directory, and publishes only to the public npm registry. Its `prepack` script runs the package contract test before tarball creation or publication.
 
@@ -16,7 +16,7 @@ Releases run from the repository root with `./tools/release-me/release.sh bump <
 
 The package directory is the source of truth for all five workflow prompts.
 
-After registration, same-named files are removed from `~/.pi/agent/prompts/` so Pi does not discover duplicate command sources. `/constitution` remains in the global prompt directory because repository governance is separate from the triage-to-implementation flow.
+After registration, same-named files are removed from `~/.pi/agent/prompts/` so Pi does not discover duplicate command sources. Remove legacy `backlog.md` too because the package now exposes `/refine`. `/constitution` remains global because repository governance is separate from the triage-to-implementation flow.
 
 ## Link installation
 
@@ -46,13 +46,13 @@ The installer leaves machine-specific Beads state unmanaged.
 
 Prompt execution depends on user-level workflow tools rather than npm dependencies.
 
-The commands expect `bd`, formulas under `~/.beads/formulas/`, and the implementation rail at `~/.beads/rail/implement-ready.sh` — the package's own resources after `install.sh link`. Hook-free worktrees use the empty `~/.beads/no-hooks/` directory. `/backlog` and `/implement-ready` can use pi-subagents, while proper-llm-router supplies command pins and worker model routing.
+The commands expect `bd`, formulas under `~/.beads/formulas/`, and the implementation rail at `~/.beads/rail/implement-ready.sh` — the package's own resources after `install.sh link`. Hook-free worktrees use the empty `~/.beads/no-hooks/` directory. `/refine` and `/implement-ready` can use pi-subagents, while proper-llm-router supplies command pins and worker model routing.
 
 `/spec` passes resolved epic and direct-source identifiers into Speckit without precomputing a backlog snapshot; the formula owns the live hierarchy-plus-provenance closure and refreshes it before materialization.
 
-`/backlog` acquires one atomic lock in the common Git directory, snapshots open and deferred P4 ids, and runs read-only reconnaissance. It combines duplicate or same-epic outcomes, serializes cross-epic conflicts, and instantiates one quick Speckit wisp per independent cluster.
+`/refine` acquires one atomic lock in the common Git directory and runs read-only reconnaissance. Selected mode resolves cards by id or unique title and limits mutation to that exact set. With no selectors, backlog mode snapshots open and deferred P4 ids.
 
-Speckit's live closure may add a P4 after the baseline. The parent must adopt that id into the owning cluster before mutation; unrelated later P4s remain outside the run. Quick depth keeps refinement Beads-only, so cluster workers need no Git worktrees or integration commits.
+Backlog mode may add a P4 from Speckit's live closure after the baseline; the parent adopts it before mutation. Selected mode keeps unselected cards as context only. Quick depth stays Beads-only, so cluster workers need no Git worktrees or integration commits.
 
 `/implement-ready` accepts an epic id, a task id or unique title, or `all`. Task titles resolve through Beads search. Single-task mode initializes the descendant-oriented rail with `all`, then filters every survey, dispatch, and report to the resolved task id.
 

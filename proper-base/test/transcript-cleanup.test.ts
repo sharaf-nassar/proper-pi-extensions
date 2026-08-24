@@ -70,7 +70,7 @@ class StatusComponent {
 class ToolExecutionComponent {
 	expanded = false;
 	toolName = "read";
-	args = { path: "src/example.ts" };
+	args: Record<string, unknown> = { path: "src/example.ts" };
 	result: { isError: boolean };
 	readonly toolCallId: string;
 	constructor(toolCallId: string, isError = false) {
@@ -130,13 +130,12 @@ test("settled re-renders reuse cached content instead of rebuilding", () => {
 			getToolsExpanded: () => false,
 			theme: {
 				fg: (_color: string, text: string) => text,
+				bold: (text: string) => text,
 				italic: (text: string) => text,
 			},
 		},
 	};
-	const controller = installTranscriptCleanup(tui as never, ctx as never, {
-		getKeys: () => [],
-	});
+	const controller = installTranscriptCleanup(tui as never, ctx as never);
 	assert.ok(controller);
 
 	const assistant = new AssistantMessageComponent({
@@ -185,8 +184,12 @@ test("settled transcript keeps thoughts and updates visible", () => {
 	let idle = false;
 	let expanded = false;
 	const rowColors = new Map<string, string>();
+	const markerColors = new Map<string, string>();
+	const boldMarkers = new Set<string>();
 	const chat = new Container();
 	const listeners = new Set<(data: string) => unknown>();
+	const scrollView = {};
+	let viewportTop = 0;
 	const document = new Container();
 	document.addChild(new Container());
 	document.addChild(new Container());
@@ -200,6 +203,11 @@ test("settled transcript keeps thoughts and updates visible", () => {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		},
+		getPrimaryScrollView: () => scrollView,
+		getScrollSelectionPoint: (_view: unknown, x: number, y: number) => ({
+			row: viewportTop + y,
+			col: x,
+		}),
 		terminal: { rows: 24 },
 	};
 	listeners.add(() => ({ consume: true }));
@@ -209,8 +217,13 @@ test("settled transcript keeps thoughts and updates visible", () => {
 			getToolsExpanded: () => expanded,
 			theme: {
 				fg: (color: string, text: string) => {
-					const kind = /^(?:▸|▾) (tool|error)\b/.exec(text)?.[1];
+					if (text === "›" || text === "⌄") markerColors.set(text, color);
+					const kind = /^(tool|error)\b/.exec(text)?.[1];
 					if (kind) rowColors.set(kind, color);
+					return text;
+				},
+				bold: (text: string) => {
+					if (text === "›" || text === "⌄") boldMarkers.add(text);
 					return text;
 				},
 				italic: (text: string) => text,
@@ -221,18 +234,13 @@ test("settled transcript keeps thoughts and updates visible", () => {
 		installTranscriptCleanup(
 			{ children: [], terminal: { rows: 24 } } as never,
 			ctx as never,
-			{ getKeys: () => [] },
 		),
 		undefined,
 	);
-	const controller = installTranscriptCleanup(tui as never, ctx as never, {
-		getKeys: () => ["ctrl+o"],
-	});
+	const controller = installTranscriptCleanup(tui as never, ctx as never);
 	assert.ok(controller);
 	assert.equal(
-		installTranscriptCleanup(tui as never, ctx as never, {
-			getKeys: () => ["alt+o"],
-		}),
+		installTranscriptCleanup(tui as never, ctx as never),
 		controller,
 	);
 
@@ -255,7 +263,10 @@ test("settled transcript keeps thoughts and updates visible", () => {
 		stopReason: "toolUse",
 	});
 	chat.addChild(progressAssistant);
-	chat.addChild(new ToolExecutionComponent("tool-1"));
+	const mcpTool = new ToolExecutionComponent("tool-1");
+	mcpTool.toolName = "mcp";
+	mcpTool.args = { tool: "firecrawl_search" };
+	chat.addChild(mcpTool);
 	chat.addChild(new ToolExecutionComponent("tool-2", true));
 	chat.addChild(new StatusComponent());
 	const finalAssistant = new AssistantMessageComponent({
@@ -307,12 +318,17 @@ test("settled transcript keeps thoughts and updates visible", () => {
 
 	controller.completeTool("tool-1");
 	const firstToolDone = chat.render(100).map(stripTerminalSequences).join("\n");
-	assert.match(firstToolDone, /tool · read · src\/example\.ts/);
+	assert.match(firstToolDone, /tool · mcp · firecrawl_search/);
 	assert.equal(firstToolDone.match(/tool preview/g)?.length, 1);
 
 	idle = true;
 	controller.settle();
-	const collapsedLines = chat.render(100).map(stripTerminalSequences);
+	const collapsedRaw = chat.render(100);
+	assert.equal(
+		collapsedRaw.some((line) => line.includes("\x1b]8;;")),
+		false,
+	);
+	const collapsedLines = collapsedRaw.map(stripTerminalSequences);
 	const collapsed = collapsedLines.join("\n");
 	assert.match(collapsed, /assistant: Image reply\./);
 	assert.match(collapsed, /thinking: inspect image/);
@@ -320,8 +336,10 @@ test("settled transcript keeps thoughts and updates visible", () => {
 	assert.match(collapsed, /thinking: inspect files/);
 	assert.match(collapsed, /assistant: I will inspect\.\nSecond line\./);
 	assert.doesNotMatch(collapsed, /update · I will inspect/);
-	assert.match(collapsed, /tool · read · src\/example\.ts/);
+	assert.match(collapsed, /tool · mcp · firecrawl_search/);
+	assert.doesNotMatch(collapsed, /tool · mcp[ \t]*$/m);
 	assert.match(collapsed, /error · read · src\/example\.ts/);
+	assert.doesNotMatch(collapsed, /\(click\b/);
 	assert.match(collapsed, /status: checking/);
 	assert.doesNotMatch(collapsed, /update · status: checking/);
 	const statusRow = collapsedLines.indexOf("status: checking");
@@ -339,6 +357,8 @@ test("settled transcript keeps thoughts and updates visible", () => {
 		error: "error",
 	});
 	assert.equal(new Set(rowColors.values()).size, 2);
+	assert.equal(markerColors.get("›"), "borderAccent");
+	assert.ok(boldMarkers.has("›"));
 	assert.match(collapsed, /user: follow up\nassistant: Done again\./);
 	chat.addChild(new Spacer(1));
 	chat.addChild(new StatusComponent("Session: 12 messages, 4 tools"));
@@ -354,12 +374,14 @@ test("settled transcript keeps thoughts and updates visible", () => {
 	const continued = chat.render(100).map(stripTerminalSequences).join("\n");
 	assert.match(continued, /assistant: Continued\./);
 	assert.doesNotMatch(collapsed, /thought ·|tool preview/);
-	tui.previousScreen = chat.render(100);
-	const targetRow = tui.previousScreen.findIndex((line) =>
-		stripTerminalSequences(line).startsWith("▸ tool · read"),
+	const rendered = chat.render(100);
+	const targetRow = rendered.findIndex((line) =>
+		stripTerminalSequences(line).startsWith("› tool · mcp · firecrawl_search"),
 	);
 	assert.ok(targetRow >= 0);
-	const click = `\x1b[<0;1;${targetRow + 1}M`;
+	viewportTop = Math.max(0, targetRow - 2);
+	tui.previousScreen = rendered.slice(viewportTop, viewportTop + 24);
+	const click = `\x1b[<0;1;${targetRow - viewportTop + 1}M`;
 	let consumed = false;
 	for (const listener of listeners) {
 		if ((listener(click) as { consume?: boolean } | undefined)?.consume) {
@@ -368,13 +390,22 @@ test("settled transcript keeps thoughts and updates visible", () => {
 		}
 	}
 	assert.equal(consumed, true);
-	const clicked = chat.render(100).map(stripTerminalSequences).join("\n");
+	const clickedRaw = chat.render(100);
+	assert.equal(
+		clickedRaw.some((line) => line.includes("\x1b]8;;")),
+		false,
+	);
+	const clicked = clickedRaw.map(stripTerminalSequences).join("\n");
 	assert.equal(clicked.match(/tool output/g)?.length, 1);
+	assert.match(clicked, /^⌄ tool · mcp · firecrawl_search/m);
+	assert.equal(markerColors.get("⌄"), "borderAccent");
+	assert.ok(boldMarkers.has("⌄"));
+	assert.doesNotMatch(clicked, /\(click\b/);
 	assert.match(clicked, / collapse /);
 	assert.match(clicked, /thinking: inspect files/);
 	assert.match(clicked, /thinking: inspect image/);
 	assert.doesNotMatch(clicked, /thought ·/);
-	tui.previousScreen = chat.render(100);
+	tui.previousScreen = clickedRaw.slice(viewportTop, viewportTop + 24);
 	const collapseRow = tui.previousScreen.findIndex((line) =>
 		stripTerminalSequences(line).startsWith(" collapse "),
 	);

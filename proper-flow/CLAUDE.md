@@ -28,11 +28,12 @@ resources the prompts drive: `formulas/` (constitution, speckit), the
 ## Conventions
 
 - Keep command filenames stable: `triage.md`, `file.md`, `spec.md`,
-  `backlog.md`, and `implement-ready.md` define their slash-command names.
+  `refine.md`, and `implement-ready.md` define their slash-command names.
 - Preserve `description` and `argument-hint` frontmatter for autocomplete.
 - Keep routing responsibilities separate: triage chooses a flow, file
-  investigates bugs, spec refines scope, backlog drains P4 work into
-  implement-ready clusters, and implement-ready executes one task, an epic
+  investigates bugs, spec plans new scope, refine investigates selected cards
+  or the P4 backlog into implement-ready clusters, and implement-ready executes
+  one task, an epic
   frontier, or the whole board.
 - The rail never launches agents and never commits; agent orchestration and
   judgement stay in the prompts.

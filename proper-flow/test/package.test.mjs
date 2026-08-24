@@ -4,9 +4,9 @@ import { test } from "node:test";
 
 const root = new URL("../", import.meta.url);
 const expected = [
-	"backlog.md",
 	"file.md",
 	"implement-ready.md",
+	"refine.md",
 	"spec.md",
 	"triage.md",
 ];
@@ -51,14 +51,24 @@ test("file stores acceptance criteria in the structured field", async () => {
 	assert.match(source, /never only in the description/);
 });
 
-test("backlog drains P4 work through a rolling quick-spec pool", async () => {
-	const source = await readFile(new URL("prompts/backlog.md", root), "utf8");
-	assert.match(source, /^argument-hint: "\[workers 1-12, default 12\]"/m);
+test("refine handles selected cards and defaults to the P4 backlog", async () => {
+	const source = await readFile(new URL("prompts/refine.md", root), "utf8");
+	assert.match(
+		source,
+		/^argument-hint: "\[card id\/name\[, \.\.\.\]\] \[workers 1-12, default 12\]"/m,
+	);
+	assert.match(
+		source,
+		/With no card selector, refine every open or deferred P4/,
+	);
 	assert.match(source, /bd list --status=open,deferred --priority=4/);
-	assert.match(source, /INITIAL_BACKLOG_IDS/);
+	assert.match(source, /bd search <selector> --json --limit 20/);
+	assert.match(source, /INITIAL_SOURCE_IDS/);
 	assert.match(source, /ADOPTED_SOURCE_IDS/);
-	assert.match(source, /BACKLOG_RUN_ID/);
-	assert.match(source, /backlog-refinement\.lock/);
+	assert.match(source, /REFINE_RUN_ID/);
+	assert.match(source, /refinement\.lock/);
+	assert.match(source, /source_scope=closure/);
+	assert.match(source, /source_scope=explicit/);
 	assert.match(source, /reconnaissance/i);
 	assert.match(source, /conflict cluster/i);
 	assert.match(source, /distinct target\s+epics/i);
@@ -78,8 +88,8 @@ test("backlog drains P4 work through a rolling quick-spec pool", async () => {
 	assert.match(source, /absorb --repo <repo>/);
 
 	const triage = await readFile(new URL("prompts/triage.md", root), "utf8");
-	assert.match(triage, /Whole backlog sweep/);
-	assert.match(triage, /invoke `\/backlog`/);
+	assert.match(triage, /Card refinement/);
+	assert.match(triage, /invoke `\/refine`/);
 });
 
 test("implement-ready accepts epic, task, or all scopes", async () => {
@@ -95,7 +105,7 @@ test("implement-ready accepts epic, task, or all scopes", async () => {
 	assert.match(source, /single-task mode/);
 });
 
-test("P4 debt stays out of ready work and routes to backlog", async () => {
+test("P4 debt stays out of ready work and routes to refine", async () => {
 	const implementReady = await readFile(
 		new URL("prompts/implement-ready.md", root),
 		"utf8",
@@ -105,7 +115,7 @@ test("P4 debt stays out of ready work and routes to backlog", async () => {
 		/bd create[\s\S]*?--type=chore -p 4[\s\S]*?--status=deferred/,
 	);
 	assert.doesNotMatch(implementReady, /bd defer/);
-	assert.match(implementReady, /refine with `\/backlog`/);
+	assert.match(implementReady, /refine with `\/refine`/);
 	assert.doesNotMatch(implementReady, /\/spec\s+debt/);
 
 	const spec = await readFile(new URL("prompts/spec.md", root), "utf8");

@@ -10,13 +10,9 @@ import {
 } from "@earendil-works/pi-tui";
 
 const INSTALLED = Symbol.for("pi-proper-base.transcript-cleanup");
-const PROCESS_LINK_PREFIX = "pi-proper-base://process/";
 const SGR_MOUSE_TAIL = /^\[<(\d+);(\d+);(\d+)([Mm])$/;
 const LEFT_BUTTON = "0";
 
-type Keybindings = {
-	getKeys(action: "app.tools.expand"): readonly string[];
-};
 type ComponentContainer = Component & { children: Component[] };
 type AssistantMessage = {
 	content: Array<{ type: string; text?: string; thinking?: string }>;
@@ -31,17 +27,20 @@ type AssistantComponent = Component & {
 type InstalledContainer = ComponentContainer & {
 	[INSTALLED]?: TranscriptCleanupController;
 };
+type DetailHit = {
+	owner: object;
+	line: string;
+	end: number;
+};
 type State = {
 	ctx: ExtensionContext;
 	tui: TUI;
-	keybindings: Keybindings;
 	activeStart: number | undefined;
 	completed: Set<Component>;
 	owned: Set<Component>;
 	expanded: Map<object, boolean>;
-	groups: Map<string, object>;
-	ids: WeakMap<object, string>;
-	nextId: number;
+	hits: Map<number, DetailHit>;
+	pendingHits: DetailHit[];
 	globalExpanded: boolean;
 	assistantCache: WeakMap<AssistantComponent, AssistantRenderCache>;
 };
@@ -68,6 +67,16 @@ type MouseTui = TUI & {
 	inputListeners?: Set<TuiInputListener>;
 	previousLines?: string[];
 	previousScreen?: string[];
+	getPrimaryScrollView?(): unknown;
+	getScrollSelectionPoint?(
+		scrollView: unknown,
+		x: number,
+		y: number,
+	): { row: number; col: number } | undefined;
+};
+type TranscriptContainers = {
+	document: ComponentContainer;
+	chat: InstalledContainer;
 };
 
 export type TranscriptCleanupController = {
@@ -75,33 +84,31 @@ export type TranscriptCleanupController = {
 	completeAssistant(message: object): void;
 	completeTool(toolCallId: string): void;
 	settle(): void;
-	update(ctx: ExtensionContext, tui: TUI, keybindings: Keybindings): void;
+	update(ctx: ExtensionContext, tui: TUI): void;
 	uninstall(): void;
 };
 
 export function installTranscriptCleanup(
 	tui: TUI,
 	ctx: ExtensionContext,
-	keybindings: Keybindings,
 ): TranscriptCleanupController | undefined {
-	const chat = findChatContainer(tui) as InstalledContainer | undefined;
-	if (!chat) return undefined;
+	const containers = findTranscriptContainers(tui);
+	if (!containers) return undefined;
+	const { document, chat } = containers;
 	if (chat[INSTALLED]) {
-		chat[INSTALLED].update(ctx, tui, keybindings);
+		chat[INSTALLED].update(ctx, tui);
 		return chat[INSTALLED];
 	}
 
 	let state: State = {
 		ctx,
 		tui,
-		keybindings,
 		activeStart: ctx.isIdle() ? undefined : chat.children.length,
 		completed: new Set(),
 		owned: new Set(chat.children),
 		expanded: new Map(),
-		groups: new Map(),
-		ids: new WeakMap(),
-		nextId: 0,
+		hits: new Map(),
+		pendingHits: [],
 		globalExpanded: ctx.ui.getToolsExpanded(),
 		assistantCache: new WeakMap(),
 	};
@@ -163,12 +170,11 @@ export function installTranscriptCleanup(
 			};
 			state.tui.requestRender();
 		},
-		update(nextCtx, nextTui, nextKeybindings) {
+		update(nextCtx, nextTui) {
 			state = {
 				...state,
 				ctx: nextCtx,
 				tui: nextTui,
-				keybindings: nextKeybindings,
 			};
 		},
 		uninstall() {
@@ -190,15 +196,19 @@ export function installTranscriptCleanup(
 		if (globalExpanded !== state.globalExpanded) {
 			state = { ...state, globalExpanded, expanded: new Map() };
 		}
-		state.groups.clear();
+		state.pendingHits.length = 0;
+		let lines: string[];
 		if (state.activeStart === undefined && state.ctx.isIdle()) {
-			return renderCollapsed(chat.children, width, state);
+			lines = renderCollapsed(chat.children, width, state);
+		} else {
+			const start = state.activeStart ?? chat.children.length;
+			lines = [
+				...renderCollapsed(chat.children.slice(0, start), width, state),
+				...renderActive(chat.children.slice(start), width, state),
+			];
 		}
-		const start = state.activeStart ?? chat.children.length;
-		return [
-			...renderCollapsed(chat.children.slice(0, start), width, state),
-			...renderActive(chat.children.slice(start), width, state),
-		];
+		indexDetailHits(lines, documentRowOffset(document, chat, width), state);
+		return lines;
 	};
 	chat[INSTALLED] = controller;
 	return controller;
@@ -407,28 +417,20 @@ function hasSectionText(lines: string[]): boolean {
 }
 
 function renderDetail(detail: Detail, width: number, state: State): string[] {
-	let id = state.ids.get(detail.owner);
-	if (!id) {
-		id = String(++state.nextId);
-		state.ids.set(detail.owner, id);
-	}
-	state.groups.set(id, detail.owner);
 	const expanded = state.expanded.get(detail.owner) ?? state.globalExpanded;
-	const keys = state.keybindings.getKeys("app.tools.expand").join("/");
-	const action = expanded ? "collapse" : "expand";
-	const hint = keys
-		? ` (click or ${keys} to ${action})`
-		: ` (click to ${action})`;
-	const label = `${expanded ? "▾" : "▸"} ${detail.label}${hint}`;
-	const styled = state.ctx.ui.theme.fg(detailColor(detail.kind), label);
-	const header = truncateToWidth(
-		`\x1b]8;;${PROCESS_LINK_PREFIX}${id}\x07${styled}\x1b]8;;\x07`,
-		width,
-		"",
+	const marker = state.ctx.ui.theme.fg(
+		"borderAccent",
+		state.ctx.ui.theme.bold(expanded ? "⌄" : "›"),
 	);
-	const lines = [
-		`${header}${" ".repeat(Math.max(0, width - visibleWidth(header)))}`,
-	];
+	const label = state.ctx.ui.theme.fg(detailColor(detail.kind), detail.label);
+	const header = truncateToWidth(`${marker} ${label}`, width, "");
+	const headerLine = `${header}${" ".repeat(Math.max(0, width - visibleWidth(header)))}`;
+	state.pendingHits.push({
+		owner: detail.owner,
+		line: headerLine,
+		end: visibleWidth(header),
+	});
+	const lines = [headerLine];
 	const expandable = detail.component as ToolComponent;
 	// setExpanded rebuilds the tool's result renderer even when the state is
 	// unchanged, which re-sanitizes full outputs on every frame. Skip no-ops.
@@ -436,11 +438,14 @@ function renderDetail(detail: Detail, width: number, state: State): string[] {
 	if (expanded) {
 		lines.push(...detail.component.render(width));
 		const button = `\x1b[7m ${state.ctx.ui.theme.fg(detailColor(detail.kind), "collapse")} \x1b[27m`;
-		const linked = `\x1b]8;;${PROCESS_LINK_PREFIX}${id}\x07${button}\x1b]8;;\x07`;
-		const rendered = truncateToWidth(linked, width, "");
-		lines.push(
-			`${rendered}${" ".repeat(Math.max(0, width - visibleWidth(rendered)))}`,
-		);
+		const rendered = truncateToWidth(button, width, "");
+		const buttonLine = `${rendered}${" ".repeat(Math.max(0, width - visibleWidth(rendered)))}`;
+		state.pendingHits.push({
+			owner: detail.owner,
+			line: buttonLine,
+			end: visibleWidth(rendered),
+		});
+		lines.push(buttonLine);
 	}
 	return lines;
 }
@@ -459,7 +464,16 @@ function detailColor(
 function describeTool(tool: ToolComponent, error: boolean): string {
 	const name = tool.toolName ?? "tool";
 	const args = asRecord(tool.args);
-	const value = ["path", "command", "pattern", "query", "task", "url", "action"]
+	const value = [
+		"tool",
+		"path",
+		"command",
+		"pattern",
+		"query",
+		"task",
+		"url",
+		"action",
+	]
 		.map((key) => args?.[key])
 		.find((candidate): candidate is string => typeof candidate === "string");
 	const target = value ? ` · ${oneLine(value)}` : "";
@@ -476,6 +490,29 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 		: undefined;
 }
 
+function documentRowOffset(
+	document: ComponentContainer,
+	chat: ComponentContainer,
+	width: number,
+): number {
+	const chatIndex = document.children.indexOf(chat);
+	if (chatIndex <= 0) return 0;
+	return document.children
+		.slice(0, chatIndex)
+		.reduce((rows, child) => rows + child.render(width).length, 0);
+}
+
+function indexDetailHits(lines: string[], offset: number, state: State): void {
+	state.hits.clear();
+	let nextRow = 0;
+	for (const hit of state.pendingHits) {
+		const relativeRow = lines.indexOf(hit.line, nextRow);
+		if (relativeRow < 0) continue;
+		state.hits.set(offset + relativeRow, hit);
+		nextRow = relativeRow + 1;
+	}
+}
+
 function handleClick(
 	data: string,
 	state: State,
@@ -485,51 +522,44 @@ function handleClick(
 	if (!match || match[1] !== LEFT_BUTTON) return undefined;
 	const column = Number.parseInt(match[2] ?? "", 10) - 1;
 	const row = Number.parseInt(match[3] ?? "", 10) - 1;
-	const line = screenLines(state.tui)[row];
-	if (!line) return undefined;
-	const link = linkAtColumn(line, column);
-	if (!link?.startsWith(PROCESS_LINK_PREFIX)) return undefined;
-	const owner = state.groups.get(link.slice(PROCESS_LINK_PREFIX.length));
-	if (!owner) return undefined;
+	const point = contentPoint(state.tui, column, row);
+	if (!point) return undefined;
+	const hit = state.hits.get(point.row);
+	if (!hit || point.col < 0 || point.col >= hit.end) return undefined;
+	const screenLine = screenLines(state.tui)[row];
+	if (!screenLine || !sameHitText(screenLine, hit)) return undefined;
 	if (match[4] === "M") {
 		state.expanded.set(
-			owner,
-			!(state.expanded.get(owner) ?? state.globalExpanded),
+			hit.owner,
+			!(state.expanded.get(hit.owner) ?? state.globalExpanded),
 		);
 		state.tui.requestRender();
 	}
 	return { consume: true };
 }
 
+function contentPoint(
+	tui: TUI,
+	column: number,
+	row: number,
+): { row: number; col: number } | undefined {
+	const host = tui as MouseTui;
+	const scrollView = host.getPrimaryScrollView?.();
+	return scrollView !== undefined && host.getScrollSelectionPoint
+		? host.getScrollSelectionPoint(scrollView, column, row)
+		: { row, col: column };
+}
+
+function sameHitText(line: string, hit: DetailHit): boolean {
+	return (
+		truncateToWidth(stripTerminalSequences(line), hit.end, "") ===
+		truncateToWidth(stripTerminalSequences(hit.line), hit.end, "")
+	);
+}
+
 function screenLines(tui: TUI): string[] {
 	const host = tui as MouseTui;
 	return host.previousScreen ?? host.previousLines ?? [];
-}
-
-function linkAtColumn(line: string, column: number): string | undefined {
-	let active: string | undefined;
-	let visible = 0;
-	for (let index = 0; index < line.length; ) {
-		if (line.startsWith("\x1b]8;;", index)) {
-			const end = line.indexOf("\x07", index + 5);
-			if (end < 0) break;
-			active = line.slice(index + 5, end) || undefined;
-			index = end + 1;
-			continue;
-		}
-		if (line[index] === "\x1b") {
-			const end = line.indexOf("m", index + 1);
-			if (end < 0) break;
-			index = end + 1;
-			continue;
-		}
-		const character = line[index] ?? "";
-		const width = visibleWidth(character);
-		if (column >= visible && column < visible + width) return active;
-		visible += width;
-		index += character.length;
-	}
-	return undefined;
 }
 
 function prioritize(tui: TUI, listener: TuiInputListener): void {
@@ -541,7 +571,7 @@ function prioritize(tui: TUI, listener: TuiInputListener): void {
 	for (const entry of rest) listeners.add(entry);
 }
 
-function findChatContainer(tui: TUI): ComponentContainer | undefined {
+function findTranscriptContainers(tui: TUI): TranscriptContainers | undefined {
 	for (const root of roots(tui)) {
 		const document = find(root, (component) => {
 			const children = childrenOf(component);
@@ -553,7 +583,12 @@ function findChatContainer(tui: TUI): ComponentContainer | undefined {
 			);
 		});
 		const chat = document ? childrenOf(document)[2] : undefined;
-		if (chat) return chat as ComponentContainer;
+		if (document && chat) {
+			return {
+				document: document as ComponentContainer,
+				chat: chat as InstalledContainer,
+			};
+		}
 	}
 	return undefined;
 }

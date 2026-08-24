@@ -66,8 +66,10 @@ The built-in map removes judge latency for commands with fixed model needs.
 | `/file` | `claude-fable-5` | `xhigh` |
 | `/triage` | `claude-fable-5` | `xhigh` |
 | `/spec` | `claude-fable-5` | `xhigh` |
-| `/backlog` | `claude-fable-5` | `xhigh` |
+| `/refine` | `claude-fable-5` | `xhigh` |
 | `/implement-ready` | `gpt-5-6-sol` | `xhigh` |
+
+Existing user maps that still pin `backlog` must rename that key to `refine`. The loader does not migrate custom command names because `commandPins` may contain unrelated user-defined commands.
 
 Pin keys may include or omit `/` and match case-insensitively. Matching is exact on the first slash-command token, so `/filet` does not match `/file` and embedded text such as `fix /file` is not a command.
 

@@ -1,5 +1,5 @@
 ---
-description: Route work to /file, direct Beads creation, /backlog, or /spec
+description: Route work to /file, direct Beads creation, /refine, or /spec
 argument-hint: <bug report, feature idea, task description, or issue reference>
 ---
 
@@ -32,11 +32,13 @@ Files: <comma-separated repo-relative paths this will touch>" --acceptance="<ver
    - Then absorb the beads audit log exactly as /file step 7 does (standalone
      chore-commit path, staged-index guard included). No learning disposition
      here — tier 2 is known work, not an investigation.
-3. **Whole backlog sweep** — the request asks to drain/refine all backlog,
-   all P4 work, or the ponytail-debt ledger → invoke `/backlog` with any worker
-   limit. Never collapse unrelated backlog into one `/spec` run.
-4. **Fuzzy scope** — new feature, unknowns needing human answers, multiple
-   interdependent work items, or one specific P4 refinement → invoke `/spec`
+3. **Card refinement** — the request names one or more existing cards that need
+   investigation/planning, or asks to refine all backlog/P4/ponytail-debt work →
+   invoke `/refine` with the card selectors and any worker limit. Invoke it with
+   no card selectors for the whole backlog. Never collapse unrelated cards into
+   one `/spec` run.
+4. **Fuzzy new scope** — a new feature or problem statement needs product
+   answers and an implementation plan but has no source card → invoke `/spec`
    with the request (quick depth for plainly small features, full otherwise).
 
 Tie-breakers:
@@ -49,5 +51,6 @@ Tie-breakers:
   that does not exist.
 - A "bug" whose fix requires a design decision is tier 4, not tier 1 — say
   so in the routing line.
-- An existing issue id routes by its content: bug-shaped → tier 1 context,
-  epic or one P4 item → tier 4. Tier 3 is only the whole backlog sweep.
+- An existing issue id routes by its content: bug-shaped → tier 1 context;
+  anything needing further investigation or planning → tier 3. Tier 4 starts
+  from new scope rather than an existing source card.

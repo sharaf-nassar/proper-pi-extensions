@@ -125,14 +125,14 @@ flow: `survey` is a rail command YOU run directly between pool events.)
    Report each bucket honestly and distinctly. `p4_excluded` was never
    dispatchable; `unacceptable` needs refinement, not dispatch — say
    `unacceptable: <ids> — no acceptance criteria, refine before dispatch` and
-   suggest `/spec <id>` (or `/file <id>` for a bug). NEVER write acceptance
+   suggest `/refine <id>` (or `/file <id>` for a bug). NEVER write acceptance
    criteria onto a bead yourself to get it dispatched: that is the worker's
    invention moved one seat earlier. Neither bucket is a failure or a stuck
-   task. A childless epic in the frontier → report it and suggest `/spec <id>`.
+   task. A childless epic in the frontier → report it and suggest `/refine <id>`.
 
    If the user asks you to work a P4 directly, do NOT dispatch it. A P4 has no
    acceptance criteria or plan refs by construction, so a worker would invent
-   its own scope and integrate the invention. Offer `/spec <p4-id>` instead.
+   its own scope and integrate the invention. Offer `/refine <p4-id>` instead.
 
    If nothing is ready and nothing is in progress, show `bd blocked` and stop.
 
@@ -376,13 +376,13 @@ flow: `survey` is a rail command YOU run directly between pool events.)
 
      Deferred creation is required: P4 expresses backlog priority, while Beads
      readiness is status/dependency-based, so an open unblocked P4 would pollute
-     `bd ready`; refine with `/backlog` later.
+     `bd ready`; refine with `/refine` later.
    - Unparented and dependency-free is deliberate: both a `--parent` and a
      `discovered-from` edge would pull these into /spec's SCOPE closure, whose
      zero-unresolved-P4 invariant would then force every later spec run to
      adjudicate unrelated debt. Provenance lives as description TEXT, which no
      closure traverses. `bd list --label ponytail-debt` is the ledger;
-     `/backlog` is the paydown.
+     `/refine` is the paydown.
    - Report `ponytail_debt: N filed`.
 
    Ponytail review (after debt filing, still before the absorb). Dispatch ONE

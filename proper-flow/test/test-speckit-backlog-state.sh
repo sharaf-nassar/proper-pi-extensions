@@ -12,7 +12,9 @@ require() {
   }
 }
 
-require 'version = 10' 'deferred-backlog formula version'
+require 'version = 11' 'source-scope formula version'
+require '[vars.source_scope]' 'source scope variable'
+require '`explicit`, do not add unselected cards' 'explicit source isolation'
 require 'stored status is `open` or `deferred`' \
   'open-or-deferred backlog discovery'
 require '--status=open,deferred --priority=4' \

@@ -572,7 +572,7 @@ export default function (pi: ExtensionAPI) {
 			activeTui = tui;
 			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Settled transcript]]
 			transcriptCleanup?.uninstall();
-			transcriptCleanup = installTranscriptCleanup(tui, ctx, keybindings);
+			transcriptCleanup = installTranscriptCleanup(tui, ctx);
 			removeSmartSelection?.();
 			removeSmartSelection = installSmartSelection(tui);
 			historyGuard = installHistoryGuard(editor);

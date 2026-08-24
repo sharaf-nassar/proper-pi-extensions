@@ -6,7 +6,7 @@ proper-flow uses one dependency-free Node test for its package and command disco
 
 The fixture verifies Pi receives the intended prompt resource set.
 
-It parses `package.json`, checks that `pi.prompts` exposes `./prompts`, and requires exactly `backlog.md`, `file.md`, `implement-ready.md`, `spec.md`, and `triage.md`. Each file must retain `description` and `argument-hint` frontmatter.
+It parses `package.json`, checks that `pi.prompts` exposes `./prompts`, and requires exactly `file.md`, `implement-ready.md`, `refine.md`, `spec.md`, and `triage.md`. Each file must retain `description` and `argument-hint` frontmatter.
 
 ## Questionnaire routing contract
 
@@ -26,11 +26,11 @@ It requires `/implement-ready` to advertise epic, task, and all scopes and to re
 
 ## P4 backlog-state contract
 
-The fixture requires `/implement-ready` to create each P4 debt bead with deferred status, point debt paydown to `/backlog`, and leave `/spec` without a whole-ledger debt route.
+The fixture requires `/implement-ready` to create each P4 debt bead with deferred status, point debt paydown to `/refine`, and leave `/spec` without a whole-ledger debt route.
 
-## Backlog orchestration contract
+## Refinement orchestration contract
 
-The fixture protects `/backlog` locking, P4 snapshot/adoption, distinct-epic serialization, bounded async refinement, exact human gates, and final audit absorption.
+The fixture protects `/refine` card resolution, no-argument P4 fallback, selected-source isolation, locking, distinct-epic serialization, bounded async refinement, exact human gates, and final audit absorption.
 
 ## Rolling pool contract
 
@@ -84,6 +84,6 @@ It verifies source authority and row-level coverage remain present, both impleme
 
 ## Coverage boundary
 
-The Node test validates package ownership, Pi-facing metadata, acceptance storage, backlog orchestration, integration sequencing, and scope selection; the shell suites validate the installer, rail, and formula contracts above.
+The Node test validates package ownership, Pi-facing metadata, acceptance storage, refinement orchestration, integration sequencing, and scope selection; the shell suites validate the installer, rail, and formula contracts above.
 
 Subagent orchestration, model pins, and the rest of each prompt's prose are exercised by their owning tools and live workflow runs rather than duplicated in these package tests.

@@ -101,7 +101,7 @@ These were verified as public npm Pi packages. Install unpinned sources so
 | `pi-context-view` | Adds context usage and hidden-injection inspection. |
 | `proper-base` | Adds this repository's baseline transcript, editor, history, image, cancellation, title, and footer behavior. |
 | `proper-llm-router` | Routes each session's first task to a configured model and applies quota-aware swaps. |
-| `proper-flow` | Adds this repository's `/triage`, `/file`, `/spec`, `/backlog`, and `/implement-ready` prompts. All five run `bd`; install only when `bd` exists. |
+| `proper-flow` | Adds this repository's `/triage`, `/file`, `/spec`, `/refine`, and `/implement-ready` prompts. All five run `bd`; install only when `bd` exists. |
 
 ```bash
 packages=(
@@ -323,7 +323,7 @@ Remove:
 
 - Old direct `llm-router.ts` registrations.
 - Legacy `proper-customs`, `proper-history`, or duplicate `proper-base` paths.
-- Loose `~/.pi/agent/prompts/{triage,file,spec,backlog,implement-ready}.md`
+- Loose `~/.pi/agent/prompts/{triage,file,spec,backlog,refine,implement-ready}.md`
   files when `proper-flow` supplies those commands.
 - Duplicate skill copies that produce Pi name-collision warnings.
 
@@ -364,7 +364,7 @@ was installed):
 /triage
 /file
 /spec
-/backlog
+/refine
 /implement-ready
 /skill:ui-ux-pro-max
 /skill:unslop

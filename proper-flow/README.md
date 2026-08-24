@@ -14,7 +14,7 @@ and rail into `~/.beads/`.
 | `/triage <request>` | Classifies the request as broken behavior, known concrete work, or fuzzy scope. It routes to `/file`, files a ready task directly, or routes to `/spec`. |
 | `/file <bug>` | Reproduces the bug, traces the root cause, checks prior work, presents findings for approval, then files precise bug beads with structured acceptance criteria. It does not implement unless explicitly asked. |
 | `/spec <input>` | Accepts one idea, epic, or P4 item; runs `speckit` in full or quick depth, pauses at clarification and approval gates, then creates or updates an epic with dependency-wired P0 to P3 tasks. |
-| `/backlog [workers]` | Researches every open or deferred P4, groups conflicts, and fans independent clusters through quick Speckit refinement into workable P0 to P3 cards. |
+| `/refine [card id/name[, ...]] [workers]` | Researches and plans selected cards of any type or priority. With no card selector, it refines every open or deferred P4 backlog item. |
 | `/implement-ready [scope] [workers]` | Accepts an epic, task, or `all`; runs the scope through a rolling pool of 1 to 12 workers with worktree, integration, retry, verification, cleanup, and reporting controls. |
 
 All five commands run `bd` for the user. When input is needed, they use
@@ -29,9 +29,10 @@ UI appears.
 - Broken or regressed behavior goes to `/file`.
 - Small work with known files and verifiable acceptance criteria is filed
   directly, without a larger pipeline.
-- Whole-board backlog or ponytail-debt sweeps go to `/backlog`.
-- Features, material unknowns, multi-part work, and one specific P4 refinement
-  go to `/spec`.
+- Existing cards that need investigation/planning, plus whole-board backlog or
+  ponytail-debt sweeps, go to `/refine`.
+- New features, material unknowns, and multi-part work without a source card go
+  to `/spec`.
 - Borderline requests get one explicit user decision instead of a guess.
 
 ### `/file`
@@ -53,7 +54,8 @@ UI appears.
 ### `/spec`
 
 Accepted inputs include a new idea, an existing epic, or one direct P4 backlog
-item. Whole-board P4 refinement belongs to `/backlog`.
+item. Existing-card refinement and whole-board P4 refinement belong to
+`/refine`.
 
 The underlying `speckit` pipeline performs:
 
@@ -74,22 +76,26 @@ Both depths require verifiable acceptance criteria, resolve every source P4,
 and verify implementation and test ownership for normative visual requirements
 before creating tasks.
 
-### `/backlog`
+### `/refine`
 
-- Acquires one atomic repository run lock, then snapshots every open or deferred
-  P4 so concurrent backlog sessions cannot share sources or human gates.
+- Acquires one atomic repository refinement lock, then resolves selected cards
+  by id or unique title. With no selector, it snapshots every open or deferred
+  P4 backlog item.
+- Accepts source cards of any type or priority. Selected scope never mutates an
+  unselected card; backlog scope may adopt a later P4 from a cluster's required
+  live closure.
 - Fans read-only reconnaissance across up to 12 workers, requiring local
   investigation and relevant current web documentation.
 - Groups duplicate or same-epic outcomes into refinement clusters. Cross-epic
   file/shared-primitive conflicts remain separate and serialize.
-- Runs one quick Speckit wisp per independent cluster and adopts only P4s found
-  later in that cluster's required live closure.
-- Mediates Speckit's clarification and approval gates through the parent session.
-- Refines a source in place, creates coverage-first replacements before
-  superseding it, preserves actionable coverage for an already-retired source,
-  retires an approved non-goal, or promotes a P4 epic after child coverage.
-- Verifies every initial source has one terminal disposition and that no initial
-  open or deferred P4 remains before reporting success.
+- Runs one quick Speckit wisp per independent cluster and mediates its
+  clarification and approval gates through the parent session.
+- Refines a source in place without changing its non-epic type, creates
+  coverage-first replacements before superseding it, preserves coverage for an
+  already-retired source, retires an approved non-goal, or plans/promotes an
+  epic after child coverage.
+- Verifies every run source has one terminal disposition and no run source
+  remains open or deferred at P4 before reporting success.
 - Absorbs the Beads audit log once after all cluster wisps and final checks.
 
 ### `/implement-ready`
@@ -123,7 +129,7 @@ Common report states:
 | State | Meaning |
 | --- | --- |
 | `unacceptable` | P0 to P3 work lacks structured acceptance criteria and must return to `/file` or `/spec`. |
-| `p4_excluded` | Backlog work is intentionally not dispatchable and should go through `/backlog` or a focused `/spec <id>`. |
+| `p4_excluded` | Backlog work is intentionally not dispatchable and should go through `/refine` with the card id or no selector for the full backlog. |
 | `stuck` | Attempts stopped on repeated failure, environment, conflict, missing concrete fix, or retry ceiling. |
 | `stranded` | Work remains blocked by a stuck task. |
 | `held` | User excluded the task from this run. |
@@ -177,7 +183,7 @@ The prompts expect:
 - `~/.beads/rail/implement-ready.sh`.
 - The real empty `~/.beads/no-hooks/` directory for hook-free worktrees.
 
-`/backlog` requires pi-subagents for its rolling research/refinement pool.
+`/refine` requires pi-subagents for its rolling research/refinement pool.
 `/implement-ready` uses pi-subagents when available and otherwise works tasks
 serially. `proper-llm-router` is optional, but its default command pins and
 per-worker routing match these workflows. `/constitution` remains a Beads
@@ -193,7 +199,7 @@ npm publish --dry-run
 
 `prepack` runs the Node test before a tarball or publish. The Node test
 protects package discovery, autocomplete metadata, questionnaire use,
-structured acceptance, backlog clustering, task scope, rolling-pool behavior,
+structured acceptance, refinement clustering, task scope, rolling-pool behavior,
 and integration sequencing. Dependency-free shell suites under `test/` cover
 the installer, the rail's survey filtering, integration recovery, retry and
 rebase behavior, audit absorption, and both Speckit formula contracts; the
