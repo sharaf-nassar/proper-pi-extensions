@@ -15,7 +15,7 @@ The runtime is intentionally small and local to pi.
 - `llm-router.ts` contains configuration, model selection, judge calls, quota probes, swaps, pi event handlers, notices, configuration UI, and the capability-gated `ultra` compatibility patch for Pi 0.84.2.
 - `exemplars.jsonl` contains measured verifier outcomes used as optional few-shot evidence.
 - `test/` contains offline routing and compatibility fixtures, including direct-provider operation without CPA; `smoke.ts` contains deterministic checks followed by one legacy live judge and CPA route.
-- `package.json` names the public npm package, registers `llm-router.ts`, limits published files, and keeps release-time validation offline; `package-lock.json` pins diagnostic-only Node and Pi types.
+- `package.json` names the public npm package, registers `llm-router.ts`, limits published files, declares the coding-agent and TUI host APIs as peers, and keeps release-time validation offline; `package-lock.json` pins their development copies plus Node and TypeScript diagnostics.
 - Runtime, corpus, tests, package metadata, README, and package-specific agent guidance are co-located under `proper-llm-router/`; architecture documentation stays under root `lat.md/proper-llm-router/` so repository hooks validate every extension together.
 - The judge may use Pi's configured provider runtime or an OpenAI-compatible endpoint. Execution models come from Pi's authenticated registry. CPA is optional and adds live catalog and account-quota checks for its own targets. There is no build step or project-local service.
 

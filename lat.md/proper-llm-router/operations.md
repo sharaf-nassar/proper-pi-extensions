@@ -6,13 +6,13 @@ Operating llm-router requires Pi registration, a placeholder provider, authentic
 
 The repository directory and public npm package are both named `proper-llm-router`.
 
-Install the published package with `pi install npm:proper-llm-router`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-llm-router`. The manifest registers `llm-router.ts`, limits the tarball to runtime source, the exemplar corpus, user documentation, and required license notices, and declares Pi's coding-agent API as a host-supplied peer.
+Install the published package with `pi install npm:proper-llm-router`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-llm-router`. The manifest registers `llm-router.ts`, limits the tarball to runtime source, the exemplar corpus, user documentation, and required license notices, and declares Pi's coding-agent and TUI APIs as host-supplied peers.
 
 Remove any former direct `extensions` entry for `llm-router.ts` so only one package source loads. The extension factory self-registers provider `llm-router` with model `auto` through `pi.registerProvider()`, including a dead port-1 base URL and dummy key, so installation needs no `~/.pi/agent/models.json` edit. Hosts without `registerProvider` fall back to a manual `models.json` placeholder entry with dummy authentication; an existing manual entry composes with the registration and stays harmless.
 
 The model IDs named in [[models]], the configured fallback, and active override targets must resolve among Pi's authenticated models. Values may use unqualified IDs or explicit `provider/model-id`; CPA remains the preferred provider for duplicate unqualified IDs.
 
-There is no build step. Pi loads the TypeScript source directly, while Node uses experimental type stripping for tests. `package.json` and `package-lock.json` pin TypeScript, Node, and Pi declarations for strict no-emit diagnostics. Package `prepack` runs offline unit tests and type checking; standalone live smoke still uses external CPA contracts.
+There is no build step. Pi loads the TypeScript source directly, while Node uses experimental type stripping for tests. `package.json` and `package-lock.json` pin TypeScript, Node declarations, and development copies of the Pi coding-agent and TUI host packages for strict no-emit diagnostics. Both Pi packages remain peer dependencies at runtime so the host supplies one compatible instance. Package `prepack` runs offline unit tests and type checking; standalone live smoke still uses external CPA contracts.
 
 Releases run from the repository root with `./tools/release-me/release.sh bump <major|minor|patch> proper-llm-router`. The script commits the manifest version and creates `proper-llm-router-vMAJOR.MINOR.PATCH`; [[lat#Package releases]] verifies and publishes that exact tarball through npm trusted publishing after the maintainer-authenticated initial release establishes the package.
 
