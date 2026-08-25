@@ -1,0 +1,57 @@
+{
+  "name": "proper-pacify",
+  "version": "0.0.0",
+  "description": "Optimize the tone of Pi prompts without changing their content",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "pi-coding-agent",
+    "prompt",
+    "tone"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sharaf-nassar/proper-pi-extensions.git",
+    "directory": "proper-pacify"
+  },
+  "homepage": "https://github.com/sharaf-nassar/proper-pi-extensions/tree/main/proper-pacify#readme",
+  "bugs": {
+    "url": "https://github.com/sharaf-nassar/proper-pi-extensions/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "module",
+  "files": [
+    "pacify.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "npm test && npm run typecheck",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "test:coverage": "node --experimental-strip-types --experimental-test-coverage --test --test-coverage-lines=75 --test-coverage-branches=70 --test-coverage-functions=75 test/*.test.ts",
+    "typecheck": "tsc"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@earendil-works/pi-tui": "0.84.2",
+    "@types/node": "25.9.5",
+    "typescript": "6.0.2"
+  },
+  "pi": {
+    "extensions": [
+      "./pacify.ts"
+    ]
+  }
+}

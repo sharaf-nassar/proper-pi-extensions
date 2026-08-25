@@ -3,7 +3,12 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 const root = new URL("../", import.meta.url);
-const packages = ["proper-base", "proper-flow", "proper-llm-router"];
+const packages = [
+	"proper-base",
+	"proper-flow",
+	"proper-llm-router",
+	"proper-pacify",
+];
 
 test("npm release config matches publishable packages", async () => {
 	const config = JSON.parse(
@@ -27,6 +32,15 @@ test("npm release config matches publishable packages", async () => {
 		assert.ok(manifest.files?.length > 0);
 		assert.ok(manifest.scripts?.prepack);
 	}
+});
+
+test("pacify ships runtime source without its test or config scaffolding", async () => {
+	const manifest = JSON.parse(
+		await readFile(new URL("proper-pacify/package.json", root), "utf8"),
+	);
+	assert.deepEqual(manifest.files, ["pacify.ts", "README.md", "LICENSE"]);
+	assert.deepEqual(manifest.pi.extensions, ["./pacify.ts"]);
+	assert.equal(manifest.scripts.prepack, "npm test && npm run typecheck");
 });
 
 // @lat: [[proper-llm-router/tests#Strict validation]]
@@ -56,7 +70,11 @@ test("npm release workflow separates verification from OIDC publishing", async (
 	for (const name of packages) {
 		assert.match(workflow, new RegExp(`- "${name}-v\\*"`));
 	}
-	assert.match(workflow, /\^\(proper-base\|proper-flow\|proper-llm-router\)-v/);
+	assert.match(
+		workflow,
+		new RegExp(`\\^\\(${packages.join("\\|")}\\)-v`),
+		"the tag regex must accept exactly the configured packages",
+	);
 	assert.match(workflow, /^permissions: \{\}$/m);
 	assert.match(workflow, /^ {2}verify:\n[\s\S]*?^ {2}publish:/m);
 	assert.match(workflow, /^ {2}publish:\n[\s\S]*?id-token: write/m);

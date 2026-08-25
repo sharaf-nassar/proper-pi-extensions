@@ -22,7 +22,7 @@ auth files, private endpoints, or machine-specific paths from another user.
 
 Install:
 
-- `proper-base` and `proper-llm-router` from npm — always.
+- `proper-base`, `proper-llm-router`, and `proper-pacify` from npm — always.
 - `proper-flow` from npm, plus its repository-linked Beads resources — only
   when the `bd` CLI is installed locally (`command -v bd` succeeds).
 - The other public Pi packages listed below.
@@ -101,6 +101,7 @@ These were verified as public npm Pi packages. Install unpinned sources so
 | `pi-context-view` | Adds context usage and hidden-injection inspection. |
 | `proper-base` | Adds this repository's baseline transcript, editor, history, image, cancellation, title, and footer behavior. |
 | `proper-llm-router` | Routes each session's first task to a configured model and applies quota-aware swaps. |
+| `proper-pacify` | Rewrites prompt tone to be clear, direct, and neutral-professional without changing prompt content. |
 | `proper-flow` | Adds this repository's `/triage`, `/file`, `/spec`, `/refine`, and `/implement-ready` prompts. All five run `bd`; install only when `bd` exists. |
 
 ```bash
@@ -117,6 +118,7 @@ packages=(
   'npm:pi-context-view'
   'npm:proper-base'
   'npm:proper-llm-router'
+  'npm:proper-pacify'
 )
 
 for package in "${packages[@]}"; do
@@ -144,14 +146,16 @@ if command -v bd >/dev/null 2>&1; then
 fi
 ```
 
-For extension development, local installs may replace the three npm packages:
+For extension development, local installs may replace the four npm packages:
 
 ```bash
 pi remove npm:proper-base
 pi remove npm:proper-llm-router
+pi remove npm:proper-pacify
 pi remove npm:proper-flow
 pi install "$REPO_ROOT/proper-base"
 pi install "$REPO_ROOT/proper-llm-router"
+pi install "$REPO_ROOT/proper-pacify"
 pi install "$REPO_ROOT/proper-flow"
 ```
 

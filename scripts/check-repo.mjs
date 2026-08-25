@@ -3,8 +3,13 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const PACKAGES = ["proper-base", "proper-flow", "proper-llm-router"];
-const LOCKED_PACKAGES = ["proper-base", "proper-llm-router"];
+const PACKAGES = [
+	"proper-base",
+	"proper-flow",
+	"proper-llm-router",
+	"proper-pacify",
+];
+const LOCKED_PACKAGES = ["proper-base", "proper-llm-router", "proper-pacify"];
 
 function run(command, args, cwd = ".") {
 	console.log(
@@ -37,6 +42,7 @@ function fast(coverage = false) {
 		["run", coverage ? "test:coverage" : "test:unit"],
 		"proper-llm-router",
 	);
+	run("npm", ["run", coverage ? "test:coverage" : "test"], "proper-pacify");
 	for (const cwd of LOCKED_PACKAGES) run("npm", ["run", "typecheck"], cwd);
 	for (const cwd of LOCKED_PACKAGES) {
 		run("npm", ["ci", "--ignore-scripts", "--dry-run", "--offline"], cwd);

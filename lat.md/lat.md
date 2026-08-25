@@ -12,11 +12,13 @@ Current packages:
 
 - [proper-llm-router](../proper-llm-router/) — npm package `proper-llm-router`, routing each session's first task to an appropriate model.
 - [proper-base](../proper-base/) — npm package `proper-base`, providing baseline history, prompt editing, cancellation, fullscreen navigation, image previews, and footer layout.
+- [proper-pacify](../proper-pacify/) — npm package `proper-pacify`, rewriting prompt tone while preserving content and logging both forms.
 - [proper-flow](../proper-flow/) — npm package `proper-flow`, containing triage, bug investigation, specification, and implementation workflow prompts plus the Beads formulas and implementation rail they drive.
 
 <!-- lat-index
 - [[proper-llm-router]] — repository index entry
 - [[proper-base]] — repository index entry
+- [[proper-pacify]] — repository index entry
 - [[proper-flow]] — repository index entry
 -->
 
@@ -24,7 +26,7 @@ Current packages:
 
 Published installs use npm package names; local installs point at package directories. The repository root is not installable, and each package remains independently enabled and updated.
 
-The npm manifests use the `pi-package` keyword, explicit `pi.extensions` or `pi.prompts` resources, public-registry publish settings, package file allowlists, and monorepo repository metadata. A `prepack` gate validates each package before npm creates a tarball.
+Every package manifest uses the `pi-package` keyword, explicit `pi.extensions` or `pi.prompts` resources, public-registry publish settings, a file allowlist, and monorepo repository metadata. A `prepack` gate validates each package before npm creates a tarball.
 
 A package install replaces any legacy direct-file registration for the same extension. Keeping both entries can load the extension twice; keeping only the stale path can make Pi fail during startup after a move.
 
@@ -50,7 +52,7 @@ The repository regression test discovers every `pi.extensions` manifest entry, f
 
 Package releases use package-scoped tags and npm trusted publishing without stored registry tokens.
 
-`.release-me.json` selects npm mode, requires releases from `main`, and maps `proper-base`, `proper-llm-router`, and `proper-flow` to their tracked manifests. The shared `tools/release-me/release.sh` requires a package argument only in this mode, derives the version from that manifest, and scopes release notes to the package directory.
+`.release-me.json` selects npm mode, requires releases from `main`, and maps `proper-base`, `proper-llm-router`, `proper-pacify`, and `proper-flow` to their tracked manifests. The shared `tools/release-me/release.sh` requires a configured package argument, derives the version from that manifest, and scopes release notes to the package directory.
 
 A package bump updates only its `package.json`, validates `npm pack`, creates a conventional release commit and annotated `<package>-vMAJOR.MINOR.PATCH` tag, then atomically pushes `main` and the tag. Dry runs change no files or refs. Retagging is disabled because npm versions are immutable.
 
@@ -58,7 +60,7 @@ A package bump updates only its `package.json`, validates `npm pack`, creates a 
 
 The protected publish job downloads and verifies that exact artifact, holds only read plus `id-token: write` permissions, and publishes through npm's GitHub Actions trusted publisher. A separate `contents: write` job creates an idempotent GitHub Release from the tag annotation. Action dependencies are pinned to full commit SHAs.
 
-All three npm packages must trust the `publish-npm.yml` workflow in `sharaf-nassar/proper-pi-extensions` with environment `npm-release`. A brand-new package receives one maintainer-authenticated initial publish because npm cannot configure trust before the package exists; later releases use the protected trusted path. The GitHub environment has no required reviewer or wait timer, and its custom deployment policies allow only the three package tag prefixes. Repository tag rules supply the maintainer-only tag boundary; the release maintainer also needs ruleset bypass for the atomic `main` version-commit push. npm token publishing is disabled after the trusted path is proven.
+All four npm packages must trust the `publish-npm.yml` workflow in `sharaf-nassar/proper-pi-extensions` with environment `npm-release`. A brand-new package receives one maintainer-authenticated initial publish because npm cannot configure trust before the package exists; `proper-pacify` still needs that first publish. The GitHub environment has no required reviewer or wait timer, and its custom deployment policies allow only the four package tag prefixes. Repository tag rules supply the maintainer-only tag boundary; the release maintainer also needs ruleset bypass for the atomic `main` version-commit push. npm token publishing is disabled after the trusted path is proven.
 
 ## Repository validation
 
@@ -66,7 +68,7 @@ Shared repository hooks run pinned format, lint, secret, package, test, type, do
 
 Git uses `.beads/hooks` through `core.hooksPath`. The Beads-managed `pre-commit` and `pre-push` shims chain into `.pre-commit-config.yaml`; commit checks run deterministic local validation, while push checks select coverage runs instead of repeating unit suites, then add the live router smoke, npm audits and signature verification, and OSV dependency scanning.
 
-Biome enforces formatting, recommended lint rules, JSON syntax and duplicate-key checks, explicit-any rejection in runtime source, and focused or skipped test rejection. Both TypeScript packages enable strict diagnostics, unchecked-index checks, exact optional properties, unused checks, and no-emit compilation. Markdown, shell, YAML, TOML, spelling, file hygiene, package-lock consistency, package contents, and lat.md links are also checked.
+Biome enforces formatting, recommended lint rules, JSON syntax and duplicate-key checks, explicit-any rejection in runtime source, and focused or skipped test rejection. The three TypeScript packages enable strict diagnostics, unchecked-index checks, exact optional properties, unused checks, and no-emit compilation. Markdown, shell, YAML, TOML, spelling, file hygiene, package-lock consistency, package contents, and lat.md links are also checked.
 
 `scripts/policy-guard.mjs` rejects staged edits to hook, validation, and npm release policy, deleted tests, and new suppression directives unless a human deliberately sets `ALLOW_POLICY_CHANGES=1`. Package manifests are not guarded — `package.json` edits pass while package locks, `.release-me.json`, and GitHub workflow files stay protected — and lock consistency is separately enforced by the package-lock hook. The `prepare-commit-msg` shim runs the committed guard when possible so a staged guard cannot approve itself.
 

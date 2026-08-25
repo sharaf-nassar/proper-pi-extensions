@@ -4,6 +4,7 @@
   "packages": {
     "proper-base": "proper-base/package.json",
     "proper-flow": "proper-flow/package.json",
-    "proper-llm-router": "proper-llm-router/package.json"
+    "proper-llm-router": "proper-llm-router/package.json",
+    "proper-pacify": "proper-pacify/package.json"
   }
 }

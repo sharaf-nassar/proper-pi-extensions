@@ -1,10 +1,10 @@
 # proper-pi-extensions — repo guide for agents
 
 Independently installable local Pi packages: `proper-base/` (TS extension),
-`proper-llm-router/` (TS routing extension + exemplar corpus), and
-`proper-flow/` (workflow prompts + Beads formulas + implementation rail).
-Root is NOT an npm package/workspace — use
-`npm --prefix <pkg>` or cd into each package.
+`proper-llm-router/` (TS routing extension + exemplar corpus),
+`proper-pacify/` (TS tone-rewriting extension), and `proper-flow/`
+(workflow prompts + Beads formulas + implementation rail). Root is NOT an npm
+package/workspace — use `npm --prefix <pkg>` or cd into each package.
 
 ## Ground rules
 
@@ -25,6 +25,7 @@ Fresh checkout setup (repo root):
 ```bash
 npm --prefix proper-base install
 npm --prefix proper-llm-router install
+npm --prefix proper-pacify install
 git config core.hooksPath .beads/hooks
 pre-commit install-hooks
 ```
@@ -46,11 +47,13 @@ smoke. No build step exists anywhere.
 Package releases use `.release-me.json` and package-scoped tags. Run
 `./tools/release-me/release.sh bump <part> <package>` from the repo root. The
 GitHub release workflow verifies and packs without OIDC, then publishes the
-exact artifact from a protected `npm-release` environment.
+exact artifact from a protected `npm-release` environment. `proper-pacify` has
+no published version yet, so its first release needs one maintainer-
+authenticated publish before npm can trust the workflow.
 
 - Router live smoke (`npm run test:smoke` in proper-llm-router/) needs a
   reachable judge/CPA at `http://127.0.0.1:8317` and
-  `ANTHROPIC_AUTH_TOKEN`; unit tests and typechecks are offline.
+  `ANTHROPIC_AUTH_TOKEN`; unit tests and all package typechecks are offline.
 
 ## Gotchas
 

@@ -15,6 +15,7 @@ credentials or private integrations.
 | --- | --- | --- |
 | [proper-base](./proper-base/README.md) | Pi extension | Improves transcripts, session titles, `/clear`, prompt history and search, editor keys, autocomplete, fullscreen navigation, image handling, cancellation, and footer layout. |
 | [proper-llm-router](./proper-llm-router/README.md) | Pi extension | Routes each session's first task to one of seven model tiers, then handles command pins, per-task overrides, quota swaps, fallbacks, and `ultra` thinking support. |
+| [proper-pacify](./proper-pacify/README.md) | Pi extension | Adds `/pacify`, `/pacify-session`, and `/pacify-config` for tone-only prompt rewriting, automatic prompt interception, and before/after session entries. |
 | [proper-flow](./proper-flow/README.md) | Pi prompt package | Adds `/triage`, `/file`, `/spec`, `/refine`, and `/implement-ready` for filing, planning, refining, and implementing Beads work, and ships the `constitution` and `speckit` formulas plus the worktree, retry, integration, and audit rail behind them. |
 
 `proper-base` and `proper-llm-router` work independently. `proper-flow`
@@ -31,6 +32,7 @@ Published packages:
 ```bash
 pi install npm:proper-base
 pi install npm:proper-llm-router
+pi install npm:proper-pacify
 pi install npm:proper-flow
 ```
 
@@ -46,8 +48,12 @@ Local checkout:
 ```bash
 pi install ./proper-base
 pi install ./proper-llm-router
+pi install ./proper-pacify
 pi install ./proper-flow
 ```
+
+Install order does not matter for `proper-pacify`; it pacifies prompts above
+Pi's extension handler chain.
 
 Pi supplies the extensions' core peer packages, and no package has runtime
 npm dependencies, so local installs need no `npm install`; it only prepares
@@ -62,6 +68,7 @@ shared script from the repository root with the package name:
 ```bash
 ./tools/release-me/release.sh bump patch proper-base
 ./tools/release-me/release.sh bump patch proper-llm-router
+./tools/release-me/release.sh bump minor proper-pacify
 ./tools/release-me/release.sh bump minor proper-flow
 ./tools/release-me/release.sh bump --dry-run patch proper-base
 ./tools/release-me/release.sh latest proper-flow
@@ -74,8 +81,10 @@ verifies and packs without OIDC permissions, publishes the exact tarball through
 npm trusted publishing, then creates a GitHub Release from the tag annotation.
 A brand-new package needs one maintainer-authenticated initial publish before
 npm allows trusted-publisher configuration; later versions use only this flow.
+`proper-pacify` has never been published, so its first release needs that
+manual publish before the trusted path applies.
 
-Configure all three npm packages with the same trusted publisher:
+Configure all four npm packages with the same trusted publisher:
 
 - GitHub repository: `sharaf-nassar/proper-pi-extensions`
 - Workflow: `publish-npm.yml`
@@ -84,8 +93,8 @@ Configure all three npm packages with the same trusted publisher:
 
 Keep the GitHub `npm-release` environment free of required reviewers and wait
 timers so releases stay automatic. Restrict its deployment policies to
-`proper-base-v*`, `proper-llm-router-v*`, and `proper-flow-v*` tags, and restrict
-tag creation or deletion to maintainers. Main-branch rules must allow the
+`proper-base-v*`, `proper-llm-router-v*`, `proper-pacify-v*`, and
+`proper-flow-v*` tags, and restrict tag creation or deletion to maintainers. Main-branch rules must allow the
 release maintainer to bypass a PR-only rule for the script's atomic
 version-commit plus tag push. After the first trusted release succeeds, set each
 npm package to disallow token publishing.
@@ -106,6 +115,7 @@ Initialize a fresh checkout once:
 ```bash
 npm --prefix proper-base install
 npm --prefix proper-llm-router install
+npm --prefix proper-pacify install
 
 git config core.hooksPath .beads/hooks
 pre-commit install-hooks

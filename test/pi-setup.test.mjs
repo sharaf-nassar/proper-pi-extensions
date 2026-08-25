@@ -16,6 +16,7 @@ const publicPackages = [
 	"pi-context-view",
 	"proper-base",
 	"proper-flow",
+	"proper-pacify",
 ];
 
 test("complete Pi setup covers public packages and explicit exclusions", async () => {

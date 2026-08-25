@@ -20,7 +20,7 @@ Releases run from the repository root with `./tools/release-me/release.sh bump <
 
 Repository-local agent configuration keeps task context and lat.md workflow consistent across supported clients.
 
-The repository root owns shared agent instructions, hooks, Beads state, and the cross-package `lat.md/` tree. This package has its own `CLAUDE.md`, with `AGENTS.md` symlinked to it, so extension guidance stays local without drifting between clients.
+The repository root owns shared agent instructions, hooks, Beads state, and the cross-package `lat.md/` tree. This package has its own `AGENTS.md`, with `CLAUDE.md` symlinked to it, so extension guidance stays local without drifting between clients.
 
 `.claude/settings.json` runs `bd prime --hook-json` on session start. It also invokes `lat hook claude UserPromptSubmit` before prompts and `lat hook claude Stop` when a Claude session stops.
 
