@@ -421,6 +421,39 @@ test("settled transcript keeps thoughts and updates visible", () => {
 	const recollapsed = chat.render(100).map(stripTerminalSequences).join("\n");
 	assert.doesNotMatch(recollapsed, /tool output| collapse /);
 
+	// A wheel scroll advances scrollTop before the throttled repaint lands, so
+	// the mapped content row names a row the click never landed on.
+	const stale = chat.render(100);
+	const staleRow = stale.findIndex((line) =>
+		stripTerminalSequences(line).startsWith("› tool · mcp · firecrawl_search"),
+	);
+	assert.ok(staleRow >= 0);
+	const paintedTop = Math.max(0, staleRow - 2);
+	tui.previousScreen = stale.slice(paintedTop, paintedTop + 24);
+	viewportTop = paintedTop + 3;
+	const staleClick = `\x1b[<0;1;${staleRow - paintedTop + 1}M`;
+	for (const listener of listeners) {
+		if ((listener(staleClick) as { consume?: boolean } | undefined)?.consume) {
+			break;
+		}
+	}
+	viewportTop = paintedTop;
+	const afterStale = chat.render(100);
+	assert.match(
+		afterStale.map(stripTerminalSequences).join("\n"),
+		/^⌄ tool · mcp · firecrawl_search/m,
+	);
+	tui.previousScreen = afterStale.slice(paintedTop, paintedTop + 24);
+	for (const listener of listeners) {
+		if ((listener(staleClick) as { consume?: boolean } | undefined)?.consume) {
+			break;
+		}
+	}
+	assert.doesNotMatch(
+		chat.render(100).map(stripTerminalSequences).join("\n"),
+		/tool output| collapse /,
+	);
+
 	idle = false;
 	controller.start();
 	chat.addChild(new Spacer(1));

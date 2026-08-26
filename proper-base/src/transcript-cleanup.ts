@@ -524,10 +524,10 @@ function handleClick(
 	const row = Number.parseInt(match[3] ?? "", 10) - 1;
 	const point = contentPoint(state.tui, column, row);
 	if (!point) return undefined;
-	const hit = state.hits.get(point.row);
-	if (!hit || point.col < 0 || point.col >= hit.end) return undefined;
 	const screenLine = screenLines(state.tui)[row];
-	if (!screenLine || !sameHitText(screenLine, hit)) return undefined;
+	if (!screenLine) return undefined;
+	const hit = findHit(state, point.row, screenLine);
+	if (!hit || point.col < 0 || point.col >= hit.end) return undefined;
 	if (match[4] === "M") {
 		state.expanded.set(
 			hit.owner,
@@ -536,6 +536,28 @@ function handleClick(
 		state.tui.requestRender();
 	}
 	return { consume: true };
+}
+
+/**
+ * A wheel or keyboard scroll moves `scrollTop` immediately while the repaint
+ * is throttled, so the mapped content row can name a different item than the
+ * frame the click landed on. Fall back to the painted screen text whenever it
+ * identifies exactly one control.
+ */
+function findHit(
+	state: State,
+	contentRow: number,
+	screenLine: string,
+): DetailHit | undefined {
+	const direct = state.hits.get(contentRow);
+	if (direct && sameHitText(screenLine, direct)) return direct;
+	let match: DetailHit | undefined;
+	for (const hit of state.hits.values()) {
+		if (!sameHitText(screenLine, hit)) continue;
+		if (match) return undefined;
+		match = hit;
+	}
+	return match;
 }
 
 function contentPoint(
