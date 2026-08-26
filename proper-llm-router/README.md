@@ -35,11 +35,9 @@ are normal task text unless pinned.
   evidence when TF-IDF similarity is useful.
 - Judge model overrides can replace the model occupying a slot without changing
   that slot's calibrated use cases.
-- A provider-qualified judge model uses Pi's configured provider runtime. When
-  CPA is absent, an unqualified model also uses Pi when it resolves uniquely.
-  The registry path forces one strict `route_model` tool call.
-- Otherwise the router uses `<judge.baseUrl>/chat/completions` with strict JSON
-  Schema, preserving existing compatible endpoint configurations.
+- The judge model must resolve through Pi's authenticated model registry.
+  Qualified and unqualified IDs both use Pi's provider runtime, credentials,
+  endpoint, serialization, and one strict `route_model` tool call.
 - The judge makes at most two 60-second attempts. Pressing Esc cancels judging,
   discards the prompt, and leaves routing armed.
 - Later turns make no judge call.
@@ -68,11 +66,12 @@ model IDs prefer `cliproxyapi` for backward compatibility, then the direct
 provider for that model family. Use `provider/model-id` in overrides or
 `fallbackModel` when the same ID exists under several providers.
 
-CPA-backed targets also check CPA's `/v1/models` catalog while the judge runs.
-When `quotaMaxPct` and a CPA management key are configured, the router averages
-Claude or Codex account usage and treats CPA-backed slots at or above the
-threshold as down. Usage is cached for 60 seconds. Without an available
-`cliproxyapi` model, no CPA availability or quota request runs.
+The provider registry is the model-availability source. The CLIProxyAPI provider
+owns its `/v1/models` discovery, authentication, caching, and refresh. When
+`quotaMaxPct` and a separate CPA management key are configured, the router
+averages Claude or Codex account usage and treats CPA-backed slots at or above
+the threshold as down. Usage is cached for 60 seconds. Without an available
+`cliproxyapi` model, no CPA quota request runs.
 
 A down slot swaps once to a fixed partner:
 
@@ -208,10 +207,9 @@ must resolve to authenticated models in Pi's registry. They may come from
 built-in providers, `models.json`, or extension-registered providers. Exact
 `provider/model-id` values remove ambiguity.
 
-CPA remains backward compatible. When authenticated `cliproxyapi` models are
-available, unqualified IDs prefer them and CPA availability and quota checks
-apply. Provide its key through the variable configured by `cpaKeyEnv`,
-`ANTHROPIC_AUTH_TOKEN` by default.
+When authenticated `cliproxyapi` models are available, unqualified IDs prefer
+them and optional CPA quota checks apply. The router never reads or stores the
+provider API key; `/login CLIProxyAPI` and Pi's model registry own model auth.
 
 A direct-provider setup can keep the defaults when the same model IDs are
 available, or qualify ambiguous choices:
@@ -239,14 +237,11 @@ after the corpus has loaded, and quota data may remain cached for 60 seconds.
 
 | Field | Default | Behavior |
 | --- | --- | --- |
-| `judge.baseUrl` | `http://127.0.0.1:8317/v1` | OpenAI-compatible judge API base. |
-| `judge.apiKeyEnv` | `ANTHROPIC_AUTH_TOKEN` | Environment variable containing the judge key. |
-| `judge.model` | `gpt-5.6-terra` | Judge model ID or `provider/model-id`. A registry-resolved model uses Pi's provider runtime; otherwise the configured HTTP endpoint is used. |
+| `judge.model` | `gpt-5.6-terra` | Authenticated Pi model ID or `provider/model-id` used for the judge. |
 | `judge.effort` | `medium` | Judge `reasoning_effort`; `null` omits it. |
 | `judge.fast` | `false` | Sends `service_tier: "priority"` when enabled. |
 | `fallbackModel` | `gpt-5.6-terra` | Model ID or `provider/model-id` used after judged failure and for bare commands. |
-| `cpaBase` | `http://127.0.0.1:8317` | CPA base for model and quota requests. |
-| `cpaKeyEnv` | `ANTHROPIC_AUTH_TOKEN` | Environment variable containing the CPA API key. |
+| `cpaBase` | `http://127.0.0.1:8317` | CPA base for optional quota-management requests. |
 | `exemplarsPath` | package `exemplars.jsonl` | Optional measured-outcome corpus. |
 | `quotaMaxPct` | `null` | Average lane usage threshold; `null` disables it. |
 | `cpaManagementKey` | empty | Plaintext management key, preferred over the environment. |
@@ -255,7 +250,8 @@ after the corpus has loaded, and quota data may remain cached for 60 seconds.
 | `commandPins` | five defaults above | Slash command to model and effort mapping. |
 
 `commandPins` and `judgeModelOverrides` replace their whole default maps when
-present. Invalid or unreadable JSON falls back to defaults. The loader does not
+present. Legacy `judge.baseUrl`, `judge.apiKeyEnv`, and `cpaKeyEnv` fields are
+ignored. Invalid or unreadable JSON falls back to defaults. The loader does not
 validate field types or URL shapes, so use `/llm-router-config` when possible.
 The full JSON editor writes a complete merged config.
 
@@ -278,7 +274,6 @@ npm run test:coverage
 npm run test:smoke -- ["task text"]
 ```
 
-Type checks and unit tests are offline. They include a no-CPA route through
-Pi provider models. The smoke command then runs one legacy live judge, CPA
-availability, quota, exemplar, and swap route because the standalone harness
-has no Pi model registry.
+Type checks, unit tests, and the smoke command are offline. They include direct
+and CPA-backed routes through injected Pi model snapshots, registry judge
+behavior, quota aggregation, exemplars, and swaps without owning provider auth.

@@ -31,29 +31,27 @@ A pin wins over a sentinel when both appear in one command. Because the pin path
 
 ## Judged route
 
-`route()` combines the measured rubric, optional exemplar note, judge verdict, and concurrent registry and optional CPA availability checks.
+`route()` combines the measured rubric, optional exemplar note, registry judge verdict, and concurrent registry plus optional CPA quota availability checks.
 
 The judge receives seven stable arm selection keys. Configured model overrides replace source-arm labels throughout the rubric and exemplar note, but the schema still returns the source key. After the verdict, `resolveVerdictModel()` keeps the slot, swaps it to a fixed partner, or throws when both choices are unavailable.
 
-The final slot maps to a resolved provider and model. The verdict exposes `arm`, `provider`, and `model`; an override records the source slot in `overridden_from`. `arms_unavailable` stays keyed by semantic slots and combines missing registry targets, CPA serving or quota failures, and simulation.
+The final slot maps to a resolved provider and model. The verdict exposes `arm`, `provider`, and `model`; an override records the source slot in `overridden_from`. `arms_unavailable` stays keyed by semantic slots and combines missing registry targets, CPA quota failures, and simulation.
 
 The measured latency covers both the judge request and the concurrent availability work because routing waits for both. Lazy exemplar loading and note construction happen before the timer and are excluded.
 
 ## Judge protocol
 
-The judge can run through Pi's configured provider runtime or an OpenAI-compatible chat-completions endpoint.
+The judge always runs through Pi's configured provider runtime.
 
-Both transports require `model` and `rationale`, reject extra fields, and limit `model` to the seven stable arm keys. Override targets appear only in system-message labels, paired with their selection keys. The task is truncated to 4,000 characters. Rationale permits 500 characters; UI displays 150.
+The strict `route_model` tool requires `model` and `rationale`, rejects extra fields, and limits `model` to the seven stable arm keys. Override targets appear only in system-message labels, paired with their selection keys. The task is truncated to 4,000 characters. Rationale permits 500 characters; UI displays 150.
 
-A provider-qualified judge model always uses `ctx.modelRegistry.complete()`. When CPA is absent, an unqualified judge model also uses Pi if it resolves among authenticated models. This path forces one strict `route_model` tool call and delegates auth, endpoint, and provider serialization to Pi.
+Qualified and unqualified judge names resolve against `ctx.modelRegistry.getAvailable()`. `ctx.modelRegistry.complete()` delegates credentials, endpoint selection, headers, provider serialization, and OAuth refresh to Pi. An unresolved judge fails visibly and the input handler uses `fallbackModel`; llm-router has no raw endpoint or provider-key fallback.
 
-Otherwise the router preserves the raw HTTP path at `<judge.baseUrl>/chat/completions` with strict `response_format` JSON Schema. This keeps existing CPA and compatible custom endpoint configurations working.
-
-The router maps configured effort and optional priority service to the selected judge transport. It makes at most two 60-second attempts. Missing or invalid structured output, provider errors, HTTP errors, and transport errors consume an attempt; user cancellation does not.
+The router maps configured effort and optional priority service to the registry request. Codex Responses APIs, including provider-specific IDs ending in `codex-responses`, receive required tool choice so the judge must call `route_model`. It makes at most two 60-second attempts. Missing or invalid tool output and provider errors consume an attempt; user cancellation does not.
 
 ## Direct routes
 
-Command pins and sentinels skip the judge and its model overrides but still resolve authenticated targets and consult optional CPA checks.
+Command pins and sentinels skip the judge and its model overrides but still resolve authenticated targets and consult the optional CPA quota gate.
 
 `commandPin()` runs only while the selected provider is `llm-router`. A pinned command on a later turn does not change models; reselect `llm-router/auto` first when the command must route a new session choice.
 
@@ -89,7 +87,7 @@ Pinned and forced picks do not retry; an unresolvable model reports an error and
 
 Pressing Esc during judging aborts the active request, consumes the terminal input, discards the prompt, and leaves the session on `llm-router/auto` for the next attempt.
 
-Cancellation depends on `ctx.ui.onTerminalInput`. On a pi build without it the handler subscribes to nothing and judging always runs to completion. Esc aborts only the judge request; the concurrent availability probe is not passed that signal and may continue until its own timeout.
+Cancellation depends on `ctx.ui.onTerminalInput`. On a pi build without it the handler subscribes to nothing and judging always runs to completion. Esc aborts only the judge request; a concurrent CPA quota probe is not passed that signal and may continue until its own timeout.
 
 Any other judged-path failure selects `fallbackModel` and shows an error notice. This includes judge failure, invalid structured output, and both a verdict arm and its swap target being unavailable. Fallback selection uses authenticated registry lookup only; it does not re-run CPA checks for the fallback.
 

@@ -130,8 +130,7 @@ pre-commit run --hook-stage pre-push --all-files
 
 The commit gate runs formatting, lint, secrets, spelling, Markdown, shell,
 package tests, strict TypeScript, package checks, and lat.md validation. The
-push gate adds coverage, audits, OSV, signatures, and the live router smoke.
-That smoke needs configured judge and CPA services plus credentials.
+push gate adds coverage, audits, OSV, signatures, and the offline router smoke.
 
 Validation policy changes require human review and a human-applied
 `ALLOW_POLICY_CHANGES=1`. Local hooks are guardrails, not a security boundary.

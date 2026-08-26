@@ -8,14 +8,11 @@ Missing files and missing keys use built-in defaults.
 
 | Field | Default | Contract |
 | --- | --- | --- |
-| `judge.baseUrl` | `http://127.0.0.1:8317/v1` | OpenAI-compatible judge API base |
-| `judge.apiKeyEnv` | `ANTHROPIC_AUTH_TOKEN` | environment variable holding the judge key |
-| `judge.model` | `gpt-5.6-terra` | judge model ID or `provider/model-id` |
+| `judge.model` | `gpt-5.6-terra` | authenticated Pi judge model ID or `provider/model-id` |
 | `judge.effort` | `medium` | optional `reasoning_effort`; `null` omits it |
 | `judge.fast` | `false` | `true` sends `service_tier: "priority"` on judge requests |
 | `fallbackModel` | `gpt-5.6-terra` | model ID or `provider/model-id` used after judged-path failure or for bare commands |
-| `cpaBase` | `http://127.0.0.1:8317` | CPA base for model and management requests |
-| `cpaKeyEnv` | `ANTHROPIC_AUTH_TOKEN` | environment variable holding the CPA API key |
+| `cpaBase` | `http://127.0.0.1:8317` | CPA base for optional management requests |
 | `exemplarsPath` | `<extension>/exemplars.jsonl` | measured-outcome corpus path |
 | `quotaMaxPct` | `null` | threshold gate; `null` disables it |
 | `cpaManagementKey` | empty | plaintext management key with priority over the environment |
@@ -27,7 +24,9 @@ The default exemplar path resolves beside the loaded `llm-router.ts`, so a packa
 
 ## Merge and error behavior
 
-`loadConfig()` shallow-merges top-level user fields over defaults and separately merges `judge` fields. Its optional path argument exists for isolated default-config checks; normal runtime calls use `~/.pi/agent/llm-router.json`.
+`loadConfig()` merges user settings over defaults while removing obsolete router-owned authentication fields.
+
+It shallow-merges top-level fields and separately merges `judge`. It drops legacy `cpaKeyEnv`, `judge.baseUrl`, and `judge.apiKeyEnv`. Its optional path argument supports isolated checks; normal runtime calls use `~/.pi/agent/llm-router.json`.
 
 Supplying `commandPins` or `judgeModelOverrides` replaces that entire top-level map; entries are not merged individually. Invalid JSON, read failure, or a non-readable file silently returns all defaults.
 
@@ -81,21 +80,21 @@ Pin edits affect the next armed routing decision. They do not repin a session th
 
 `/llm-router-config` opens a UI-only configuration loop when the current pi context has a UI.
 
-The menu has one `Judge` entry for model, effort, and fast settings, plus `Overrides`, pinned commands, JSON editing, and a live route test. Judge and override pickers use authenticated Pi models when CPA is absent. The fast setting requests priority service where supported.
+The menu has one `Judge` entry for model, effort, and fast settings, plus `Overrides`, pinned commands, JSON editing, and a live route test. Judge and override pickers always use authenticated Pi models. The fast setting requests priority service where supported.
 
 When an authenticated `cliproxyapi` model exists, the menu also shows quota thresholds and masked management-key entry. Without CPA, those actions, summary fields, and CPA-only fields in the JSON editor are omitted. Hidden stored CPA values are preserved.
 
 The menu summary reports current override and pin counts. The pin editor offers canonical arm keys and every session thinking level supported by the selected model, plus a choice that leaves the session default unchanged. `ultra` appears only when that model's `thinkingLevelMap.ultra` is a non-empty string.
 
-With CPA active, the judge model picker reads `<judge.baseUrl>/models` and preserves the existing endpoint workflow. Without CPA it shows authenticated Pi models as `provider/model-id`. Manual entry remains available in both modes.
+The judge model picker reads Pi's authenticated model snapshot and displays `provider/model-id` values. Manual entry remains available for exact registry names that are not in the first 80 displayed entries.
 
 ### Picker focus and navigation
 
 Every TUI picker opens on its checked current value; menus without one open on their first entry. Up from the first entry wraps to the last, and Down from the last wraps to the first. Non-TUI modes keep Pi's standard selector fallback.
 
-There is no dedicated fallback-model picker. Change `fallbackModel`, endpoint fields, environment-variable names, or `exemplarsPath` through the full JSON editor.
+There is no dedicated fallback-model picker. Change `fallbackModel`, optional CPA management settings, or `exemplarsPath` through the full JSON editor.
 
-`Test judge` calls the complete `route()` path. It uses the same authenticated model snapshot and judge transport as normal input, applies overrides and swaps, and consults CPA only for CPA-backed targets.
+`Test judge` calls the complete `route()` path. It uses the same authenticated model snapshot and registry judge transport as normal input, applies overrides and swaps, and consults CPA only when the optional quota gate is enabled for CPA-backed targets.
 
 ## Thinking levels
 

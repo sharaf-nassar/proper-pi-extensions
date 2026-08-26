@@ -1,6 +1,6 @@
 # Runtime operations
 
-Operating llm-router requires Pi registration, a placeholder provider, authenticated execution models, and a configured judge; CPA is optional.
+Operating llm-router requires Pi registration, a placeholder provider, and authenticated judge and execution models; CPA quota management is optional.
 
 ## Installation contract
 
@@ -12,7 +12,7 @@ Remove any former direct `extensions` entry for `llm-router.ts` so only one pack
 
 The model IDs named in [[models]], the configured fallback, and active override targets must resolve among Pi's authenticated models. Values may use unqualified IDs or explicit `provider/model-id`; CPA remains the preferred provider for duplicate unqualified IDs.
 
-There is no build step. Pi loads the TypeScript source directly, while Node uses experimental type stripping for tests. `package.json` and `package-lock.json` pin TypeScript, Node declarations, and development copies of the Pi coding-agent and TUI host packages for strict no-emit diagnostics. Both Pi packages remain peer dependencies at runtime so the host supplies one compatible instance. Package `prepack` runs offline unit tests and type checking; standalone live smoke still uses external CPA contracts.
+There is no build step. Pi loads the TypeScript source directly, while Node uses experimental type stripping for tests. `package.json` and `package-lock.json` pin TypeScript, Node declarations, and development copies of the Pi coding-agent and TUI host packages for strict no-emit diagnostics. Both Pi packages remain peer dependencies at runtime so the host supplies one compatible instance. Package `prepack`, unit tests, type checking, and the standalone smoke are offline.
 
 Releases run from the repository root with `./tools/release-me/release.sh bump <major|minor|patch> proper-llm-router`. The script commits the manifest version and creates `proper-llm-router-vMAJOR.MINOR.PATCH`; [[lat#Package releases]] verifies and publishes that exact tarball through npm trusted publishing after the maintainer-authenticated initial release establishes the package.
 
@@ -36,22 +36,20 @@ Three pi APIs degrade by feature detection. Without `onTerminalInput`, Esc canno
 
 ## Network endpoints
 
-The router has one judge contract plus optional CPA contracts.
+The router has one Pi judge contract plus optional CPA management contracts.
 
-- Pi's `modelRegistry.complete()` returns a strict `route_model` tool call when the judge resolves to an authenticated Pi model.
-- `<judge.baseUrl>/chat/completions` returns the strict JSON verdict for raw endpoint judging.
-- `<judge.baseUrl>/models` populates the judge model picker while CPA mode is active.
-- `<cpaBase>/v1/models` reports serving CPA model IDs when any routed target uses `cliproxyapi`.
-- `<cpaBase>/v0/management/auth-files` lists credentials for usage probes.
+- Pi's `modelRegistry.complete()` returns a strict `route_model` tool call for the authenticated judge model.
+- Pi's authenticated model snapshot supplies judge choices and execution targets; provider extensions own discovery, credentials, endpoints, and catalogue refresh policy. A provider may serve that snapshot from a cache, so it reflects configured authentication rather than live capacity.
+- `<cpaBase>/v0/management/auth-files` lists credentials for optional usage probes.
 - `<cpaBase>/v0/management/api-call` proxies upstream Claude and Codex usage requests.
 
-Execution switching always uses Pi's registry. Non-CPA targets make no CPA request. Provider-qualified judge models use Pi's provider runtime; raw OpenAI-compatible judge endpoints remain supported.
+Judging and execution switching always use Pi's registry. The router never reads or stores provider API keys. Non-CPA targets make no CPA management request.
 
 ## Transport and timeout behavior
 
-Network calls use bounded JSON requests and treat non-2xx responses as failures before parsing the body.
+Management network calls use bounded JSON requests and treat non-2xx responses as failures before parsing the body.
 
-Judge attempts have a 60-second timeout and may run twice. CPA requests use a 10-second timeout and are not retried. CPA catalog failure marks only CPA-backed targets unavailable, as defined by [[availability#Failure policy]].
+Judge attempts use Pi's provider runtime with a 60-second timeout and may run twice. CPA management requests use a 10-second timeout and are not retried. Their failure skips only the optional quota gate, as defined by [[availability#Failure policy]].
 
 ## Environment controls
 
@@ -59,8 +57,6 @@ Environment variables provide credentials and test controls.
 
 | Variable | Effect |
 | --- | --- |
-| variable named by `judge.apiKeyEnv` | bearer token for judge requests |
-| variable named by `cpaKeyEnv` | bearer token for CPA model listing |
 | variable named by `cpaManagementKeyEnv` | management-key fallback when the config value is empty |
 | `LLM_ROUTER_OFF=1` | stops startup from forcing `llm-router/auto` and omits sentinel help; explicit selection of `auto` can still route; pinned workflow commands gate through a confirm dialog in dialog-capable sessions |
 | `JUDGE_EXEMPLARS=0` | disables exemplar retrieval |
@@ -94,7 +90,7 @@ A successful verdict notice names the resolved `provider/model-id`. If that targ
 
 ## Sensitive data and prompt scope
 
-Raw judge and CPA credentials come from configured environment variables. Registry judge and execution credentials use Pi's provider runtime. A CPA management key entered through the UI is stored as plaintext JSON.
+Judge and execution credentials stay inside Pi's provider runtime and are never read by llm-router. A separate CPA management key entered through the UI is stored as plaintext JSON only for optional quota probes.
 
 The judge receives the first 4,000 characters of task text. Exemplar retrieval inspects the complete task locally and may add short excerpts from matching corpus prompts to the judge's system message. Image contents are not sent to the routing judge by this extension.
 
@@ -109,4 +105,4 @@ npm run test:smoke -- ["task text"]
 npm run test:coverage
 ```
 
-Unit fixtures and strict diagnostics are offline, including a direct-provider route with no CPA network access. The standalone smoke runs deterministic assertions before one legacy live route and still needs configured judge and CPA services because it has no Pi registry context. Coverage applies repository floors to unit tests.
+Unit fixtures, strict diagnostics, and the standalone smoke are offline. They inject authenticated model snapshots and judge runners where Pi would supply them, and they keep quota-management HTTP behind focused stubs. Coverage applies repository floors to unit tests.

@@ -66,7 +66,7 @@ All four npm packages must trust the `publish-npm.yml` workflow in `sharaf-nassa
 
 Shared repository hooks run pinned format, lint, secret, package, test, type, documentation, and dependency checks before changes leave a checkout.
 
-Git uses `.beads/hooks` through `core.hooksPath`. The Beads-managed `pre-commit` and `pre-push` shims chain into `.pre-commit-config.yaml`; commit checks run deterministic local validation, while push checks select coverage runs instead of repeating unit suites, then add the live router smoke, npm audits and signature verification, and OSV dependency scanning.
+Git uses `.beads/hooks` through `core.hooksPath`. The Beads-managed `pre-commit` and `pre-push` shims chain into `.pre-commit-config.yaml`; commit checks run deterministic local validation, while push checks select coverage runs instead of repeating unit suites, then add the offline router smoke, npm audits and signature verification, and OSV dependency scanning.
 
 Biome enforces formatting, recommended lint rules, JSON syntax and duplicate-key checks, explicit-any rejection in runtime source, and focused or skipped test rejection. The three TypeScript packages enable strict diagnostics, unchecked-index checks, exact optional properties, unused checks, and no-emit compilation. Markdown, shell, YAML, TOML, spelling, file hygiene, package-lock consistency, package contents, and lat.md links are also checked.
 

@@ -14,10 +14,10 @@ The runtime is intentionally small and local to pi.
 
 - `llm-router.ts` contains configuration, model selection, judge calls, quota probes, swaps, pi event handlers, notices, configuration UI, and the capability-gated `ultra` compatibility patch for Pi 0.84.2.
 - `exemplars.jsonl` contains measured verifier outcomes used as optional few-shot evidence.
-- `test/` contains offline routing and compatibility fixtures, including direct-provider operation without CPA; `smoke.ts` contains deterministic checks followed by one legacy live judge and CPA route.
+- `test/` contains offline routing and compatibility fixtures, including direct and CPA-backed Pi registry operation; `smoke.ts` contains deterministic checks followed by one injected offline route.
 - `package.json` names the public npm package, registers `llm-router.ts`, limits published files, declares the coding-agent and TUI host APIs as peers, and keeps release-time validation offline; `package-lock.json` pins their development copies plus Node and TypeScript diagnostics.
 - Runtime, corpus, tests, package metadata, README, and package-specific agent guidance are co-located under `proper-llm-router/`; architecture documentation stays under root `lat.md/proper-llm-router/` so repository hooks validate every extension together.
-- The judge may use Pi's configured provider runtime or an OpenAI-compatible endpoint. Execution models come from Pi's authenticated registry. CPA is optional and adds live catalog and account-quota checks for its own targets. There is no build step or project-local service.
+- Judge and execution models come only from Pi's authenticated registry, which owns provider auth, endpoints, serialization, and discovery. Registry availability means configured authentication, not live capacity. CPA is optional and adds account-quota checks for its own targets. There is no build step or project-local service.
 
 ## Core invariants
 
@@ -37,11 +37,11 @@ Each file owns one part of the contract to avoid turning this directory into a s
 
 - [models](./models.md) — model arm catalog, lane policy, tier rubric, deterministic names, and judge model overrides.
 - [routing](./routing.md) — session state, input precedence, direct pins, judging, cancellation, and fallback.
-- [availability](./availability.md) — Pi registry availability, optional CPA probes, account aggregation, swap rules, caching, and fail-open behavior.
+- [availability](./availability.md) — Pi registry availability, optional CPA quota probes, account aggregation, swap rules, caching, and fail-open behavior.
 - [configuration](./configuration.md) — JSON defaults, merge rules, commands, hot reload, and interactive editing.
 - [exemplars](./exemplars.md) — measured corpus format, retrieval, labels, statistics, and cache behavior.
 - [operations](./operations.md) — installation assumptions, repository agent tooling, environment controls, endpoints, notices, and sensitive data.
-- [tests](./tests.md) — smoke harness, deterministic assertions, live check, and known coverage gaps.
+- [tests](./tests.md) — smoke harness, deterministic assertions, offline integration checks, and known coverage gaps.
 
 <!-- lat-index
 - [[models]] — package index entry

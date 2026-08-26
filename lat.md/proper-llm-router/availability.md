@@ -1,10 +1,12 @@
 # Availability and quota
 
-Availability starts with Pi's authenticated model registry; CPA adds live serving and account-quota checks only for targets resolved under `cliproxyapi`.
+Availability comes from Pi's authenticated model registry; the opt-in CPA quota gate is the only exhaustion signal for targets resolved under `cliproxyapi`.
 
 ## Registry availability
 
 Every routed prompt reads `ctx.modelRegistry.getAvailable()`, excluding the `llm-router` placeholder provider.
+
+That call reports models with valid configured authentication, not live upstream capacity, and providers may serve it from a cached catalogue. Registry availability therefore answers "is this model configured and authenticated", never "does it have quota right now".
 
 A configured target may be a model ID or `provider/model-id`. Unqualified IDs prefer `cliproxyapi` for backward compatibility, then the direct provider for that model family. Exact IDs beat dated `-suffix` or `@suffix` variants. Provider-qualified values never fall across providers.
 
@@ -12,11 +14,11 @@ Judged routes resolve overrides for each semantic slot. Command pins and sentine
 
 ## CPA checks
 
-Targets resolved under `cliproxyapi` receive two additional checks; non-CPA targets do not call CPA.
+Targets resolved under `cliproxyapi` receive an optional quota check; non-CPA targets do not call CPA.
 
-`armAvailability()` requests `<cpaBase>/v1/models` once when at least one target is CPA-backed. A listed exact or dated model is serving. Failure of this request marks CPA targets unavailable while leaving authenticated non-CPA targets usable.
+`armAvailability()` treats a resolved registry target as available without a catalog request. CPA's `/v1/models` was never an exhaustion signal to begin with: its registry deliberately keeps a model listed while every account for it sits in quota cooldown, so a listing could not distinguish spare quota from an exhausted lane.
 
-When `quotaMaxPct` is set and a management key is available, CPA-backed targets also use the account aggregation below. The management key comes from `cpaManagementKey`, then from the environment variable named by `cpaManagementKeyEnv`.
+When `quotaMaxPct` is set and a management key is available, CPA-backed targets use the account aggregation below. Leaving `quotaMaxPct` at its `null` default means CPA arms are assumed available, no swap fires for an exhausted account, and exhaustion surfaces as a failed request on the routed model instead. The management key comes from `cpaManagementKey`, then from the environment variable named by `cpaManagementKeyEnv`.
 
 ## Usage collection
 
@@ -63,7 +65,7 @@ A judged route swaps semantic slots first, then resolves the override configured
 Availability should reduce avoidable failures, not create a new outage mode.
 
 - A missing authenticated registry target marks only that arm unavailable.
-- CPA `/v1/models` failure marks only CPA-backed targets unavailable.
+- An unreachable CPA leaves arms available; the judge and `fallbackModel` route through the same provider, so the request fails rather than swapping.
 - An account usage call returning upstream 429 counts as 100% usage.
 - Other failures of one account usage call drop that account.
 - Failure of all usage calls skips only the threshold gate.
@@ -80,4 +82,4 @@ The cache is global rather than keyed by CPA URL, management key, or threshold. 
 
 A failed or no-data usage probe is cached as `null` for the same interval. Fixing a management key or recovering CPA can therefore leave the gate visibly skipped until the entry expires.
 
-`CPA_SIMULATE_UNAVAILABLE` adds exact arm keys to the down set after normal checks. It is a deterministic test hook for swaps and fallback, not a substitute for the management quota gate.
+`CPA_SIMULATE_UNAVAILABLE` adds exact arm keys to the down set after registry and quota checks. It is a deterministic test hook for swaps and fallback, not a substitute for the management quota gate.

@@ -328,7 +328,6 @@ test("config UI hides CPA-only controls and JSON fields without CPA", async () =
 	const visible = JSON.parse(edited);
 	for (const key of [
 		"cpaBase",
-		"cpaKeyEnv",
 		"quotaMaxPct",
 		"cpaManagementKey",
 		"cpaManagementKeyEnv",

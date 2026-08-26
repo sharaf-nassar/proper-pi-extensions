@@ -41,7 +41,7 @@ Fast = biome-ci, gitleaks, typos, markdownlint, shellcheck, policy guard,
 then `node scripts/check-repo.mjs fast` (node --test suites in every
 package, tsc typechecks, npm pack dry-runs, exemplars JSON parse,
 `lat check`). Full swaps in coverage-thresholded tests and adds
-`npm audit`, `npm audit signatures`, osv-scanner, and the router live
+`npm audit`, `npm audit signatures`, osv-scanner, and the router
 smoke. No build step exists anywhere.
 
 Package releases use `.release-me.json` and package-scoped tags. Run
@@ -51,9 +51,9 @@ exact artifact from a protected `npm-release` environment. `proper-pacify` has
 no published version yet, so its first release needs one maintainer-
 authenticated publish before npm can trust the workflow.
 
-- Router live smoke (`npm run test:smoke` in proper-llm-router/) needs a
-  reachable judge/CPA at `http://127.0.0.1:8317` and
-  `ANTHROPIC_AUTH_TOKEN`; unit tests and all package typechecks are offline.
+- Router smoke (`npm run test:smoke` in proper-llm-router/) is offline and
+  credential-free; it injects the model snapshot and judge runner Pi would
+  supply. Unit tests and all package typechecks are offline too.
 
 ## Gotchas
 

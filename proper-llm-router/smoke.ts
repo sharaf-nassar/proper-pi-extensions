@@ -1,7 +1,6 @@
 /**
- * Live smoke test for the self-contained extension routing logic.
+ * Offline smoke test for the self-contained extension routing logic.
  * Run: node --experimental-strip-types smoke.ts ["task text"]
- * Needs the CPA key env var set (see ~/.pi/agent/llm-router.json).
  */
 import * as assert from "node:assert";
 import { fileURLToPath } from "node:url";
@@ -242,10 +241,28 @@ assert.deepStrictEqual(
 assert.ok((menus[0] ?? []).includes("Overrides"));
 assert.deepStrictEqual(menus[1] ?? [], ["Model", "Effort", "Fast"]);
 
-// live check: legacy standalone route against configured judge + CPA probe
+// integrated offline route: Pi supplies the authenticated model snapshot and
+// judge runner in production, so the smoke injects deterministic equivalents.
+// Uses defaults, not the user's config: a personal judgeModelOverrides entry
+// naming a model outside the injected snapshot would fail the route here.
 const task =
 	(globalThis as typeof globalThis & { process?: { argv: string[] } }).process
 		?.argv[2] ?? "fix typo in README.md: 'teh' -> 'the'";
-const v = await route(cfg, task);
+const models = [
+	"claude-haiku-4-5",
+	"claude-sonnet-5",
+	"claude-opus-5",
+	"claude-fable-5",
+	"gpt-5.6-luna",
+	"gpt-5.6-terra",
+	"gpt-5.6-sol",
+].map((id) => ({ provider: "cliproxyapi", id }));
+const v = await route(defaults, task, undefined, {
+	models,
+	judge: async () => ({
+		model: "claude-haiku-4-5",
+		rationale: "deterministic smoke verdict",
+	}),
+});
 assert.ok(v.provider && v.model && v.rationale, JSON.stringify(v));
 console.log(JSON.stringify(v, null, 2));

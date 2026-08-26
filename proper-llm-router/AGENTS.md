@@ -17,7 +17,8 @@ Beads (`bd`). Context loads via the SessionStart hook in
 ## Build & Test
 
 No build step — pi loads `llm-router.ts` through this package's `pi`
-manifest. Run strict type diagnostics, offline fixtures, and the live smoke:
+manifest. Run strict type diagnostics, offline fixtures, and the smoke
+(all three are offline and need no credentials):
 
 ```bash
 npm run typecheck

@@ -255,16 +255,15 @@ Ask for:
 - CLIProxyAPI base URL, normally `http://127.0.0.1:8317`.
 - Its API key, entered by the user in Pi's login UI.
 
-The router judge defaults to the environment variable
-`ANTHROPIC_AUTH_TOKEN`. The user must export the correct CPA key before starting
-Pi, or change the environment-variable name and endpoints through:
+The router reuses Pi's authenticated `cliproxyapi` models for judging and
+execution. It does not need a second API key or environment variable. Open:
 
 ```text
 /llm-router-config
 ```
 
-Run **Test judge** in that menu. Never put the real key in this repository,
-`models.json`, setup logs, or chat.
+Run **Test judge** in that menu. Never put the real provider key in this
+repository, `models.json`, setup logs, or chat.
 
 ## 7. Configure optional provider-backed tools
 

@@ -23,12 +23,11 @@
  * needed. /llm-router switches the session back to llm-router/auto so
  * the next prompt gets routed.
  * {
- *   "judge": { "baseUrl": "...", "apiKeyEnv": "...", "model": "...",
- *              "effort": "medium" | null,    // any OpenAI-compatible
+ *   "judge": { "model": "...",               // authenticated Pi model
+ *              "effort": "medium" | null,
  *              "fast": false },              // priority service tier
  *   "fallbackModel": "gpt-5.6-terra",         // id or provider/id
- *   "cpaBase": "http://127.0.0.1:8317",       // optional CPA availability probe
- *   "cpaKeyEnv": "ANTHROPIC_AUTH_TOKEN",
+ *   "cpaBase": "http://127.0.0.1:8317",       // optional quota management API
  *   "exemplarsPath": ".../exemplars.jsonl",   // optional few-shot corpus
  *   "quotaMaxPct": null,                      // gate: exclude arms >= this % used
  *   "cpaManagementKey": "",                   // plaintext; env fallback below
@@ -43,18 +42,16 @@
  *
  * Quota: the judge is NEVER menu-filtered — it always sees all 7 slots.
  * Availability is checked after the verdict (checks run concurrently
- * with the judge call). Pi's authenticated model registry covers every
- * provider. CPA-backed targets additionally use CPA's /v1/models listing
- * and, when quotaMaxPct plus a management key are configured, per-account
- * usage through CPA's management api-call passthrough (claude: oauth/usage
- * incl. per-model 7d; codex: wham/usage used_percent). An out-of-quota
- * pick swaps to its fixed cross-lane partner (fable<->sol,
- * opus<->terra, sonnet->luna, haiku<->luna); both sides dead falls back
- * to fallbackModel. Usage is cached 60s; usage failures skip the threshold
- * gate, while catalog failures mark only CPA targets unavailable.
- * Registry judges use one strict tool call; raw endpoints need strict
- * json_schema response_format support. Point judge.baseUrl at any compatible
- * provider; execution does not require CPA.
+ * with the judge call). An arm is down when its target is missing from
+ * Pi's authenticated model registry, which reports configured auth, not
+ * live upstream capacity. The only exhaustion signal is the opt-in gate:
+ * when quotaMaxPct plus a CPA management key are configured, CPA-backed
+ * targets also use per-account usage through CPA's management api-call
+ * passthrough (claude: oauth/usage incl. per-model 7d; codex: wham/usage
+ * used_percent). An out-of-quota pick swaps to its fixed cross-lane partner
+ * (fable<->sol, opus<->terra, sonnet->luna, haiku<->luna); both sides dead
+ * falls back to fallbackModel. Usage is cached 60s; usage failures skip the
+ * threshold gate. The judge always uses one strict Pi model-registry tool call.
  *
  * session_start forces fresh sessions back to llm-router/auto because pi
  * persists the last-set model as the default (LLM_ROUTER_OFF=1 disables).
@@ -89,8 +86,6 @@ const CONFIG_PATH = path.join(os.homedir(), ".pi/agent/llm-router.json");
 const EXTENSION_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 export interface JudgeConfig {
-	baseUrl: string;
-	apiKeyEnv: string;
 	model: string;
 	effort: string | null;
 	// request the provider's priority service tier when supported
@@ -244,7 +239,6 @@ export interface Config {
 	judge: JudgeConfig;
 	fallbackModel: string;
 	cpaBase: string;
-	cpaKeyEnv: string;
 	exemplarsPath: string;
 	// exclude arms whose accounts have used >= this % of quota (null = off);
 	// needs the CPA management key: cpaManagementKey, or exported under
@@ -262,15 +256,12 @@ export interface Config {
 
 const DEFAULTS: Config = {
 	judge: {
-		baseUrl: "http://127.0.0.1:8317/v1",
-		apiKeyEnv: "ANTHROPIC_AUTH_TOKEN",
 		model: "gpt-5.6-terra",
 		effort: "medium",
 		fast: false,
 	},
 	fallbackModel: "gpt-5.6-terra",
 	cpaBase: "http://127.0.0.1:8317",
-	cpaKeyEnv: "ANTHROPIC_AUTH_TOKEN",
 	exemplarsPath: path.join(EXTENSION_DIR, "exemplars.jsonl"),
 	quotaMaxPct: null,
 	cpaManagementKey: "",
@@ -289,14 +280,22 @@ function managementKey(cfg: Config): string {
 	return cfg.cpaManagementKey || process.env[cfg.cpaManagementKeyEnv] || "";
 }
 
+function mergeConfig(user: Record<string, unknown>): Config {
+	const top = { ...user };
+	delete top.cpaKeyEnv;
+	const judge = { ...((top.judge ?? {}) as Record<string, unknown>) };
+	delete judge.baseUrl;
+	delete judge.apiKeyEnv;
+	return {
+		...DEFAULTS,
+		...top,
+		judge: { ...DEFAULTS.judge, ...judge },
+	} as Config;
+}
+
 export function loadConfig(configPath = CONFIG_PATH): Config {
 	try {
-		const user = JSON.parse(fs.readFileSync(configPath, "utf8"));
-		return {
-			...DEFAULTS,
-			...user,
-			judge: { ...DEFAULTS.judge, ...(user.judge ?? {}) },
-		};
+		return mergeConfig(JSON.parse(fs.readFileSync(configPath, "utf8")));
 	} catch {
 		return DEFAULTS;
 	}
@@ -464,18 +463,6 @@ function armTargets(
 				? [[arm, { provider: target.provider, id: target.id }]]
 				: [];
 		}),
-	) as ArmTargets;
-}
-
-function legacyCpaTargets(cfg: Config, withOverrides: boolean): ArmTargets {
-	return Object.fromEntries(
-		(Object.keys(ARMS) as Arm[]).map((arm) => [
-			arm,
-			{
-				provider: CPA_PROVIDER,
-				id: withOverrides ? judgeModelName(cfg, arm) : ARMS[arm].model,
-			},
-		]),
 	) as ArmTargets;
 }
 
@@ -701,8 +688,10 @@ export function exemplarNote(cfg: Config, task: string): string {
 }
 
 // --------------------------------------------------------------- quota
-// Port of cpa_quota.py. CPA hides a model from /v1/models once no account
-// serves it, so listed == at least one account has quota.
+// CPA's /v1/models is deliberately NOT an availability signal: its registry
+// keeps a model listed while every account sits in quota cooldown
+// (modelRegistrationAvailability), so listed never implied spare quota.
+// Exhaustion is only visible through the management usage API below.
 async function fetchJson<T = unknown>(
 	url: string,
 	init: RequestInit = {},
@@ -933,27 +922,13 @@ export interface ArmStatus {
 
 export async function armAvailability(
 	cfg: Config,
-	targets: ArmTargets = legacyCpaTargets(cfg, false),
+	targets: ArmTargets,
 ): Promise<Record<string, ArmStatus>> {
-	const cpaTargets = Object.values(targets).filter(
-		(target): target is ModelTarget => target?.provider === CPA_PROVIDER,
+	const hasCpaTarget = Object.values(targets).some(
+		(target) => target?.provider === CPA_PROVIDER,
 	);
-	let listed = new Set<string>();
-	if (cpaTargets.length && cfg.cpaBase) {
-		try {
-			const key = process.env[cfg.cpaKeyEnv] ?? "";
-			const models = await fetchJson<{ data?: Array<{ id: string }> }>(
-				`${cfg.cpaBase}/v1/models`,
-				{ headers: { Authorization: `Bearer ${key}` } },
-			);
-			listed = new Set((models.data ?? []).map((model) => model.id));
-		} catch {
-			// A failed CPA probe makes only CPA-backed targets unavailable.
-		}
-	}
-
 	let overQuota = new Set<string>();
-	if (cpaTargets.length && cfg.quotaMaxPct != null) {
+	if (hasCpaTarget && cfg.quotaMaxPct != null) {
 		const usages = await cachedAccountUsages(cfg);
 		if (usages) overQuota = quotaBlockedArms(usages, cfg.quotaMaxPct);
 	}
@@ -969,7 +944,6 @@ export async function armAvailability(
 		const target = targets[arm];
 		let ok = Boolean(target);
 		if (target?.provider === CPA_PROVIDER) {
-			ok = [...listed].some((id) => modelIdRank(id, target.id) < 2);
 			const quotaArm = resolveArm(target.id);
 			if (quotaArm && overQuota.has(quotaArm)) ok = false;
 		}
@@ -1006,74 +980,12 @@ export interface Verdict {
 }
 
 type JudgeResult = Pick<Verdict, "model" | "rationale">;
-type JudgeRunner = (
+export type JudgeRunner = (
 	instructions: string,
 	task: string,
 	menu: string[],
 	signal?: AbortSignal,
 ) => Promise<JudgeResult>;
-type ChatCompletion = {
-	choices?: Array<{ message?: { content?: string } }>;
-};
-
-async function judgeCall(
-	cfg: Config,
-	instructions: string,
-	task: string,
-	menu: string[],
-	signal?: AbortSignal,
-): Promise<JudgeResult> {
-	const schema = {
-		type: "object",
-		properties: {
-			model: { type: "string", enum: menu },
-			rationale: { type: "string", maxLength: 500 },
-		},
-		required: ["model", "rationale"],
-		additionalProperties: false,
-	};
-	const body: Record<string, unknown> = {
-		model: cfg.judge.model,
-		messages: [
-			{ role: "system", content: instructions },
-			{ role: "user", content: task.slice(0, 4000) },
-		],
-		response_format: {
-			type: "json_schema",
-			json_schema: { name: "routing_verdict", strict: true, schema },
-		},
-	};
-	if (cfg.judge.effort) body.reasoning_effort = cfg.judge.effort;
-	if (cfg.judge.fast) body.service_tier = "priority";
-	const headers: Record<string, string> = {
-		"Content-Type": "application/json",
-	};
-	const key = process.env[cfg.judge.apiKeyEnv] ?? "";
-	if (key) headers.Authorization = `Bearer ${key}`;
-
-	let last = "";
-	for (let attempt = 0; attempt < 2; attempt++) {
-		try {
-			const resp = await fetchJson<ChatCompletion>(
-				`${cfg.judge.baseUrl.replace(/\/+$/, "")}/chat/completions`,
-				{ method: "POST", headers, body: JSON.stringify(body) },
-				60_000,
-				signal,
-			);
-			const text = resp.choices?.at(0)?.message?.content;
-			if (text) return JSON.parse(text) as JudgeResult;
-			last = JSON.stringify(resp).slice(0, 200);
-		} catch (e) {
-			// user cancellation must not burn the retry
-			if (signal?.aborted) throw new Error("judge cancelled");
-			last = `transport: ${e}`;
-		}
-	}
-	throw new Error(
-		`judge ${cfg.judge.model} returned no verdict twice (last: ${last})`,
-	);
-}
-
 function registryJudgeRunner(
 	ctx: ExtensionContext,
 	cfg: Config,
@@ -1122,7 +1034,7 @@ function registryJudgeRunner(
 			model.api === "google-vertex"
 		) {
 			options.toolChoice = "any";
-		} else if (model.api === "openai-codex-responses") {
+		} else if (model.api.endsWith("codex-responses")) {
 			options.toolChoice = "required";
 		} else {
 			options.toolChoice = {
@@ -1186,8 +1098,8 @@ function registryJudgeRunner(
 }
 
 export interface RouteRuntime {
-	models?: readonly ModelTarget[];
-	judge?: JudgeRunner;
+	models: readonly ModelTarget[];
+	judge: JudgeRunner;
 }
 
 /** Routing verdict for one task. The judge always sees seven stable slots;
@@ -1196,20 +1108,17 @@ export interface RouteRuntime {
 export async function route(
 	cfg: Config,
 	task: string,
-	signal?: AbortSignal,
-	runtime: RouteRuntime = {},
+	signal: AbortSignal | undefined,
+	runtime: RouteRuntime,
 ): Promise<Verdict> {
 	const instructions = applyJudgeModelOverrides(
 		cfg,
 		RUBRIC + exemplarNote(cfg, task),
 	);
-	const targets = runtime.models
-		? armTargets(cfg, runtime.models, true)
-		: legacyCpaTargets(cfg, true);
+	const targets = armTargets(cfg, runtime.models, true);
 	const t0 = Date.now();
-	const judge = runtime.judge ?? ((...args) => judgeCall(cfg, ...args));
 	const [judged, avail] = await Promise.all([
-		judge(instructions, task, Object.keys(ARMS), signal),
+		runtime.judge(instructions, task, Object.keys(ARMS), signal),
 		armAvailability(cfg, targets),
 	]);
 	const { final, swapped } = resolveVerdictModel(judged.model, avail);
@@ -1324,17 +1233,15 @@ export default function (pi: ExtensionAPI) {
 		cfg: Config,
 		models: readonly RegistryModel[],
 	): RouteRuntime {
-		const useRegistryJudge =
-			!cpaConfigured(models) || cfg.judge.model.includes("/");
-		const judgeTarget = useRegistryJudge
-			? resolveModelTarget(cfg.judge.model, models)
-			: undefined;
-		const judgeModel = findTarget(ctx, judgeTarget);
+		const judgeModel = resolveModelTarget(cfg.judge.model, models);
+		if (!judgeModel) {
+			throw new Error(
+				`judge ${cfg.judge.model} is unavailable in Pi's authenticated model registry`,
+			);
+		}
 		return {
 			models,
-			...(judgeModel
-				? { judge: registryJudgeRunner(ctx, cfg, judgeModel) }
-				: {}),
+			judge: registryJudgeRunner(ctx, cfg, judgeModel),
 		};
 	}
 
@@ -1703,7 +1610,6 @@ export default function (pi: ExtensionAPI) {
 		if (showCpa) return cfg;
 		const visible: Partial<Config> = { ...cfg };
 		delete visible.cpaBase;
-		delete visible.cpaKeyEnv;
 		delete visible.quotaMaxPct;
 		delete visible.cpaManagementKey;
 		delete visible.cpaManagementKeyEnv;
@@ -1755,7 +1661,7 @@ export default function (pi: ExtensionAPI) {
 						` | key: ${keySource}`
 					: "";
 				const summary =
-					`judge: ${cfg.judge.model}@${cfg.judge.effort ?? "no-effort"}${cfg.judge.fast ? "+fast" : ""} via ${cfg.judge.baseUrl}\n` +
+					`judge: ${cfg.judge.model}@${cfg.judge.effort ?? "no-effort"}${cfg.judge.fast ? "+fast" : ""} via Pi model registry\n` +
 					`fallback: ${cfg.fallbackModel}${cpaSummary}` +
 					` | overrides: ${judgeOverrides(cfg).size}` +
 					` | pinned commands: ${Object.keys(cfg.commandPins ?? {}).length}`;
@@ -1780,39 +1686,15 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				if (action === "Judge model") {
-					let items: string[] = [];
-					if (!cpaOn) {
-						const current = resolveModelTarget(cfg.judge.model, models);
-						const currentRef = current
-							? `${current.provider}/${current.id}`
-							: cfg.judge.model;
-						items = models
-							.map((model) => `${model.provider}/${model.id}`)
-							.sort()
-							.slice(0, 80)
-							.map((model) => model + (model === currentRef ? CHECK : ""));
-					} else {
-						let ids: string[] = [];
-						try {
-							const key = process.env[cfg.judge.apiKeyEnv] ?? "";
-							const catalog = await fetchJson<{
-								data?: Array<{ id: string }>;
-							}>(`${cfg.judge.baseUrl.replace(/\/+$/, "")}/models`, {
-								headers: key ? { Authorization: `Bearer ${key}` } : {},
-							});
-							ids = (catalog.data ?? []).map((model) => model.id).sort();
-						} catch {
-							// provider unreachable: fall through to manual entry
-						}
-						const armIds = new Set<string>(
-							Object.values(ARMS).map((arm) => arm.model),
-						);
-						const armOnly = ids.filter((id) => armIds.has(id));
-						if (armOnly.length) ids = armOnly;
-						items = ids
-							.slice(0, 40)
-							.map((id) => id + (id === cfg.judge.model ? CHECK : ""));
-					}
+					const current = resolveModelTarget(cfg.judge.model, models);
+					const currentRef = current
+						? `${current.provider}/${current.id}`
+						: cfg.judge.model;
+					const items = models
+						.map((model) => `${model.provider}/${model.id}`)
+						.sort()
+						.slice(0, 80)
+						.map((model) => model + (model === currentRef ? CHECK : ""));
 					const pick = await select(
 						`Judge model (current: ${cfg.judge.model})`,
 						[...items, "(enter manually)"],
@@ -2002,11 +1884,7 @@ export default function (pi: ExtensionAPI) {
 					try {
 						const parsed = JSON.parse(edited);
 						const base = cpaOn ? DEFAULTS : cfg;
-						saveConfig({
-							...base,
-							...parsed,
-							judge: { ...DEFAULTS.judge, ...(parsed.judge ?? {}) },
-						});
+						saveConfig(mergeConfig({ ...base, ...parsed }));
 						ctx.ui.notify("llm-router: config saved", "info");
 					} catch (e) {
 						ctx.ui.notify(
