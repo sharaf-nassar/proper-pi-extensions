@@ -106,6 +106,18 @@ Before each model call, proper-base finds the newest user message in Pi's copied
 
 The `context` event supplies a deep copy, so persisted messages, transcript rendering, exports, resume, and branches keep the original image blocks. A later request that needs an old image must read or send it again.
 
+## Skill context
+
+Each invoked skill stays present exactly once in outbound context, and survives the compaction that would otherwise erase it.
+
+Pi expands `/skill:<name>` into a user message holding the whole `SKILL.md` body followed by the request, then treats that message like any other. Re-invoking the skill appends a second full copy, and compaction summarizes the copy away while the model keeps working under instructions it can no longer read. Bodies run to tens of thousands of characters, so both cost real context.
+
+On the same `context` event as image trimming, proper-base parses user messages with Pi's own skill-block reader. The first copy of a given rendered body is never rewritten, so the cached request prefix stays byte stable across turns; later messages carrying an identical body keep their request and replace the block with a one-line already-loaded note. A changed body, from different arguments or regenerated content, hashes differently and is left intact.
+
+When the context contains a compaction summary, proper-base walks the active branch for skills whose body no longer appears, and prepends the newest body of each to the first user turn after that summary. Restoration reproduces the message shape Pi itself produces rather than inserting a message, so role alternation and turn structure are unchanged. A per-skill character ceiling truncates long bodies and a combined ceiling bounds the total, filled newest first, keeping restored text well under the recent-token window so it cannot re-trigger the compaction that just ran.
+
+The transform is derived from the copied context on every request, so it self-heals across compaction, resume, fork, and branch navigation with nothing persisted. Session history, transcript rendering, and exports keep the original messages.
+
 ## Autocomplete description pane
 
 The installed editor's `render()` is wrapped once per instance. Selected autocomplete descriptions render in a non-capturing pi-tui overlay immediately above the editor instead of adding lines to the editor itself.

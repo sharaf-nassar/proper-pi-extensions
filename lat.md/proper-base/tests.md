@@ -54,6 +54,12 @@ A focused fixture verifies old image bytes leave outbound model context without 
 
 It supplies user and tool-result images on both sides of a newer user message. Earlier image blocks become text markers while current-turn images retain their original objects, and assertions against the inputs prove the filter does not mutate session content. A context containing only the current user turn returns by reference as a no-op.
 
+## Skill context fixture
+
+A focused fixture verifies invoked skills stay present once in outbound context and survive compaction.
+
+It asserts a repeated identical body keeps the first message by reference, so the cached request prefix cannot shift, while the later message retains its request beside an already-loaded note. A changed body returns the context unmodified, proving different arguments still reach the model. A compacted context holding only a summary and a follow-up turn regains the dropped bodies on the first user turn after the summary, in invocation order, without inserting a message; a skill still present is not carried a second time, and a branch with no summary is left alone. Oversized bodies truncate, the combined ceiling drops the oldest, plain transcripts return by reference, and repeated runs over one input are byte-identical.
+
 ## Prompt display fixture
 
 A focused fixture verifies prompt-template expansion remains model-facing rather than user-facing.

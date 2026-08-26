@@ -126,6 +126,22 @@ in model context for every tool loop in the turn that introduced them. A later
 user message replaces older image blocks only in the outbound context copy, so
 saved sessions, exports, resumes, and branches retain the originals.
 
+### Skill context
+
+Pi expands `/skill:<name>` into a user message holding the whole `SKILL.md`
+body, then treats it like any other message. Invoking the same skill twice
+therefore sends two full copies, and compaction summarizes the body away while
+the model keeps following instructions it can no longer read.
+
+proper-base keeps each invoked skill present exactly once in the outbound
+context. A repeat invocation of an unchanged body keeps its request and shows
+the model a one-line already-loaded note instead of a second copy; a body that
+changed with its arguments is sent in full. After a compaction, the newest body
+of each dropped skill is restored on the first user turn following the summary,
+truncated to a character ceiling per skill and in total so the restored text
+cannot re-trigger the compaction that just ran. Only the outbound copy changes,
+so saved sessions, exports, resumes, and branches retain the originals.
+
 ### Footer
 
 The built-in footer keeps path, branch, cumulative input, output, cache, cost,

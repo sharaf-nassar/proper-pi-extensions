@@ -50,6 +50,7 @@ import {
 	PROMPT_DISPLAY_ENTRY,
 } from "./src/prompt-display.ts";
 import { installRecorder } from "./src/recorder.ts";
+import { pinSkillContext } from "./src/skill-context.ts";
 import { installSmartSelection } from "./src/smart-selection.ts";
 import {
 	appendPrompt,
@@ -355,8 +356,12 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Model image context]]
-	pi.on("context", (event) => {
-		const messages = omitPriorTurnImages(event.messages);
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Skill context]]
+	pi.on("context", (event, ctx) => {
+		const messages = pinSkillContext(
+			omitPriorTurnImages(event.messages),
+			ctx.sessionManager.getBranch(),
+		);
 		if (messages !== event.messages) return { messages };
 	});
 
