@@ -34,13 +34,13 @@ A package install replaces any legacy direct-file registration for the same exte
 
 [PI_SETUP.md](../PI_SETUP.md) is the agent-facing runbook for reproducing the repository maintainer's public Pi environment without copying machine secrets or private integrations.
 
-The runbook always installs `proper-base`, `proper-llm-router`, the verified public npm extension set, `lat.md`, UI/UX Pro Max, Unslop, and Ponytail. `proper-flow` and its linked Beads resources install only when the `bd` CLI is present, because all five proper-flow prompts run `bd` and the proper-flow installer hard-fails without it. Package installs remain unpinned so Pi can update them; the documented list records sources and user-facing purpose.
+Installation is opt-in per package. `proper-base` always installs; every other extension, skill, and workflow bundle installs only after the user selects it from a single multi-select question that quotes each package's one-line purpose. `proper-flow` is offered only when the `bd` CLI is present, because all five proper-flow prompts run `bd` and the proper-flow installer hard-fails without it. Package installs remain unpinned so Pi can update them; the documented list records each source, its choice status, and what it does.
 
 Settings changes are merge-only and limited to fullscreen TUI, skill commands, and the safe default for subagent worker context. Provider, trust, telemetry, proxy, image model, and credential choices remain user decisions.
 
 CLIProxyAPI and llm-router setup uses a non-serving `llm-router/auto` placeholder plus user-entered provider credentials. The runbook never writes real keys. It explicitly excludes Quill, Scribe, the superseded Ctrl+C extension, and the local lat extension fork.
 
-Verification covers Pi package registration, Beads links, lat validation, skill discovery, router/provider health, image configuration, MCP, FFF, context view, Ponytail, and proper-flow prompt discovery.
+Verification covers Pi package registration, Beads links, lat validation, skill discovery, router/provider health, image configuration, MCP, FFF, context view, Ponytail, and proper-flow prompt discovery, restricted to the packages the user chose. The completion report names declined packages alongside installed ones.
 
 ## Runtime responsiveness
 

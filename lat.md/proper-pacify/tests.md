@@ -59,3 +59,9 @@ The fixture verifies commands, automatic mode, transcript entries, and failure b
 It covers slash-token preservation, interactive and extension-origin input, one-shot recursion avoidance, template expansion, and cancellation.
 
 It asserts that the entry holds exactly the original text and the target model, that a successful rewrite emits no notification beside it, and that a provider failure reports the error without appending a second entry.
+
+## Transcript entry fixture
+
+The fixture captures the registered entry renderer and renders it at one width with a plain-text theme.
+
+It asserts that the collapsed form is the `›` header alone with the original prompt withheld, and that the expanded form carries the `⌄` marker and the prompt beneath it.

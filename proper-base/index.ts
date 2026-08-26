@@ -49,6 +49,7 @@ import {
 	createPromptDisplay,
 	PROMPT_DISPLAY_ENTRY,
 } from "./src/prompt-display.ts";
+import { installPromptJump } from "./src/prompt-jump.ts";
 import { installRecorder } from "./src/recorder.ts";
 import { pinSkillContext } from "./src/skill-context.ts";
 import { installSmartSelection } from "./src/smart-selection.ts";
@@ -216,6 +217,7 @@ export default function (pi: ExtensionAPI) {
 
 	let removeFooterColors: (() => void) | undefined;
 	let removeJumpToBottom: (() => void) | undefined;
+	let removePromptJump: (() => void) | undefined;
 	let removePromptClear: (() => void) | undefined;
 	let removeSmartSelection: (() => void) | undefined;
 	let imagePreview: ImagePreviewController | undefined;
@@ -481,6 +483,8 @@ export default function (pi: ExtensionAPI) {
 		removeFooterColors = undefined;
 		removeJumpToBottom?.();
 		removeJumpToBottom = undefined;
+		removePromptJump?.();
+		removePromptJump = undefined;
 		removePromptClear?.();
 		removePromptClear = undefined;
 		removeSmartSelection?.();
@@ -586,6 +590,11 @@ export default function (pi: ExtensionAPI) {
 			historyGuard = installHistoryGuard(editor);
 			removeJumpToBottom?.();
 			removeJumpToBottom = installJumpToBottom(editor, tui);
+			removePromptJump?.();
+			removePromptJump = installPromptJump(tui, {
+				color: (value) => ctx.ui.theme.fg("muted", value),
+				subtle: (value) => ctx.ui.theme.fg("dim", value),
+			});
 			imagePreview?.dispose();
 			imagePreview = installImagePreview(editor, tui, {
 				fallbackColor: (value) => ctx.ui.theme.fg("dim", value),

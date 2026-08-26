@@ -38,7 +38,7 @@ function scrollableTui(tui: TUI): ScrollableTui | undefined {
  * respond to the mouse; if that internal field ever changes shape the button
  * keeps rendering and simply stops reacting.
  */
-function prioritize(tui: TUI, listener: TuiInputListener): void {
+export function prioritize(tui: TUI, listener: TuiInputListener): void {
 	const listeners = (tui as ListenerHost).inputListeners;
 	if (!listeners?.has(listener)) return;
 	const rest = [...listeners].filter((entry) => entry !== listener);

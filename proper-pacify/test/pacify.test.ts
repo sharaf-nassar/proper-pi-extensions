@@ -866,3 +866,33 @@ test("wrapper survives reload, bare commands, and transcript failures", async ()
 	);
 	assert.deepEqual(survived, { action: "transform", text: "rewritten" });
 });
+
+// @lat: [[proper-pacify/tests#Verification#Transcript entry fixture]]
+test("the transcript entry collapses to its header until expanded", () => {
+	let renderer: any;
+	properPacify({
+		registerEntryRenderer(_type: string, render: unknown) {
+			renderer = render;
+		},
+		registerCommand() {},
+		on() {},
+	} as unknown as TestPi);
+	assert.ok(renderer);
+
+	const theme = {
+		fg: (_token: string, text: string) => text,
+		bold: (text: string) => text,
+		italic: (text: string) => text,
+	};
+	const entry = { data: { before: "fix this stupid parser", model: "m" } };
+	const render = (expanded: boolean) =>
+		renderer(entry, { expanded }, theme).render(60).join("\n");
+
+	const collapsed = render(false);
+	assert.match(collapsed, /› pacifying with m/);
+	assert.doesNotMatch(collapsed, /stupid parser/);
+
+	const expanded = render(true);
+	assert.match(expanded, /⌄ pacifying with m/);
+	assert.match(expanded, /fix this stupid parser/);
+});

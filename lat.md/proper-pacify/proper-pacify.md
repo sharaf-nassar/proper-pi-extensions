@@ -142,6 +142,8 @@ The entry is written before the model call rather than after it, so the prompt a
 
 The entry records nothing else. The rewrite is the user message rendered directly below it, so repeating it there would duplicate it. Effort, fast, and source are configuration the user already set and can read from [[proper-pacify#Configuration]], so restating them on every prompt costs a line and tells the reader nothing about that prompt.
 
+The entry follows Pi's global tool-expansion state: collapsed it is the header alone, expanded it adds the original prompt beneath it. A bold `›` or `⌄` disclosure marker in `borderAccent` opens the header, matching the summaries proper-base renders, so a run of prompts reads as one line each until `app.tools.expand` opens them. Reusing that host state keeps the behavior free of the per-item click machinery that would otherwise have to be duplicated here, and leaves the package independent of proper-base.
+
 The entry renders as progress output rather than as a message: no background fill, and an italic unbolded header whose fixed label and varying model name take separate theme colors. A terminal cell has no size, so weight and slant are the only levers for making the header subordinate to the prompt beneath it. Colors come from the theme's custom-entry tokens rather than fixed intents, so the entry follows whichever theme is active.
 
 A failed transcript write is swallowed. The record is worth less than the prompt, and an error raised while logging a failure would otherwise escape the dispatch and discard the user's input.

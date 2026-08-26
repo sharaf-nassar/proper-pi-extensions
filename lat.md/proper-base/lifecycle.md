@@ -206,6 +206,28 @@ The editor's `render()` prepends one right-aligned inverse-video row reading `�
 
 Installation is skipped unless the renderer exposes the alternate-screen viewport surface, so regular mode, where the terminal owns scrolling, is untouched. Pi's alternate-screen renderer registers its own input listener in its constructor and consumes every mouse event, so the click listener moves itself to the front of the renderer's listener set. A left press or release inside the button's screen cells is consumed, and the press scrolls the viewport to the end; a renamed internal listener field leaves the button rendered but inert rather than breaking. The button's screen row is derived from the terminal height minus the editor rows and the rows below the editor, matching the overlay anchoring described under `Autocomplete description pane`.
 
+## Prompt jump chips
+
+The transcript's top-right corner carries two always-visible arrow chips that walk the viewport between user prompts.
+
+The chips render as bare `↑` and `↓` glyphs in the theme's muted foreground with no background of their own, so the transcript reads through them instead of a filled button block. Each keeps a three-column click target around its glyph. Arrowheads and box-drawing carets are deliberately avoided because common monospace fonts leave those code points blank.
+
+Compositing resets the cells it covers to the terminal default, which cuts a visible hole through a colored row such as a user message band. The chips therefore replay the styles already active at their own start column, taken from the covered slice, before their foreground color, so the row's background continues underneath them.
+
+That slice can end part-way through an escape sequence, so the styles are collected with a single bounded pattern match rather than a hand-rolled cursor scan. Everything here runs inside the renderer's own frame, where a loop that fails to terminate freezes the whole application instead of degrading one row.
+
+For the same reason the decoration is failure-contained: the chips, the reading, and their colors are all produced inside a guard, and anything thrown drops the decoration for that frame and clears the click region so dead cells cannot keep swallowing mouse input. The renderer then composites the frame exactly as it would without the extension. Colors are requested per frame rather than once at installation, so a theme that rejects the request fails inside that guard instead of propagating out of the editor factory.
+
+The chips composite onto row 0 of the finished alternate screen, one column clear of the scrollbar, by wrapping the renderer's flash compositor. That keeps them outside Pi's overlay stack, which would otherwise disable scrollbar dragging exactly as described under `Jump-to-bottom button`, and lets a transient flash message still win the row because flashes composite last. A terminal too narrow for both chips renders neither and disables their hit region.
+
+Directly beneath the chips, a `position/total` reading appears while the viewport is scrolled away from output and disappears once it follows the newest output again. It centres on the chip pair rather than the right margin, because each chip carries a padding column that would otherwise pull the reading off to one side, and it clamps to the same right gap when it grows wider than the chips. An odd-width reading sits half a cell off an even-width chip pair, which is the closest a character grid allows. The reading uses the theme's dim foreground against the chips' muted one, so it reads as secondary rather than as a second control. Both numbers come from the same prompt scan the chips navigate with, counting every user prompt in the transcript and treating the last one at or above the viewport top as the current position. Scrolling above the first prompt reads position zero, so one down click always advances the reading by one, and a transcript with no prompts shows no reading at all. The scan reuses the renderer's previous-frame layout, so a forced full redraw hides the reading for that one frame.
+
+A jump scans the primary scroll view's content lines outward from the current scroll position for the next OSC 133 zone start that opens a user prompt. Pi marks both user and assistant blocks with the same zone sequence, so a prompt is recognized by the background-padded box row that follows its markers; assistant blocks open with an empty spacer row instead. The up chip stops at the first prompt above and otherwise does nothing, while the down chip past the last prompt scrolls to the transcript end.
+
+Installation, listener priority, and press/release consumption match the jump-to-bottom button. Renderers without the viewport scroll surface, including regular mode, install nothing.
+
+The renderer instance outlives an extension reload, unlike the editor the jump-to-bottom button attaches to, so installation takes over any wrapper a previous extension instance left behind instead of yielding to it. Because a reload runs the incoming instance's editor factory before the outgoing instance shuts down, disposal is identity-guarded and a stale disposer arriving afterwards is a no-op; a live disposal restores the renderer's own flash compositor and drops the extension's property when it was inherited.
+
 ## Footer presentation
 
 The editor factory locates pi's mounted built-in `FooterComponent` and decorates its `render()` output in place.

@@ -7,8 +7,11 @@ auth files, private endpoints, or machine-specific paths from another user.
 ## Agent contract
 
 1. Read this file and each linked package README before changing user state.
-2. Show the user the package list below and get approval before installing
-   third-party code. Pi packages and skills run with the user's permissions.
+2. Let the user choose. Present the package list below as one multi-select
+   question, quoting each package's one-line purpose so the choice is
+   informed, and install only what the user picks. `proper-base` is the sole
+   exception: it always installs. Pi packages and skills run with the user's
+   permissions.
 3. Inspect existing Pi settings and `pi list` first. Back up files before edits.
 4. Merge JSON settings. Never replace a user's complete settings file.
 5. If a required CLI is missing, show the user the verified install command and
@@ -22,13 +25,13 @@ auth files, private endpoints, or machine-specific paths from another user.
 
 Install:
 
-- `proper-base`, `proper-llm-router`, and `proper-pacify` from npm — always.
-- `proper-flow` from npm, plus its repository-linked Beads resources — only
+- `proper-base` from npm — always, no prompt.
+- Every other package, skill, and workflow bundle below — only when the user
+  selects it in step 2.
+- `proper-flow` and its repository-linked Beads resources — offer them only
   when the `bd` CLI is installed locally (`command -v bd` succeeds).
-- The other public Pi packages listed below.
-- `ui-ux-pro-max`, `unslop`, and Ponytail's bundled skills.
 - The public `lat.md` CLI required by this repository. The Beads CLI is
-  optional; it gates the two Beads workflow bundles above.
+  optional; it gates the proper-flow option above.
 
 Do not install:
 
@@ -82,61 +85,58 @@ npm install --global @beads/bd
 If the user declines, skip `proper-flow` in step 2 and its Beads resources
 in step 3.
 
-## 2. Install public Pi packages
+## 2. Choose the packages to install
 
-These were verified as public npm Pi packages. Install unpinned sources so
-`pi update --extensions` can update them later.
+These were verified as public npm Pi packages. Ask the user once, as a
+multi-select, which of the optional ones to install. Show the "What it does"
+text verbatim so the user can decide without reading each README. Install
+unpinned sources so `pi update --extensions` can update them later.
 
-| Package | User-facing behavior |
-| --- | --- |
-| `@router-for-me/pi-cliproxyapi-provider` | Discovers CLIProxyAPI models, registers the provider, and adds Fast mode plus elapsed/TPS UI. |
-| `pi-mcp-adapter` | Loads MCP servers lazily behind compact discovery and call tools. |
-| `@vigolium/piolium` | Adds security-audit extensions, prompts, themes, and specialist skills. |
-| `pi-subagents` | Adds worker, reviewer, scout, researcher, oracle, council, missions, and async orchestration. |
-| `pi-web-access` | Adds web search, fetching, source checking, GitHub cloning, PDFs, and video analysis. |
-| `@juicesharp/rpiv-ask-user-question` | Adds structured multi-option user questionnaires. |
-| `@amaster.ai/pi-image-gen` | Adds raster image generation and editing plus the `image-gen` skill. |
-| `@dietrichgebert/ponytail` | Adds always-on minimal-code guidance and Ponytail review, audit, debt, gain, and help skills. |
-| `@ff-labs/pi-fff` | Adds fast fuzzy file and content search plus FFF-backed file autocomplete. |
-| `pi-context-view` | Adds context usage and hidden-injection inspection. |
-| `proper-base` | Adds this repository's baseline transcript, editor, history, image, cancellation, title, and footer behavior. |
-| `proper-llm-router` | Routes each session's first task to a configured model and applies quota-aware swaps. |
-| `proper-pacify` | Rewrites prompt tone to be clear, direct, and neutral-professional without changing prompt content. |
-| `proper-flow` | Adds this repository's `/triage`, `/file`, `/spec`, `/refine`, and `/implement-ready` prompts. All five run `bd`; install only when `bd` exists. |
+| Source | Choice | What it does |
+| --- | --- | --- |
+| `npm:proper-base` | always | Baseline session behavior for this setup: transcript cleanup, prompt editing and history, image previews, cancellation, session titles, footer layout. |
+| `npm:proper-llm-router` | optional | Picks the model for each session's first task and swaps models when a provider quota runs out. Needs CLIProxyAPI (step 6). |
+| `npm:proper-pacify` | optional | Rewrites your prompt's tone to neutral and direct without changing what it asks for. |
+| `npm:proper-flow` | optional, needs `bd` | Adds `/triage`, `/file`, `/spec`, `/refine`, and `/implement-ready` Beads workflow prompts. Offer only when `command -v bd` succeeds; all five prompts run `bd`. |
+| `npm:@router-for-me/pi-cliproxyapi-provider` | optional | Registers a CLIProxyAPI server as a Pi model provider, plus Fast mode and elapsed/TPS readouts. Required by proper-llm-router. |
+| `npm:pi-mcp-adapter` | optional | Runs MCP servers, including this repository's `lat mcp`, behind two compact discovery and call tools instead of loading every server tool. |
+| `npm:@vigolium/piolium` | optional | Security-audit bundle: audit extensions, prompts, themes, and specialist skills. |
+| `npm:pi-subagents` | optional | Delegates work to worker, reviewer, scout, researcher, and oracle subagents, with councils, missions, and background runs. |
+| `npm:pi-web-access` | optional | Web search, page fetching, source checking, GitHub repository cloning, PDF and video reading. |
+| `npm:@juicesharp/rpiv-ask-user-question` | optional | Lets the agent ask you multiple-choice questions mid-task instead of guessing. |
+| `npm:@amaster.ai/pi-image-gen` | optional | Generates and edits images from a prompt. Needs a provider API key (step 7). |
+| `npm:@dietrichgebert/ponytail` | optional | Pushes the agent toward the smallest working change, plus review, audit, debt, gain, and help skills. |
+| `npm:@ff-labs/pi-fff` | optional | Fast fuzzy file and content search, and file autocomplete backed by it. |
+| `npm:pi-context-view` | optional | Shows how much context a session is using and what was injected into it. |
+
+Selection rules:
+
+- Offer `npm:proper-flow` only when `bd` exists; otherwise state that it was
+  hidden and why.
+- If the user selects `npm:proper-llm-router` without
+  `npm:@router-for-me/pi-cliproxyapi-provider`, say the router needs it and
+  let the user decide.
+- Accept "all", "none", or any subset. Never install an unselected package.
+
+Then install exactly the accepted set:
 
 ```bash
-packages=(
-  'npm:@router-for-me/pi-cliproxyapi-provider'
-  'npm:pi-mcp-adapter'
-  'npm:@vigolium/piolium'
-  'npm:pi-subagents'
-  'npm:pi-web-access'
-  'npm:@juicesharp/rpiv-ask-user-question'
-  'npm:@amaster.ai/pi-image-gen'
-  'npm:@dietrichgebert/ponytail'
-  'npm:@ff-labs/pi-fff'
-  'npm:pi-context-view'
+selected=(
   'npm:proper-base'
-  'npm:proper-llm-router'
-  'npm:proper-pacify'
+  # one line per package the user selected, e.g. 'npm:pi-subagents'
 )
 
-for package in "${packages[@]}"; do
+for package in "${selected[@]}"; do
   pi install "$package"
 done
-
-if command -v bd >/dev/null 2>&1; then
-  pi install npm:proper-flow
-else
-  echo "bd not found: skipping proper-flow and its Beads resources"
-fi
 ```
 
 ## 3. Install repository-local resources
 
-Install the Beads formulas and implementation rail only when `bd` exists;
-`proper-flow/install.sh` hard-fails without `bd` or `jq`. The links point into
-this checkout, so moving or deleting the checkout breaks them.
+Install the Beads formulas and implementation rail only when the user selected
+`proper-flow` and `bd` exists; `proper-flow/install.sh` hard-fails without `bd`
+or `jq`. The links point into this checkout, so moving or deleting the checkout
+breaks them.
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -146,7 +146,8 @@ if command -v bd >/dev/null 2>&1; then
 fi
 ```
 
-For extension development, local installs may replace the four npm packages:
+For extension development, local installs may replace the selected repository
+packages. Run only the pairs for packages the user actually installed:
 
 ```bash
 pi remove npm:proper-base
@@ -162,6 +163,12 @@ pi install "$REPO_ROOT/proper-flow"
 Never keep the npm and local registration for the same package.
 
 ## 4. Install the standalone skills
+
+These two are optional as well. Offer them in the same question as step 2:
+
+- `ui-ux-pro-max` — UI and UX guidance data: styles, palettes, font pairings,
+  accessibility and layout rules, chart and stack recipes.
+- `unslop` — strips AI-tell phrasing out of written output.
 
 Install UI/UX Pro Max into the universal Agent Skills directory that Pi scans:
 
@@ -182,8 +189,8 @@ npx --yes skills add cursor/plugins \
   --yes
 ```
 
-Ponytail's skills install with `npm:@dietrichgebert/ponytail`; do not copy a
-second Ponytail skill directory.
+Ponytail's skills install with `npm:@dietrichgebert/ponytail` and need no
+separate choice; do not copy a second Ponytail skill directory.
 
 ## 5. Merge baseline Pi settings
 
@@ -215,6 +222,8 @@ Rules:
   proxy, or tool settings without asking.
 
 ## 6. Configure CLIProxyAPI and the router
+
+Skip this step when the user did not install `proper-llm-router`.
 
 The router requires a reachable CLIProxyAPI service and user-supplied
 credentials. If the user does not have one, skip router activation or launch Pi
@@ -266,6 +275,8 @@ Run **Test judge** in that menu. Never put the real provider key in this
 repository, `models.json`, setup logs, or chat.
 
 ## 7. Configure optional provider-backed tools
+
+Each subsection applies only when the matching package was installed.
 
 ### Image generation
 
@@ -335,7 +346,9 @@ one resource from a package without uninstalling the whole package.
 
 ## 9. Verify the complete setup
 
-Restart Pi or run `/reload`, then verify:
+Restart Pi or run `/reload`, then verify. Run only the checks that belong to
+installed packages and skills; skip the rest instead of reporting them as
+failures.
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -348,7 +361,7 @@ test -f "$HOME/.agents/skills/unslop/SKILL.md" ||
   test -f "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/skills/unslop/SKILL.md"
 ```
 
-Inside Pi:
+Inside Pi, run the command for each installed package:
 
 ```text
 /subagents-doctor
@@ -360,8 +373,7 @@ Inside Pi:
 /ponytail-help
 ```
 
-Also verify autocomplete contains (the first five only when `proper-flow`
-was installed):
+Also verify autocomplete contains the entries for what was installed:
 
 ```text
 /triage
@@ -376,7 +388,7 @@ was installed):
 Finish by reporting:
 
 - Installed package sources from `pi list`.
-- Any skipped package and why.
+- Packages the user declined, and any package skipped for a missing CLI.
 - User settings changed.
 - Manual credential/configuration steps still pending.
 - Duplicate registrations removed.

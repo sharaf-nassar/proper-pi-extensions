@@ -640,22 +640,27 @@ export default function properPacify(pi: ExtensionAPI): void {
 	};
 
 	// @lat: [[proper-pacify#Session transcript]]
-	pi.registerEntryRenderer<PacifyLog>(ENTRY_TYPE, (entry, _options, theme) => {
-		const data = entry.data ?? { before: "", model: "unknown" };
-		// No background fill: the entry is progress output, not a message, and a
-		// filled block draws more attention than the prompt it is echoing.
-		const box = new Box(1, 1);
-		// The label is fixed and the model is the part that varies, so they carry
-		// different colors rather than reading as one undifferentiated heading.
-		// Italic and unbolded keeps the header subordinate to the prompt below it;
-		// a terminal cell has no size, so weight is the only lever for "smaller".
-		const header = theme.italic(
-			`${theme.fg("customMessageLabel", "pacifying with")} ${theme.fg("accent", data.model)}`,
-		);
-		const text = `${header}\n${data.before}`;
-		box.addChild(new Text(text, 0, 0));
-		return box;
-	});
+	pi.registerEntryRenderer<PacifyLog>(
+		ENTRY_TYPE,
+		(entry, { expanded }, theme) => {
+			const data = entry.data ?? { before: "", model: "unknown" };
+			// No background fill: the entry is progress output, not a message, and a
+			// filled block draws more attention than the prompt it is echoing.
+			const box = new Box(1, 1);
+			// The label is fixed and the model is the part that varies, so they carry
+			// different colors rather than reading as one undifferentiated heading.
+			// Italic and unbolded keeps the header subordinate to the prompt below it;
+			// a terminal cell has no size, so weight is the only lever for "smaller".
+			const marker = theme.fg("borderAccent", theme.bold(expanded ? "⌄" : "›"));
+			const header = theme.italic(
+				`${marker} ${theme.fg("customMessageLabel", "pacifying with")} ${theme.fg("accent", data.model)}`,
+			);
+			box.addChild(
+				new Text(expanded ? `${header}\n${data.before}` : header, 0, 0),
+			);
+			return box;
+		},
+	);
 
 	pi.registerCommand("pacify", {
 		description: "Optimize a prompt's tone without changing its content",

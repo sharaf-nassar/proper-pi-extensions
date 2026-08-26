@@ -103,6 +103,12 @@ Scrolling away from current output adds a `↓ jump to bottom` row above the
 prompt. Clicking it returns to the newest output without disabling scrollbar
 dragging.
 
+The transcript's top-right corner carries muted `↑` and `↓` arrows that walk
+the viewport between your own prompts. Clicking `↓` past the last prompt scrolls
+to the bottom. While you are scrolled up, a dimmer `position/total` reading sits
+centred under the arrows and counts the prompts in the session; it disappears
+once the viewport is following output again.
+
 ### Clipboard and model image context
 
 Ctrl+V and Ctrl+Shift+V both use Pi's image-or-text clipboard action. Readable

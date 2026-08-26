@@ -185,6 +185,10 @@ shows the original and the model, nothing else: the rewrite is the user message
 rendered directly below it, and effort, fast, and auto are settings you already
 chose, so repeating them on every prompt says nothing about that prompt.
 
+The entry collapses to its `› pacifying with <model>` header and keeps the
+original prompt hidden until you expand it with Pi's `app.tools.expand`
+binding, which also drives tool output.
+
 Cancellation and failure are written to the session transcript through Pi's
 notification API rather than to a footer status slot, so they appear beside the
 entry instead of competing for one truncated line. A failure adds no second
