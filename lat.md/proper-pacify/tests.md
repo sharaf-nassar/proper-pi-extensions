@@ -14,6 +14,14 @@ The fixture verifies defaults, sanitized configuration, provider-qualified looku
 
 The fixture verifies one-call rewriting, immutable tone-only instructions, unchanged model input, configured effort and priority options, text extraction, and rejection of truncated output.
 
+It also asserts that the operative contract and the prompt travel in the user turn, that the prompt occupies the end of that turn so a forged fence cannot end the data region early, that the system prompt carries only the role declaration and the tone guidance, and that the request carries text only, with no images attached.
+
+## Rewrite integrity fixture
+
+The fixture drives envelope parsing directly, with no model call.
+
+It asserts that a well-formed envelope yields the trimmed rewrite, and that verbatim replies recorded from two provider-injected agent identities are rejected, including a bare tool call and a refusal. It also asserts that an envelope alone is insufficient: an over-long body and a blank body both raise `PacifyError`, which fails open to the original prompt.
+
 ## Scheduled automatic mode fixture
 
 The fixture covers time parsing, window evaluation, storage, and rejection of unusable windows.
@@ -28,9 +36,15 @@ It verifies that the wrapper routes to the newest instance rather than the one t
 
 ## Session override fixture
 
-The fixture drives `/pacify-session` against a stored default of off and asserts that toggling enables pacification for the next input while the configuration file keeps its stored value.
+The fixture drives `/pacify-session` against a stored default of off and asserts that it enables pacification for the next input while the configuration file keeps its stored value.
 
-It also verifies that a second toggle suspends automatic mode, that a reload keeps the override, and that a replacement session clears it.
+It also verifies that repeating `/pacify-session` leaves automatic mode on, that `/unpacify-session` suspends it, that a reload keeps the override, that a replacement session clears it, and that neither command writes to disk.
+
+## Bypass command fixture
+
+The fixture drives `/unpacify` with automatic mode on and a model registry that throws if it is called.
+
+It asserts that input beginning with either bypass command reaches dispatch untransformed, that the command sends its argument verbatim with template expansion enabled, that the re-sent extension-origin prompt passes the one-shot guard, that no transcript entry is written, and that an empty argument reports usage instead of sending a prompt.
 
 ## Dispatch priority fixture
 
@@ -42,4 +56,6 @@ It verifies that the foreign handler observes only pacified text, that the wrapp
 
 The fixture verifies commands, automatic mode, transcript entries, and failure behavior.
 
-It covers slash-token preservation, interactive and extension-origin input, one-shot recursion avoidance, template expansion, cancellation, and fail-open logging.
+It covers slash-token preservation, interactive and extension-origin input, one-shot recursion avoidance, template expansion, and cancellation.
+
+It asserts that the entry holds exactly the original text and the target model, that a successful rewrite emits no notification beside it, and that a provider failure reports the error without appending a second entry.

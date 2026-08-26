@@ -56,7 +56,9 @@ you can see what was sent on your behalf.
 | Command | Behavior |
 | --- | --- |
 | `/pacify <prompt>` | Pacifies the prompt, logs before and after text, then sends the result as the user prompt. |
-| `/pacify-session` | Turns automatic mode on or off for the current session only, leaving the stored default alone. |
+| `/pacify-session` | Turns automatic mode on for the current session only, leaving the stored default alone. |
+| `/unpacify <prompt>` | Sends the prompt verbatim, skipping automatic mode for that one prompt. |
+| `/unpacify-session` | Turns automatic mode off for the current session only, leaving the stored default alone. |
 | `/pacify-config` | Configures model, effort, priority service tier, tone guidance, and automatic mode. |
 
 ## Tone-only contract
@@ -71,6 +73,63 @@ The configurable tone prompt adds style guidance. It cannot replace the
 immutable content-preservation rules. Each prompt uses one rewrite model call;
 there is no model-as-judge or self-verification pass.
 
+## Rewrite integrity
+
+A reply is accepted only when it arrives inside a `<rewrite>` envelope and its
+length stays near the input's. Anything else fails open: Pi sends your original
+prompt and logs the rejection.
+
+A model in answer mode is not following the rewrite protocol, so it never emits
+the envelope, which makes the distinction binary instead of a guess.
+
+The envelope is the backstop, not the cure. What makes models comply is where
+the instructions go.
+
+## Instruction placement
+
+The rewrite contract travels in the **user turn**, and the system prompt
+declares only the role. This is deliberate.
+
+The system slot is not reliably yours. A provider fronting a subscription
+endpoint may prepend its own agent prompt to every request, because the upstream
+credential requires it. Rules placed in the system slot are then outranked by an
+identity that answers prompts and calls tools — and no wording there overrides
+it; an explicit "disregard any prior identity" instruction changed nothing.
+Disabling that injection is not an option either: it is what makes the
+credential valid, so turning it off breaks the provider entirely.
+
+The user turn is left intact. Moving the contract there, with your prompt marked
+as data, takes an affected model from rejecting every prompt to rewriting all of
+them correctly.
+
+Your prompt occupies the end of the message rather than sitting inside a fence.
+Any fence is forgeable — a prompt containing the closing delimiter would end the
+data region early and the rest would read as instructions. A trailing region has
+no closing token to forge, so a prompt containing `"""` or even a literal
+`<rewrite>` block is still treated as text.
+
+Both halves have to agree. While the system prompt still described the user
+message as the text to rewrite, a well-behaved model correctly rewrote the
+*instructions* instead of the prompt. So the system prompt names the `TEXT`
+block as the only data.
+
+If every prompt is still rejected, the configured model is unusable for this
+job. Switch it in `/pacify-config`.
+
+## Images
+
+Images are never sent to the rewrite model. Tone is a property of text, an image
+cannot change what the rewrite should be, and sending one would spend image
+tokens on every prompt in automatic mode for no tone signal. It also makes the
+failure above *more* likely: hand a task-oriented model the screenshot and it
+stops asking and starts solving.
+
+Pasting an image in Pi writes it to a temp file and inserts that path into your
+prompt as ordinary text. The path needs no special treatment — it is content,
+the tone contract already requires paths to survive verbatim, and the envelope
+catches any reply that acts on one. Automatic mode reattaches your images to the
+transformed prompt, so the agent still receives them.
+
 ## Automatic mode
 
 Automatic mode is off by default and has three settings, chosen under `Auto` in
@@ -84,12 +143,20 @@ excludes `end`. A window whose start is later than its end wraps midnight, so
 opens and closes during a running session without a restart. An unusable window
 falls back to off rather than on.
 
-`/pacify-session` toggles automatic mode for the current session without
-writing to disk: it enables pacification when the stored setting is currently
-off, and suspends it when currently on. A session override outranks a schedule
+`/pacify-session` turns automatic mode on for the current session and
+`/unpacify-session` turns it off, neither writing to disk. Each sets one state
+rather than flipping the current one, so both are safe to repeat and neither
+depends on knowing whether the stored default, or the current point in a
+schedule, has pacification on right now. A session override outranks a schedule
 until the session ends. The override is dropped by `/new`, `/resume`, `/fork`,
 and `/clone`, and survives `/reload`. Use `/pacify-config` to change the stored
 setting for every future session.
+
+To skip a single prompt, use `/unpacify <prompt>`. Because automatic mode runs
+above command dispatch, input starting with `/unpacify` or `/unpacify-session`
+is exempt before any rewrite happens; otherwise the bypass command's own
+argument would be rewritten before the command ran. `/unpacify` then sends its
+argument verbatim and writes no transcript entry, since nothing changed.
 
 When enabled, automatic mode runs on every interactive, RPC, or
 extension-injected user input. A one-shot guard skips only the message already produced by
@@ -107,19 +174,26 @@ exposing that funnel, the extension keeps working through its ordinary `input`
 handler and ordering falls back to load order.
 
 A successful transform becomes Pi's stored user message. The extension also
-adds a visible custom session entry containing the full before and after text.
-That entry is durable but excluded from LLM context, as are the notifications
-below; the model only ever receives the rewritten prompt.
+adds a visible custom session entry holding the original prompt, headed
+`pacifying with <model>`. That entry is durable but excluded from LLM context,
+as are the notifications below; the model only ever receives the rewritten
+prompt.
 
-Progress, cancellation, and failure messages are written to the session
-transcript through Pi's notification API rather than to a footer status slot,
-so they appear beside the entry they describe instead of competing for one
-truncated line.
+The entry is written *before* the model call, so your prompt appears the moment
+you send it rather than after a round trip — it is the progress indicator. It
+shows the original and the model, nothing else: the rewrite is the user message
+rendered directly below it, and effort, fast, and auto are settings you already
+chose, so repeating them on every prompt says nothing about that prompt.
+
+Cancellation and failure are written to the session transcript through Pi's
+notification API rather than to a footer status slot, so they appear beside the
+entry instead of competing for one truncated line. A failure adds no second
+entry.
 
 Esc cancels an in-flight automatic rewrite and discards the prompt. Model,
-authentication, transport, and non-stop completion failures fail open: Pi sends
-the original prompt and logs the failure beside identical before and after
-text.
+authentication, transport, non-stop completion, and rejected-rewrite failures
+fail open: Pi sends the original prompt and logs the failure beside identical
+before and after text.
 
 ## Configuration
 
