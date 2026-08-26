@@ -8,6 +8,16 @@ A session integration fixture verifies first-response naming without a second mo
 
 It proves a fresh unnamed branch receives the title instruction, the streamed metadata marker stays hidden, terminal control characters are removed before `pi.setSessionName()`, and later turns stop receiving the instruction. Separate phases keep naming armed after an aborted response, stop after completed output omits metadata, and prove explicit names or branches with prior assistant output are never renamed.
 
+## Session listing fixtures
+
+Session-listing tests build real JSONL session files in temporary directories and read them back.
+
+They verify header fields, message counts that ignore non-message entries, the first user message including multi-block text joined with a space, `created` from the header, and an empty `allMessagesText`. Activity time comes from the last user or assistant entry rather than the file, so a later branch append cannot move a finished session; renames are picked up wherever they appear with the newest winning and an explicit clear returning to unnamed. A boundary case sizes an entry so the next one begins inside the read overlap, then requires the exact count, that entry's time, a rename beyond it, and the padded first message. Headerless files and missing paths return nothing, and a session with no messages falls back to its header time.
+
+A descriptor case reads forty sessions whose bodies are never reached and requires the process's open descriptors not to grow, since abandoning a line reader does not close its stream; it is skipped where `/proc/self/fd` is unavailable.
+
+Lister cases prove newest-first ordering, that non-JSONL files are ignored, that a shared custom directory is filtered to the current working directory while the project's own directory is not, and that `listAll` spans project directories and reports progress. A backfill case waits for `allMessagesText` to arrive on the object the picker already holds, and an installation case proves both static methods are replaced exactly once and serve rows before search text lands. A surface case installs onto pi's real `SessionManager` and lists a temporary directory through it, so a rename or argument reorder in pi fails loudly instead of leaving the picker quietly slow.
+
 ## Model-preserving clear fixture
 
 A command fixture verifies `/clear` replaces the session before restoring the outgoing provider and model.

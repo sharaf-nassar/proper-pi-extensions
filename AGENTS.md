@@ -35,7 +35,15 @@ Gates (repo root):
 ```bash
 pre-commit run --all-files                      # commit/fast gate
 pre-commit run --hook-stage pre-push --all-files  # full gate
+pre-commit run biome-fix --hook-stage manual --all-files  # apply biome fixes
 ```
+
+Biome is provisioned only by pre-commit, pinned to 2.5.9 by the hook rev
+and `biome.json`'s schema; no package declares it. `biome-ci` reports
+format/lint errors without writing, and `biome-fix` applies them on that
+same pinned binary. Never run `npx biome` — the bare `biome` name on npm
+is an unrelated abandoned package that ignores the arguments and exits 0,
+so it reports a false pass.
 
 Fast = biome-ci, gitleaks, typos, markdownlint, shellcheck, policy guard,
 then `node scripts/check-repo.mjs fast` (node --test suites in every

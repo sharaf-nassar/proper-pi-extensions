@@ -4,7 +4,7 @@ proper-base combines cross-session history and reverse search with focused edito
 
 ## Purpose
 
-The package groups local pi behavior in one extension: automatic session naming, model-preserving session clearing, cross-session prompt history, autocomplete details, fullscreen compatibility, footer styling, cancellation, and commit-message gating.
+The package groups local pi behavior in one extension: session naming and listing, model-preserving clearing, cross-session prompt history, autocomplete details, fullscreen compatibility, footer styling, cancellation, and commit-message gating.
 
 Pi session messages contain model-facing expansions rather than trustworthy raw input. The extension records editor submissions in a private append-only store and rejects replayed session messages, while keeping autocomplete descriptions compact and visible above the prompt.
 
@@ -27,6 +27,7 @@ The runtime is split by responsibility.
 - `src/history-guard.ts` blocks Pi's transformed session replay and admits only recorder-trusted prompts.
 - `src/history.ts` contains pure recall filtering, timestamp ordering, deduplication, and editor-factory unwrapping.
 - `src/recorder.ts` intercepts editor submission while preserving later handler assignments and repeated installation.
+- `src/session-list.ts` replaces pi's session listing with byte-prefix scans that read only what the `/resume` picker draws, and refills picker search text in the background.
 - `src/store.ts` owns project-key encoding, private JSONL appends, bounded tail reads, and compaction.
 - `src/transient-retry.ts` rewrites CLIProxyAPI transient stream errors into pi's retryable form.
 - `test/` uses built-in `node:test` against pure logic, real temporary files, and a small editor integration fixture; `tsconfig.json` and package-local dependencies provide no-emit diagnostics and pi-tui wrapping utilities, not a test framework or build step.
@@ -63,12 +64,13 @@ These rules preserve history and autocomplete details without destabilizing the 
 26. Fullscreen double-click selection expands recognized one-row URLs, paths, flags, qualified identifiers, and quoted values only inside transcript scroll views; every unknown token or incompatible renderer falls back to Pi's native selection unchanged.
 27. A `bash` or `quill_execute` command naming `git commit` executes only as one direct invocation whose literal `-m` text passes the 72-column, blank-second-line, and attribution rules; parse failures block fail-safe, and commands not naming git commit are never inspected.
 28. The prompt jump chips composite into the finished screen rather than an overlay, carry no background of their own and preserve the covered row's colors, stop only on user prompt blocks, leave a transient flash message on top, do nothing above the first prompt, and scroll to the transcript end past the last one. The position reading counts user prompts from the same scan, appears only while the viewport is scrolled away from output, and is omitted when the transcript holds no prompts. Nothing the chips do may end the session: the whole decoration runs under a guard inside the renderer's frame, a failure drops it for that frame and releases its click region, and its scans terminate on truncated escape sequences. Installation takes over a wrapper left on the reload-surviving renderer, and only the installation that owns the compositor may remove it.
+29. Session listing reads only what the `/resume` picker draws: no entry is assembled or decoded beyond its head, an entry near a read boundary is taken exactly once, activity time comes from the last user or assistant entry rather than the file's mtime, and message-body search text refills in the background instead of blocking the picker.
 
 ## Documentation map
 
 Each document owns one runtime concern.
 
-- [lifecycle](./lifecycle.md) — startup, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, smart selection, the jump-to-bottom button, the prompt jump chips, autocomplete details, footer decoration, the commit message guard, and transient stream retry.
+- [lifecycle](./lifecycle.md) — startup, session listing, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, smart selection, the jump-to-bottom button, the prompt jump chips, autocomplete details, footer decoration, the commit message guard, and transient stream retry.
 - [storage](./storage.md) — project paths, JSONL format, permissions, bounded reads, limits, and compaction.
 - [operations](./operations.md) — package identity, installation, runtime requirements, and data removal.
 - [tests](./tests.md) — deterministic history, recorder, autocomplete, fullscreen key routing, footer styling, and real-filesystem store coverage.

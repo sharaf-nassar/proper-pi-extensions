@@ -36,6 +36,11 @@ repos:
     hooks:
       - id: biome-ci
         args: [--error-on-warnings, --max-diagnostics=none]
+      # Fixer for the errors biome-ci reports, on the same pinned binary.
+      # Manual stage only: `pre-commit run biome-fix --hook-stage manual`.
+      - id: biome-check
+        alias: biome-fix
+        stages: [manual]
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # v8.30.1

@@ -8,6 +8,18 @@ Startup compacts the project store when needed, loads only recorder-captured his
 
 If another extension already provides an editor, that factory remains the base. Otherwise proper-base creates pi's `CustomEditor`. A history guard captures the editor's original append method, blocks Pi's later session replay, and adds trusted store prompts oldest first so the first Up press returns the newest entry.
 
+## Session listing
+
+`/resume` reads only what its rows show, so the picker draws before the transcripts behind it are read.
+
+Pi's `SessionManager.list` and `listAll` build every `SessionInfo` by streaming each session file, `JSON.parse`-ing every line, and concatenating all message text into `allMessagesText`. Only the picker's search reads that field, and only after the user types, so a project with hundreds of megabytes of transcripts waits seconds for rows it already has the data to draw. Extension load replaces both static methods once, tagged by a global symbol because the class outlives every session.
+
+The replacements make two cheap passes per file. Session entries are one JSON object per line, so a byte-prefix test anchored to the preceding newline classifies a line without decoding it. The first pass reads the head until the first user message and stops; because it abandons almost every file part-way, it destroys the read stream rather than only closing the line reader, which would leave the descriptor open. The second scans the file as raw bytes, counting message entries, tracking the newest rename offset, and taking the write time of the last user or assistant entry. Nothing assembles a line: single entries reach tens of megabytes, so buffering one would cost more than the scan it serves. Consecutive reads overlap by one entry head and stop one byte short of that overlap, so an entry near a boundary is taken exactly once, with its role and time in view; a final flush covers the last overlap, where a short head is all the file has.
+
+Two values are deliberately approximate. `modified` uses the entry's write time rather than the message's start time, which sits after the content and would cost a full-line read; the difference is the duration of one response. The file's own mtime is not a substitute, because branching from a session appends to it hours after its last message. `name` comes from re-reading the newest rename entry at its recorded offset rather than from the scan itself.
+
+`allMessagesText` is returned empty and refilled by a detached backfill over the same objects the picker holds, newest first. Search matches session ID, name, and working directory immediately, and message bodies as the backfill reaches them; a new listing cancels the previous backfill. Nothing else cancels one, so the final backfill of a session runs to completion in the background. Its cost is the read pi already performed before drawing the picker, moved after it rather than added.
+
 ## Automatic session title
 
 A fresh unnamed session asks the model to summarize the task in its first successful response, then applies that title through Pi's native session-name API.

@@ -15,6 +15,7 @@ import {
 	type ExtensionAPI,
 	type ExtensionContext,
 	getAgentDir,
+	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 
 import {
@@ -51,6 +52,7 @@ import {
 } from "./src/prompt-display.ts";
 import { installPromptJump } from "./src/prompt-jump.ts";
 import { installRecorder } from "./src/recorder.ts";
+import { installFastSessionList } from "./src/session-list.ts";
 import { pinSkillContext } from "./src/skill-context.ts";
 import { installSmartSelection } from "./src/smart-selection.ts";
 import {
@@ -214,6 +216,8 @@ function decodeModelReference(value: string): ModelReference | undefined {
 
 export default function (pi: ExtensionAPI) {
 	enableScribeImageCapability();
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Session listing]]
+	installFastSessionList(SessionManager, getAgentDir());
 
 	let removeFooterColors: (() => void) | undefined;
 	let removeJumpToBottom: (() => void) | undefined;
