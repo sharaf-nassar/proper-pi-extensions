@@ -47,9 +47,11 @@ smoke. No build step exists anywhere.
 Package releases use `.release-me.json` and package-scoped tags. Run
 `./tools/release-me/release.sh bump <part> <package>` from the repo root. The
 GitHub release workflow verifies and packs without OIDC, then publishes the
-exact artifact from a protected `npm-release` environment. `proper-pacify` has
-no published version yet, so its first release needs one maintainer-
-authenticated publish before npm can trust the workflow.
+exact artifact from a protected `npm-release` environment. `proper-pacify` had
+its maintainer-authenticated first publish, but no trusted publisher is
+registered for it on npm yet, so workflow publishes fail with `ENEEDAUTH`
+until a maintainer runs `npm trust github proper-pacify --file
+publish-npm.yml --repo sharaf-nassar/proper-pi-extensions --env npm-release`.
 
 - Router smoke (`npm run test:smoke` in proper-llm-router/) is offline and
   credential-free; it injects the model snapshot and judge runner Pi would

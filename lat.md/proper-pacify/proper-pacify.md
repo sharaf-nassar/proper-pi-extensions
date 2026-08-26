@@ -158,7 +158,7 @@ The repository directory and public npm package are both named `proper-pacify`.
 
 Install the published package with `pi install npm:proper-pacify`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-pacify`. Installation order does not matter because `Dispatch priority` guarantees ordering at runtime.
 
-The manifest registers `pacify.ts`, limits the tarball to runtime source, user documentation, and the license, and declares Pi's coding-agent and TUI APIs as host-supplied peers. Releases run from the repository root with `./tools/release-me/release.sh bump <part> proper-pacify`, which creates the `proper-pacify-vMAJOR.MINOR.PATCH` tag that [[lat#Package releases]] verifies and publishes. The package has no published version yet, so the first release needs one maintainer-authenticated publish before npm can trust the workflow.
+The manifest registers `pacify.ts`, limits the tarball to runtime source, user documentation, and the license, and declares Pi's coding-agent and TUI APIs as host-supplied peers. Releases run from the repository root with `./tools/release-me/release.sh bump <part> proper-pacify`, which creates the `proper-pacify-vMAJOR.MINOR.PATCH` tag that [[lat#Package releases]] verifies and publishes. The maintainer-authenticated initial publish is done, but the package does not yet trust the release workflow, so npm rejects workflow publishes until that trusted publisher is registered.
 
 ## Documentation map
 
