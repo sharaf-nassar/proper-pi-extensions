@@ -56,7 +56,7 @@ It verifies that the foreign handler observes only pacified text, that the wrapp
 
 The fixture verifies commands, automatic mode, transcript entries, and failure behavior.
 
-It covers slash-token preservation, interactive and extension-origin input, one-shot recursion avoidance, template expansion, and cancellation.
+It covers slash-token preservation, interactive and extension-origin input, one-shot recursion avoidance, template expansion, and cancellation. Print and JSON run modes receive an otherwise eligible prompt and must return it untouched without adding a transcript entry, proving headless children never pay for a rewrite.
 
 It asserts that the entry holds exactly the original text and the target model, that a successful rewrite emits no notification beside it, and that a provider failure reports the error without appending a second entry.
 

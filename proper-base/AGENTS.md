@@ -56,8 +56,9 @@ interception in `src/recorder.ts`, and the private append-only JSONL store in
   viewport renderer, and consume only mouse events on the button's own cells.
 - Keep fullscreen Home, End, PageUp, and PageDown assigned to the editor; use
   their Ctrl+Shift variants for transcript navigation and preserve unrelated
-  user keybindings. Bind Shift+Enter and Alt+Enter to prompt newlines, removing
-  Alt+Enter from follow-up queueing. Up places recalled history at prompt start.
+  user keybindings. Bind Alt+Enter to prompt newlines, removing it from
+  follow-up queueing; never restate Pi's own newline defaults. Up places
+  recalled history at prompt start.
   Home is two-stage from visible-row start to prompt start; End is two-stage
   from logical-line end to prompt end. Hot
   reload must replace stale keybinding apply callbacks.

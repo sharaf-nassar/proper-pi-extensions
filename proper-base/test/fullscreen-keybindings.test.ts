@@ -161,13 +161,12 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 		);
 		assert.deepEqual(keybindings.getKeys("tui.input.newLine"), [
 			"ctrl+n",
-			"shift+enter",
 			"alt+enter",
 		]);
 		assert.deepEqual(keybindings.getKeys("app.message.followUp"), [
 			"ctrl+alt+enter",
 		]);
-		assert.equal(keybindings.matches("\x1b[13;2u", "tui.input.newLine"), true);
+		assert.equal(keybindings.matches("\x1b[13;2u", "tui.input.newLine"), false);
 		assert.equal(keybindings.matches("\x1b[13;3u", "tui.input.newLine"), true);
 		assert.equal(
 			keybindings.matches("\x1b[13;3u", "app.message.followUp"),

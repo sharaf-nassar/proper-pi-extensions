@@ -31,6 +31,11 @@ import {
 	installReverseHistorySearch,
 	type ReverseHistorySearchController,
 } from "./src/editor-navigation.ts";
+import {
+	FastOverlay,
+	fastToggleNotice,
+	isFastToggle,
+} from "./src/fast-mode.ts";
 import { installFooterColors } from "./src/footer-colors.ts";
 import {
 	isRecallable,
@@ -52,6 +57,7 @@ import {
 } from "./src/prompt-display.ts";
 import { installPromptJump } from "./src/prompt-jump.ts";
 import { installRecorder } from "./src/recorder.ts";
+import { installSelectionDismiss } from "./src/selection-dismiss.ts";
 import { installFastSessionList } from "./src/session-list.ts";
 import { pinSkillContext } from "./src/skill-context.ts";
 import { installSmartSelection } from "./src/smart-selection.ts";
@@ -113,10 +119,11 @@ function installKeybindings(keybindings: EditorKeybindings): void {
 				"ctrl+shift+v" as const,
 			]),
 		];
+		// Shift+Enter is already Pi's `tui.input.newLine` default; only Alt+Enter
+		// needs adding, and only because it must leave `app.message.followUp`.
 		const newLineKeys = [
 			...new Set([
 				...keybindings.getKeys("tui.input.newLine"),
-				"shift+enter" as const,
 				"alt+enter" as const,
 			]),
 		];
@@ -164,8 +171,33 @@ type PendingPrompt = {
 	processed: boolean;
 	cancelled: boolean;
 	entryId?: string;
+	originId?: string | undefined;
 };
-type RestoreRequest = { entryId: string };
+type RestoreRequest = { entryId: string; originId?: string | undefined };
+
+/**
+ * Extensions may append transcript entries between submission and the prompt's
+ * own session entry; proper-pacify writes one before it rewrites the text. Those
+ * entries are the prompt's parents, so navigating to the prompt keeps them and
+ * leaves orphan rows behind. Aim at the leaf the submission started from, unless
+ * it is a prompt entry of its own (navigating there would drop that turn too) or
+ * no longer an ancestor because the tree moved meanwhile.
+ */
+function cancelTargetId(
+	ctx: ExtensionContext,
+	request: RestoreRequest,
+): string {
+	if (!request.originId) return request.entryId;
+	const origin = ctx.sessionManager.getEntry(request.originId);
+	if (!origin || origin.type === "custom_message") return request.entryId;
+	if (origin.type === "message" && origin.message.role === "user") {
+		return request.entryId;
+	}
+	const ancestor = ctx.sessionManager
+		.getBranch(request.entryId)
+		.some((entry) => entry.id === request.originId);
+	return ancestor ? request.originId : request.entryId;
+}
 
 /**
  * `details` shape of the `ask_user_question` tool result, from
@@ -219,17 +251,49 @@ export default function (pi: ExtensionAPI) {
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Session listing]]
 	installFastSessionList(SessionManager, getAgentDir());
 
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Fast tier scopes]]
+	const fastOverlay = new FastOverlay(getAgentDir());
+	pi.on("before_provider_request", (event, ctx) =>
+		fastOverlay.rewritePayload(event.payload, ctx.model ?? undefined),
+	);
+	pi.registerCommand?.("fast-global", {
+		description: "Toggle CLIProxyAPI Fast mode for all sessions.",
+		handler: async (args, ctx) => {
+			if (args.trim()) {
+				ctx.ui.notify("Usage: /fast-global", "error");
+				return;
+			}
+			let enabled: boolean;
+			try {
+				enabled = fastOverlay.toggleGlobal();
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				ctx.ui.notify(`Failed to save Fast mode: ${message}`, "error");
+				return;
+			}
+			const notice = fastToggleNotice({
+				scope: "global",
+				enabled,
+				otherEnabled: fastOverlay.isSessionEnabled(),
+				modelSupported: fastOverlay.supportsModel(ctx.model ?? undefined),
+			});
+			ctx.ui.notify(notice.message, notice.level);
+		},
+	});
+
 	let removeFooterColors: (() => void) | undefined;
 	let removeJumpToBottom: (() => void) | undefined;
 	let removePromptJump: (() => void) | undefined;
 	let removePromptClear: (() => void) | undefined;
 	let removeSmartSelection: (() => void) | undefined;
+	let removeSelectionDismiss: (() => void) | undefined;
 	let imagePreview: ImagePreviewController | undefined;
 	let removeTerminalInput: (() => void) | undefined;
 	let transcriptCleanup: TranscriptCleanupController | undefined;
 	let activeEditor: PromptEditor | undefined;
 	let activeTui: EditorTui | undefined;
 	let submittedPrompt: string | undefined;
+	let submittedOriginId: string | undefined;
 	let pendingPrompt: PendingPrompt | undefined;
 	let restoreRequest: RestoreRequest | undefined;
 	let sessionTitlePending = false;
@@ -303,11 +367,12 @@ export default function (pi: ExtensionAPI) {
 
 			const target = ctx.sessionManager.getEntry(request.entryId);
 			if (target?.type !== "message" || target.message.role !== "user") return;
+			const targetId = cancelTargetId(ctx, request);
 			try {
-				if (ctx.sessionManager.getLeafId() === request.entryId) {
-					pi.appendEntry(CANCEL_ANCHOR, { targetId: request.entryId });
+				if (ctx.sessionManager.getLeafId() === targetId) {
+					pi.appendEntry(CANCEL_ANCHOR, { targetId });
 				}
-				await ctx.navigateTree(request.entryId, { summarize: false });
+				await ctx.navigateTree(targetId, { summarize: false });
 			} catch (error) {
 				ctx.ui.notify(
 					`Could not remove cancelled prompt: ${error instanceof Error ? error.message : String(error)}`,
@@ -333,6 +398,7 @@ export default function (pi: ExtensionAPI) {
 		if (event.source !== "interactive" || !event.text.trim()) return;
 		pendingPrompt = {
 			text: submittedPrompt ?? event.text,
+			originId: submittedPrompt ? submittedOriginId : undefined,
 			processed: false,
 			cancelled: false,
 		};
@@ -458,7 +524,7 @@ export default function (pi: ExtensionAPI) {
 				? ctx.sessionManager.getEntry(candidate.entryId)
 				: findPendingEntry(ctx);
 			if (entry?.type === "message" && entry.message.role === "user") {
-				restoreRequest = { entryId: entry.id };
+				restoreRequest = { entryId: entry.id, originId: candidate.originId };
 				pendingPrompt = undefined;
 				pi.sendUserMessage(`/${CANCEL_PROMPT_COMMAND}`, {
 					expandPromptTemplates: true,
@@ -493,6 +559,8 @@ export default function (pi: ExtensionAPI) {
 		removePromptClear = undefined;
 		removeSmartSelection?.();
 		removeSmartSelection = undefined;
+		removeSelectionDismiss?.();
+		removeSelectionDismiss = undefined;
 		imagePreview?.dispose();
 		imagePreview = undefined;
 		removeTerminalInput?.();
@@ -509,6 +577,8 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
+		// Session Fast never survives into a new or restored session.
+		fastOverlay.resetSession();
 		promptDisplay.restore(ctx.sessionManager.getBranch());
 		sessionTitlePending =
 			!pi.getSessionName?.() &&
@@ -573,6 +643,10 @@ export default function (pi: ExtensionAPI) {
 				!sourceText.trimStart().startsWith("!")
 			) {
 				submittedPrompt = sourceText;
+				// Captured here rather than on the `input` event: extensions that
+				// wrap Pi's input dispatch have already appended their own entries
+				// by the time that event reaches this extension.
+				submittedOriginId = ctx.sessionManager.getLeafId() ?? undefined;
 			}
 		};
 
@@ -591,6 +665,8 @@ export default function (pi: ExtensionAPI) {
 			transcriptCleanup = installTranscriptCleanup(tui, ctx);
 			removeSmartSelection?.();
 			removeSmartSelection = installSmartSelection(tui);
+			removeSelectionDismiss?.();
+			removeSelectionDismiss = installSelectionDismiss(tui);
 			historyGuard = installHistoryGuard(editor);
 			removeJumpToBottom?.();
 			removeJumpToBottom = installJumpToBottom(editor, tui);
@@ -610,6 +686,20 @@ export default function (pi: ExtensionAPI) {
 				editor,
 				record,
 				(text) => imagePreview?.prepare(text) ?? text,
+				// pi dispatches extension commands before the `input` event, so the
+				// provider's global `/fast` can only be repurposed as a session
+				// toggle by consuming it at the editor before pi ever parses it.
+				(text) => {
+					if (!isFastToggle(text)) return false;
+					const notice = fastToggleNotice({
+						scope: "session",
+						enabled: fastOverlay.toggleSession(),
+						otherEnabled: fastOverlay.isGlobalEnabled(),
+						modelSupported: fastOverlay.supportsModel(ctx.model ?? undefined),
+					});
+					ctx.ui.notify(notice.message, notice.level);
+					return true;
+				},
 			);
 			installModelAutocompleteSubmit(editor, keybindings);
 			removePromptClear?.();

@@ -29,7 +29,7 @@ and footer layout.
 
 | Input | Behavior |
 | --- | --- |
-| Shift+Enter or Alt+Enter | Insert a newline. Alt+Enter no longer queues a follow-up. |
+| Alt+Enter | Insert a newline instead of queuing a follow-up. Pi's own Shift+Enter and Ctrl+J stay intact. |
 | Home | Move to the current visible-row start, then the full prompt start. |
 | End | Move to the current logical-line end, then the full prompt end. |
 | Ctrl+C with text | Clear the prompt without arming exit. |

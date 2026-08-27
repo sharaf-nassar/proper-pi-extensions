@@ -595,6 +595,14 @@ export async function pacifyIncoming(
 	ctx: ExtensionContext,
 	event: Pick<InputEvent, "text" | "images" | "source">,
 ): Promise<InputEventResult> {
+	// Headless runs carry no human at the prompt: `pi -p` scripts and subagent
+	// children receive machine-authored task text, and Pi defaults its `source`
+	// to "interactive", so nothing else distinguishes it. Rewriting it would
+	// spend a model call per run and edit instructions whose sender expects them
+	// to arrive verbatim.
+	if (ctx.mode === "print" || ctx.mode === "json") {
+		return { action: "continue" };
+	}
 	if (event.source === "extension" && bypassedExtensionPrompt === event.text) {
 		bypassedExtensionPrompt = undefined;
 		return { action: "continue" };

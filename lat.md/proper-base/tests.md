@@ -100,6 +100,8 @@ Transcript fixtures verify thoughts and updates remain fully rendered after sett
 
 A component-tree fixture installs the wrapper around Pi's document/chat shape and first renders thinking, tool-call commentary, tool cards, errors, and status updates unchanged. It then completes a tool-calling assistant message and one of two tools while the run remains active, proving the assistant's thinking and multiline commentary remain fully visible, updates keep blank rows around them, and the unfinished tool keeps its native live preview. A later phase completes the final active tool above `Working...` and an empty assistant component, proving the tool stays native until that assistant receives text, then compacts on the same render. The fully settled view retains thinking, direct assistant text, and agent-owned status updates while emitting separate descriptive rows for successful tools, failed tools, and errors in original component order. Assertions prove thoughts never receive `thought` summary labels, updates never receive `update` summary labels, MCP gateway rows retain `mcp` and append the proxied tool name, detail headers use bold `borderAccent`-colored `›` and `⌄` markers without click or keybinding instructions, and tool and error rows use distinct semantic colors while retaining text labels. Its fake fullscreen screen verifies compact controls emit no OSC 8 links, then clicks one tool summary through a scrolled viewport; the wrapper maps the screen row back to the document, claims the event ahead of Pi's consuming listener, expands only that tool, leaves every sibling collapsed, and fully expands the selected card without changing visible thoughts. The expanded item ends with a bottom collapse control that also emits no link and closes only that item. A stale-frame click then advances the reported scroll offset past the painted screen, proving a click that lands right after a wheel scroll still toggles the row the user actually saw and closes it again once the offsets agree. Global tool-output expansion remains available. Starting another run proves earlier item states remain stable while only newly appended components render live. A fake `/session` status appended after settlement remains native. A second user prompt proves grouping remains turn-local, repeated installation refreshes the live context without stacking, and uninstall restores the native renderer. A lifecycle fixture verifies `agent_settled` resets Pi's global tool-output state to collapsed before requesting the final redraw.
 
+A custom-entry fixture settles a transcript holding an extension entry component whose renderer switches on its own expansion state, clicks its header row, and proves the click is claimed and the entry opens, so entry disclosure markers are not decoration that only the global binding moves.
+
 ## Settled render memoization
 
 A memoization fixture proves repeated same-width renders never rebuild completed component content.
@@ -110,13 +112,19 @@ It settles a transcript containing a tool-calling assistant message and a collap
 
 A session integration fixture applies the real Pi 0.84.2 `KeybindingsManager` to the installed editor factory.
 
-It verifies Ctrl+V and Ctrl+Shift+V both match Pi's clipboard paste action without removing an existing Alt+V alias. Shift+Enter and Alt+Enter both match prompt newline while other newline aliases survive, and Alt+Enter no longer matches follow-up queueing. Fullscreen transcript actions claim Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown instead of unmodified or Shift-only keys; the editor retains its native unmodified bindings; and modern modifier sequences match the intended actions. Navigation fixtures verify a recalled prompt ends at line 0, column 0; Home first reaches a soft-wrapped visible-row start and then the full prompt start, including across a hard newline; and End reaches the logical line end and then the full prompt end. They also prove native reload reapplies current bindings without losing unrelated user values, repeated installation remains idempotent, and the terminal writer stays untouched for Pi's native mouse handling.
+It verifies Ctrl+V and Ctrl+Shift+V both match Pi's clipboard paste action without removing an existing Alt+V alias. Alt+Enter matches prompt newline and no longer matches follow-up queueing, a user's own newline alias survives beside it, and proper-base adds no Shift+Enter of its own — under a user override that chord stops matching, while Pi's untouched defaults keep both Shift+Enter and Ctrl+J. Fullscreen transcript actions claim Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown instead of unmodified or Shift-only keys; the editor retains its native unmodified bindings; and modern modifier sequences match the intended actions. Navigation fixtures verify a recalled prompt ends at line 0, column 0; Home first reaches a soft-wrapped visible-row start and then the full prompt start, including across a hard newline; and End reaches the logical line end and then the full prompt end. They also prove native reload reapplies current bindings without losing unrelated user values, repeated installation remains idempotent, and the terminal writer stays untouched for Pi's native mouse handling.
 
 ## Smart selection fixture
 
 Smart-selection fixtures verify token-aware ranges extend Pi's native fullscreen word selection without replacing it.
 
 Pure cases cover wrapped URLs, source paths with line and column suffixes, command flags, qualified identifiers, quoted values, ANSI-styled paths, ordinary prose fallback, and fraction rejection. A fake fullscreen renderer proves only scroll-view points receive smart ranges, native selection handles other rows, and disposal restores the original resolver.
+
+## Selection dismissal fixture
+
+A fake fullscreen renderer with a consuming viewport listener verifies typing dismisses the selection while every other input leaves it standing.
+
+Classifier cases accept printable characters, non-ASCII graphemes, multi-character bursts, Enter, Backspace, bare escape, encoded keys, and a bracketed paste whose body resembles a release encoding, and reject empty input, cell-size reports, and key-release encodings. A keystroke with an active selection resets every selection field, stops auto-scroll, requests one render, and leaves the input unconsumed; without a selection nothing re-renders. Mouse gestures and viewport keys consumed by the renderer's earlier listener, terminal reports, and an in-progress drag all keep the selection. A shape without the selection surface installs nothing, reinstallation takes over with one live listener, the replaced install's stale disposer is a no-op, and the owning disposer removes the listener.
 
 ## Jump-to-bottom fixture
 
@@ -142,7 +150,7 @@ A second fixture models pi's width-sensitive native render, which silently drops
 
 A session integration fixture verifies editable recovery of an unprocessed cancelled prompt.
 
-It submits through the wrapped editor, captures the accepted user entry, and presses Esc before assistant processing. The prompt returns immediately, settlement schedules the internal command, a hidden anchor makes a leaf user entry navigable, and tree navigation abandons the cancelled turn. Further phases cover pre-input routing cancellation, processed-turn retention, and delegation of queued streaming prompts to Pi's native restoration.
+It submits through the wrapped editor, captures the accepted user entry, and presses Esc before assistant processing. The prompt returns immediately, settlement schedules the internal command, a hidden anchor makes a leaf user entry navigable, and tree navigation abandons the cancelled turn. Further phases cover pre-input routing cancellation, processed-turn retention, and delegation of queued streaming prompts to Pi's native restoration. A final phase appends another extension's transcript entry between submission and the user message and proves navigation targets the pre-submission leaf, so that entry leaves the branch with the prompt instead of remaining as its surviving parent.
 
 ## Questionnaire cancellation fixture
 
@@ -155,6 +163,12 @@ It verifies a dismissed questionnaire aborts, while an answered one, a failure e
 The transient-retry fixture verifies CLIProxyAPI transient stream errors become retryable without touching other messages.
 
 An errored assistant message whose text matches the CPA `empty_stream` pattern must return a copy whose `errorMessage` gains the `network error:` prefix pi treats as retryable. User messages, non-error stops, unrelated error text, and already-prefixed messages must pass through by reference so the `message_end` handler performs no transform.
+
+## Fast tier fixture
+
+Fast-mode fixtures verify the session and global tier scopes against a temporary agent directory holding provider config and catalog files.
+
+Cases prove a bare `/fast` submission is the only session toggle text; session Fast adds `service_tier: "priority"` for capable models of the configured provider while already-injected, non-object, foreign-provider, and non-capable payloads stay untouched; Fast off strips exactly the priority tier while other tier values survive; and the session reset restores the default. Global cases prove one overlay's toggle reaches another instance's next request through the shared config file, preserves unrelated keys and the provider's file format, and honors `CLIPROXYAPI_FAST` and `CLIPROXYAPI_PROVIDER_ID` grammar including invalid-value fallback. A rewritten catalog cache refreshes the capability set by modification time and a missing cache means no capable models. Feedback cases name the scope, warn on an incapable current model, and report the surviving other scope on disable. A recorder case proves the consume hook swallows `/fast` before recording or forwarding while other text passes through.
 
 ## Commit guard fixtures
 

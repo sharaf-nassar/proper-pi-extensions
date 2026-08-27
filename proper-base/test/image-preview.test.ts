@@ -500,6 +500,7 @@ test("clipboard image markers render Kitty previews and expand before submission
 		sessionManager: {
 			getBranch: () => [],
 			getSessionFile: () => undefined,
+			getLeafId: () => null,
 		},
 		ui: {
 			theme: { fg: (_name: string, value: string) => value },

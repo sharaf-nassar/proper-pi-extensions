@@ -25,11 +25,16 @@ const INSTALLED = Symbol.for("pi-proper-history.recorder");
  * pi's submit path cannot cost a history entry. Returns false if the editor
  * already has a recorder, which keeps repeated `session_start` passes from
  * stacking them.
+ *
+ * `consume` runs first and may swallow a submission entirely: pi checks
+ * extension commands before the `input` event, so this is the only place an
+ * extension can take over a command name another extension registered.
  */
 export function installRecorder(
 	editor: SubmittableEditor,
 	record: (text: string, sourceText: string) => void,
 	prepare: (text: string) => string = (text) => text,
+	consume?: (text: string) => boolean,
 ): boolean {
 	const marked = editor as SubmittableEditor & { [INSTALLED]?: boolean };
 	if (marked[INSTALLED]) return false;
@@ -37,6 +42,7 @@ export function installRecorder(
 	let handler = editor.onSubmit;
 	const wrap =
 		(next: ((text: string) => void) | undefined) => (text: string) => {
+			if (consume?.(text)) return;
 			const prepared = prepare(text);
 			record(prepared, text);
 			next?.(prepared);

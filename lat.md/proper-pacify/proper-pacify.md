@@ -76,7 +76,7 @@ A command with no argument is entirely dispatch syntax, so it passes through unt
 
 Automatic mode transforms each non-empty interactive or RPC input before skill and prompt-template expansion.
 
-Interactive, RPC, and extension-origin inputs are eligible. A one-shot exact-text guard skips only the user message already produced by `/pacify`. A leading slash-command token and its separating whitespace remain exact; only its argument body is rewritten. Attached images pass through unchanged.
+Interactive, RPC, and extension-origin inputs are eligible, but only in the TUI and RPC run modes. Print and JSON runs are headless: `pi -p` scripts and subagent children receive machine-authored task text, and Pi labels a prompt carrying no explicit source as `interactive`, so the run mode is the only thing that separates a person typing from an agent dispatching. Rewriting those spends a rewrite call per run and edits instructions their sender expects verbatim, so automatic mode returns them untouched and writes no transcript entry. A one-shot exact-text guard skips only the user message already produced by `/pacify`. A leading slash-command token and its separating whitespace remain exact; only its argument body is rewritten. Attached images pass through unchanged.
 
 Esc cancels an in-flight rewrite and discards that input. Other failures fail open to the original prompt so unavailable models or provider errors do not block the session.
 
@@ -142,7 +142,7 @@ The entry is written before the model call rather than after it, so the prompt a
 
 The entry records nothing else. The rewrite is the user message rendered directly below it, so repeating it there would duplicate it. Effort, fast, and source are configuration the user already set and can read from [[proper-pacify#Configuration]], so restating them on every prompt costs a line and tells the reader nothing about that prompt.
 
-The entry follows Pi's global tool-expansion state: collapsed it is the header alone, expanded it adds the original prompt beneath it. A bold `›` or `⌄` disclosure marker in `borderAccent` opens the header, matching the summaries proper-base renders, so a run of prompts reads as one line each until `app.tools.expand` opens them. Reusing that host state keeps the behavior free of the per-item click machinery that would otherwise have to be duplicated here, and leaves the package independent of proper-base.
+The entry follows Pi's global tool-expansion state: collapsed it is the header alone, expanded it adds the original prompt beneath it. A bold `›` or `⌄` disclosure marker in `borderAccent` opens the header, matching the summaries proper-base renders, so a run of prompts reads as one line each until `app.tools.expand` opens them. Reusing that host state keeps the behavior free of the per-item click machinery that would otherwise have to be duplicated here, and leaves the package independent of proper-base. When proper-base's settled transcript is installed, it drives that same state per entry and makes the header clickable; without it the entry still opens under `app.tools.expand`.
 
 The entry renders as progress output rather than as a message: no background fill, and an italic unbolded header whose fixed label and varying model name take separate theme colors. A terminal cell has no size, so weight and slant are the only levers for making the header subordinate to the prompt beneath it. Colors come from the theme's custom-entry tokens rather than fixed intents, so the entry follows whichever theme is active.
 

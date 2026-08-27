@@ -340,6 +340,21 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 	);
 	assert.equal(extensionPrompt.text, "could you please check this");
 
+	// A headless child — `pi -p`, a subagent run — receives machine-authored task
+	// text under Pi's default "interactive" source, so only the run mode rules it
+	// out. Nothing is rewritten and no transcript entry is written.
+	const headlessEntries = entries.length;
+	for (const mode of ["print", "json"]) {
+		assert.deepEqual(
+			await inputHandler(
+				{ text: "Task: refactor the parser", source: "interactive" },
+				{ ...ctx, mode },
+			),
+			{ action: "continue" },
+		);
+	}
+	assert.equal(entries.length, headlessEntries);
+
 	await commands.get("pacify").handler("/file fix this now", {
 		...ctx,
 		waitForIdle: async () => {},

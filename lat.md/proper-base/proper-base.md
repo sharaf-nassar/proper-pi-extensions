@@ -1,6 +1,6 @@
 # proper-base
 
-proper-base combines cross-session history and reverse search with focused editor, fullscreen, cancellation, and footer customizations.
+proper-base combines cross-session history and reverse search with focused editor, fullscreen, cancellation, footer, and provider fast-tier customizations.
 
 ## Purpose
 
@@ -23,6 +23,7 @@ The runtime is split by responsibility.
 - `src/image-preview.ts` enables Kitty capability for Scribe before renderer startup, replaces clipboard paths with compact markers, animates Pi's native loader during asynchronous cross-platform `sharp` thumbnailing, retransmits active sources on terminal focus return, renders image previews with source-path fallback, and expands markers before submission.
 - `src/prompt-display.ts` hashes expanded prompt-template messages, maps them to raw slash invocations, and restores that display-only mapping from custom session entries.
 - `src/smart-selection.ts` extends Pi's fullscreen double-click range for common single-line terminal tokens while preserving native fallback and selection mechanics.
+- `src/selection-dismiss.ts` drops the fullscreen mouse selection when a keystroke or paste reaches the editor, while mouse, viewport, and terminal-report input leave it standing.
 - `src/transcript-cleanup.ts` keeps the active run live, leaves thoughts and settled updates fully rendered, compacts tools and errors behind per-item summaries, and claims clicks on those summaries ahead of fullscreen selection handling.
 - `src/history-guard.ts` blocks Pi's transformed session replay and admits only recorder-trusted prompts.
 - `src/history.ts` contains pure recall filtering, timestamp ordering, deduplication, and editor-factory unwrapping.
@@ -30,6 +31,7 @@ The runtime is split by responsibility.
 - `src/session-list.ts` replaces pi's session listing with byte-prefix scans that read only what the `/resume` picker draws, and refills picker search text in the background.
 - `src/store.ts` owns project-key encoding, private JSONL appends, bounded tail reads, and compaction.
 - `src/transient-retry.ts` rewrites CLIProxyAPI transient stream errors into pi's retryable form.
+- `src/fast-mode.ts` scopes CLIProxyAPI's priority service tier into a session-only `/fast` and a live cross-session `/fast-global` by owning the final `service_tier` on outgoing requests.
 - `test/` uses built-in `node:test` against pure logic, real temporary files, and a small editor integration fixture; `tsconfig.json` and package-local dependencies provide no-emit diagnostics and pi-tui wrapping utilities, not a test framework or build step.
 
 ## Core invariants
@@ -52,7 +54,7 @@ These rules preserve history and autocomplete details without destabilizing the 
 14. Slash-command completion works at command-token boundaries anywhere in the prompt and replaces only the active segment; every `/model ` result list is descending, searches strictly filter by every term when possible, and Enter or Tab submits only after Pi produces the selected `provider/model` command.
 15. Esc before assistant processing restores the prompt and removes its turn from the active branch; processed turns retain Pi's normal abort behavior, and the append-only session file keeps only an abandoned audit branch.
 16. Ctrl+V and Ctrl+Shift+V invoke Pi's clipboard paste action; image paths become `[image N]` markers without moving the cursor away from the replacement, Left and Right cross each complete marker atomically while malformed text stays native, the cursor inverse-highlights the full active marker, Backspace deletes that whole token through Pi's native editor path and leaves the cursor at its start, Scribe enables Kitty before renderer startup, capable terminals show Pi's animated braille loader until cross-platform asynchronous `sharp` produces a pixel-bounded preview, failed or timed-out thumbnail conversion falls back to source-path text, focus return forces active Kitty sources to retransmit, and intact markers expand before history storage and Pi submission.
-17. Shift+Enter and Alt+Enter insert prompt newlines; Alt+Enter is not retained as the follow-up queue shortcut.
+17. Alt+Enter inserts prompt newlines and is not retained as the follow-up queue shortcut; Pi's own newline defaults are left alone rather than restated.
 18. Up leaves a recalled prompt at line 0, column 0; Home then moves through the current visible-row and full-prompt starts, while End moves through logical-line and full-prompt ends without taking over Ctrl+Shift+Home/End.
 19. The jump-to-bottom button exists only for a viewport renderer that is not following output, occupies an editor row rather than an overlay so scrollbar dragging survives, and consumes only the mouse events landing on its own cells.
 20. Transient-error normalization touches only errored assistant messages matching the CPA `empty_stream` wording and never re-prefixes an already retryable message.
@@ -65,12 +67,14 @@ These rules preserve history and autocomplete details without destabilizing the 
 27. A `bash` or `quill_execute` command naming `git commit` executes only as one direct invocation whose literal `-m` text passes the 72-column, blank-second-line, and attribution rules; parse failures block fail-safe, and commands not naming git commit are never inspected.
 28. The prompt jump chips composite into the finished screen rather than an overlay, carry no background of their own and preserve the covered row's colors, stop only on user prompt blocks, leave a transient flash message on top, do nothing above the first prompt, and scroll to the transcript end past the last one. The position reading counts user prompts from the same scan, appears only while the viewport is scrolled away from output, and is omitted when the transcript holds no prompts. Nothing the chips do may end the session: the whole decoration runs under a guard inside the renderer's frame, a failure drops it for that frame and releases its click region, and its scans terminate on truncated escape sequences. Installation takes over a wrapper left on the reload-surviving renderer, and only the installation that owns the compositor may remove it.
 29. Session listing reads only what the `/resume` picker draws: no entry is assembled or decoded beyond its head, an entry near a read boundary is taken exactly once, activity time comes from the last user or assistant entry rather than the file's mtime, and message-body search text refills in the background instead of blocking the picker.
+30. A keystroke or bracketed paste reaching the fullscreen editor dismisses the mouse selection without consuming the input; mouse gestures, viewport keys, key releases, terminal reports, and an in-progress drag leave it standing, and renderers without the selection surface install nothing.
+31. `/fast` affects only the current session and every new session starts with it off, while `/fast-global` persists the provider's `fast` key and reaches every running session's next request; the overlay adds the priority tier only for catalog-capable models of the configured provider, strips exactly that tier when Fast is off, and never touches other providers' requests or `modelRegistry.complete` side calls.
 
 ## Documentation map
 
 Each document owns one runtime concern.
 
-- [lifecycle](./lifecycle.md) — startup, session listing, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, smart selection, the jump-to-bottom button, the prompt jump chips, autocomplete details, footer decoration, the commit message guard, and transient stream retry.
+- [lifecycle](./lifecycle.md) — startup, session listing, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, smart selection, selection dismissal, fast tier scopes, the jump-to-bottom button, the prompt jump chips, autocomplete details, footer decoration, the commit message guard, and transient stream retry.
 - [storage](./storage.md) — project paths, JSONL format, permissions, bounded reads, limits, and compaction.
 - [operations](./operations.md) — package identity, installation, runtime requirements, and data removal.
 - [tests](./tests.md) — deterministic history, recorder, autocomplete, fullscreen key routing, footer styling, and real-filesystem store coverage.

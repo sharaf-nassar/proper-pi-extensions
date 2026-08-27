@@ -267,7 +267,7 @@ function renderCollapsed(
 		) {
 			group.push(child);
 		} else {
-			lines.push(...child.render(width));
+			lines.push(...renderExpandable(child, width, state));
 		}
 	}
 	flush();
@@ -364,10 +364,36 @@ function renderGroup(
 			continue;
 		}
 		if (!state.owned.has(child)) {
-			lines.push(...child.render(width));
+			lines.push(...renderExpandable(child, width, state));
 			continue;
 		}
-		lines.push(...withVerticalSpacing(child.render(width)));
+		lines.push(...withVerticalSpacing(renderExpandable(child, width, state)));
+	}
+	return lines;
+}
+
+/**
+ * Extension entry renderers draw their own disclosure marker from Pi's global
+ * tool-expansion state, so without a hit row the marker is decoration that only
+ * `app.tools.expand` moves. Drive the same per-item state the tool summaries use
+ * and register the header row, so one entry opens on click.
+ */
+function renderExpandable(
+	child: Component,
+	width: number,
+	state: State,
+): string[] {
+	const expandable = child as ToolComponent;
+	if (typeof expandable.setExpanded !== "function") return child.render(width);
+	expandable.setExpanded(state.expanded.get(child) ?? state.globalExpanded);
+	const lines = child.render(width);
+	const header = lines.find((line) => stripTerminalSequences(line).trim());
+	if (header) {
+		state.pendingHits.push({
+			owner: child,
+			line: header,
+			end: visibleWidth(stripTerminalSequences(header).trimEnd()),
+		});
 	}
 	return lines;
 }

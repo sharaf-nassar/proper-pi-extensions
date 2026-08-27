@@ -62,7 +62,16 @@ test("cancelling an unprocessed prompt restores it and leaves its session branch
 		getFocusedComponent: () => editor,
 	};
 	const sessionManager = {
-		getBranch: () => [...entries],
+		getBranch: (fromId?: string) => {
+			const byId = new Map(entries.map((entry) => [entry.id, entry]));
+			const path: any[] = [];
+			let current = byId.get(fromId ?? leafId ?? "");
+			while (current) {
+				path.push(current);
+				current = current.parentId ? byId.get(current.parentId) : undefined;
+			}
+			return path.reverse();
+		},
 		getEntries: () => [...entries],
 		getSessionFile: () => undefined,
 		getLeafId: () => leafId,
@@ -191,6 +200,60 @@ test("cancelling an unprocessed prompt restores it and leaves its session branch
 		);
 		terminalInput?.("\x1b");
 		assert.equal(editorText, "");
+
+		// An extension that wraps Pi's input dispatch appends its own transcript
+		// entry between submission and the user message, so that entry is the
+		// prompt's parent and must leave the branch with it.
+		entries.length = 0;
+		editorText = "";
+		sentCommand = undefined;
+		navigatedTo = undefined;
+		entries.push({
+			type: "message",
+			id: "prior-assistant",
+			parentId: null,
+			message: { role: "assistant", content: [], timestamp: 700 },
+		});
+		leafId = "prior-assistant";
+		editor.onSubmit?.("pacified prompt");
+		entries.push({
+			type: "custom",
+			customType: "proper-pacify",
+			id: "pacify-entry",
+			parentId: leafId,
+		});
+		leafId = "pacify-entry";
+		await handlers.get("input")?.(
+			{ source: "interactive", text: "pacified prompt" },
+			ctx,
+		);
+		const pacifiedMessage = {
+			role: "user",
+			content: [{ type: "text", text: "pacified prompt" }],
+			timestamp: 789,
+		};
+		await handlers.get("message_start")?.({ message: pacifiedMessage }, ctx);
+		entries.push({
+			type: "message",
+			id: "pacified-entry",
+			parentId: "pacify-entry",
+			message: pacifiedMessage,
+		});
+		leafId = "pacified-entry";
+
+		terminalInput?.("\x1b");
+		assert.equal(editorText, "pacified prompt");
+		await handlers.get("agent_settled")?.({}, ctx);
+		assert.equal(sentCommand, "/__proper-cancel-prompt");
+		await commandHandler?.("", {
+			...ctx,
+			navigateTree: async (targetId: string) => {
+				navigatedTo = targetId;
+				return { cancelled: false };
+			},
+		});
+		assert.equal(navigatedTo, "prior-assistant");
+		assert.equal(entries.at(-1)?.id, "pacified-entry");
 	} finally {
 		await rm(cwd, { recursive: true, force: true });
 	}

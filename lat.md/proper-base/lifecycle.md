@@ -148,9 +148,11 @@ The same provider wrapper sorts every `/model ` result by displayed model ID des
 
 ## Prompt newline keys
 
-Shift+Enter and Alt+Enter insert new lines in the prompt.
+Alt+Enter joins Pi's own newline chords instead of queuing a follow-up.
 
-proper-base ensures both chords belong to `tui.input.newLine` while preserving other newline aliases such as Ctrl+J. Alt+Enter is removed from `app.message.followUp`, whose application-level handling would otherwise consume the chord before the editor can insert a line. The bindings are reapplied after native keybinding reloads.
+Shift+Enter and Ctrl+J are already Pi's `tui.input.newLine` defaults, so proper-base does not restate them; a user who rebinds that action keeps exactly the aliases they chose. Only Alt+Enter is added, and only because it must first leave `app.message.followUp`, whose application-level handling would otherwise consume the chord before the editor can insert a line. The binding is reapplied after native keybinding reloads.
+
+Whether Shift+Enter reaches Pi at all is a terminal concern, not an extension one: the chord is distinguishable only when the terminal reports modifiers through the Kitty keyboard protocol or a compatible xterm encoding. Alt+Enter is the alias that survives terminals without it.
 
 ## Prompt clearing and exit
 
@@ -182,6 +184,8 @@ Idle rendering walks components in their original transcript order. Thinking blo
 
 Components appended while Pi is idle are not agent-owned and keep native rendering. This preserves output from slash commands such as `/session`, extension notifications, and other command UI instead of relabeling them as model updates.
 
+Extension entry components that carry expansion state are driven from the same per-item state and register their first non-blank rendered row as a click target. Their renderers draw their own header and disclosure marker, so proper-base neither relabels them nor adds a bottom collapse control; without the hit row those markers would move only under `app.tools.expand`.
+
 Each detail summary has independent expansion state. Summary headers use a bold `›` or `⌄` disclosure marker in the theme's brighter `borderAccent` color; click and keybinding instructions are omitted. Type remains explicit in text and also receives a stable semantic color: tools use `mdLink`, and failures use `error`. The same semantic color carries onto that item's bottom collapse control, while labels and disclosure markers keep meaning available without color. Rendering records each header and collapse control's document row and clickable width without emitting an OSC 8 URI, so terminals do not expose internal controls as hyperlinks.
 
 In fullscreen mode, a mouse listener converts a left click into the primary scroll view's content row, confirms that the expected control is visible there, toggles only that item, fully expands a selected tool card, and consumes the press and release before Pi begins text selection. Pi advances the scroll offset the moment a wheel or keyboard scroll arrives but repaints on a throttle, so a click that follows a scroll can map to a content row the painted frame never showed. When the mapped row does not carry the expected control, the listener falls back to the painted screen line and toggles it only when exactly one control matches that text. Expanded detail ends with a compact left-aligned inverse-video `collapse` control, so long items can close without returning to their header. Pi's configured `app.tools.expand` binding remains a global expand/collapse fallback and resets per-item overrides when used.
@@ -211,6 +215,16 @@ Pi's fullscreen renderer already maps mouse coordinates into scroll-view content
 Unrecognized text, prompt and footer rows, regular TUI mode, and renderer shapes without both internal selection methods use Pi's native word selection unchanged. The wrapper restores the original method during session shutdown and refuses to stack on repeated editor-factory installation.
 
 This is deliberately a guarded compatibility layer over private pi-tui methods because the extension API exposes no selection-range hook. A future rename disables token expansion rather than mouse selection. Tokens split across rendered rows remain separate, and proper-base's clickable compact tool and error rows keep their single-click expansion behavior instead of participating in double-click selection.
+
+## Selection dismissal
+
+A fullscreen mouse selection disappears on the next keystroke or paste instead of surviving typing as a stale highlight.
+
+Pi's renderer clears its selection on focus loss and on the next mouse press, but never on keyboard input, and the highlight is anchored to screen rows rather than content: left standing, it repaints whatever each new frame places on those rows while typing changes the transcript beneath it. The clipboard copy already happened on mouse release, so dropping the highlight loses nothing.
+
+An input listener registered after the renderer's constructor-installed viewport listener sees only input the viewport declined, so mouse gestures, wheel events, and viewport scroll keys keep the selection, matching terminal convention. Input without an escape prefix, a bracketed paste, and any parseable key dismiss it; key-release events and terminal reports such as cell-size responses do not, and a selection still being dragged is left to its own gesture. Dismissal resets the same private fields the renderer's focus-loss branch resets and never consumes the input, so the keystroke still reaches the editor.
+
+Like smart selection, this is a guarded compatibility layer over private renderer state: regular mode and renderer shapes without the selection surface install nothing, and a field rename disables dismissal rather than breaking selection. The renderer outlives an extension reload, so installation takes over the previous instance's listener and a stale disposer is identity-guarded into a no-op.
 
 ## Jump-to-bottom button
 
@@ -262,7 +276,9 @@ proper-base tracks each submitted plain prompt until assistant processing begins
 
 Editor submission captures text before Pi's input pipeline, while input and message events attach the accepted user-message timestamp and processing state. A terminal-input listener watches Esc only while the editor is focused and autocomplete is closed.
 
-If Esc arrives before assistant processing, the prompt text is restored to the editor immediately. After the aborted run settles, proper-base invokes an internal extension command with command-context access and navigates to the cancelled user entry. Navigating to a user entry moves the active leaf to its parent, rebuilds agent context, and rerenders the transcript; when the user entry is already the leaf, a hidden custom anchor first makes navigation non-no-op. The append-only JSONL retains the abandoned branch, but the active transcript and future model context exclude it.
+If Esc arrives before assistant processing, the prompt text is restored to the editor immediately. After the aborted run settles, proper-base invokes an internal extension command with command-context access and navigates back to the session leaf the submission started from. Navigating to that entry moves the active leaf onto it, rebuilds agent context, and rerenders the transcript; when it is already the leaf, a hidden custom anchor first makes navigation non-no-op. The append-only JSONL retains the abandoned branch, but the active transcript and future model context exclude it.
+
+The origin leaf is read at editor submission rather than on the `input` event, because an extension that wraps Pi's input dispatch, such as proper-pacify, has already appended its own transcript entry by the time that event arrives. Those entries are the prompt entry's parents, so navigating to the prompt alone would strand them as rows describing a prompt no longer in the session. The origin is used only when it is still an ancestor of the cancelled prompt and is not itself a user or custom message, whose navigation semantics would drop an earlier turn; otherwise navigation falls back to the cancelled user entry. A submission that begins at an empty session has no origin entry, so entries appended ahead of that first prompt remain as the branch root.
 
 The pre-input submission capture also covers cancellation during llm-router judging, when no Pi user entry exists yet: the router discards the prompt, and proper-base restores its text without branch navigation. Streaming steering or follow-up submissions clear this early capture and remain owned by Pi's native queue restoration. Once an assistant message starts, cancellation keeps Pi's normal behavior and does not remove the turn. Escape used by autocomplete or another focused component is ignored.
 
@@ -291,6 +307,16 @@ A `message_end` handler makes CLIProxyAPI's `empty_stream` failure retryable ins
 CLIProxyAPI can close a stream before the first payload; pi-ai surfaces this as a `Codex error: empty_stream: upstream stream closed before first payload` assistant error that matches none of pi's retryable patterns, so the turn dies. The handler rewrites such errored assistant messages with the `network error:` prefix, after which pi's normal retry budget and backoff apply.
 
 Matching is by error text alone, not provider ID, because the wording is CPA-specific. Already-prefixed messages pass through untouched, so the normalizer composes with the provider package's own `message_end` normalizer, which covers different patterns; pi chains `message_end` transforms across extensions in load order.
+
+## Fast tier scopes
+
+`/fast` turns CLIProxyAPI's priority service tier on for the current session only, while `/fast-global` turns it on live for every session.
+
+The CLIProxyAPI provider's own `/fast` persists one flag and reads it back only at extension load, which is neither scope: it changes the running session immediately, changes other sessions only after their restart, and silently becomes every future session's default. proper-base owns the final decision instead. A `before_provider_request` handler — which pi's agent loop runs for its own requests while `modelRegistry.complete` side calls such as proper-llm-router's judge never pass through it — rewrites only payloads for the configured provider id: when Fast is effective and the provider's cached catalog marks the model capable it adds `service_tier: "priority"`, and when Fast is off it strips exactly that value, so a provider instance still injecting from a stale in-memory flag is corrected on its next request. Because the provider applies its own injection before pi's payload hooks, the correction holds regardless of extension load order.
+
+Effective Fast is the session flag or the global flag. The session flag lives in extension memory, is never written to disk, and resets on `session_start`, so a new, cleared, or restored session always starts without it. The global flag is the provider's own persisted `fast` key in `cliproxyapi.json`, re-read on every request exactly as the provider's pause gate re-reads its flag: `/fast-global` in one session reaches every running session's next request, and a newly started session seeds the provider's native Fast — including its pricing refresh and footer chip — from the same key. `CLIPROXYAPI_FAST` keeps the provider's boolean grammar and overrides the file when set, and the toggle write preserves the config file's other keys and format.
+
+pi resolves extension commands before the `input` event and suffixes duplicate command names, so the provider's global `/fast` can be neither re-registered nor intercepted downstream. The submit recorder therefore consumes a bare `/fast` at the editor, before pi parses commands, and flips the session flag; `/fast-global` is an ordinary new command with no collision. Both report the scope they changed, warn when the current model cannot use the tier, and name the other scope when it keeps Fast effectively on after a disable. `/fast` with arguments falls through to the provider's usage error, and non-editor input paths such as RPC still reach the provider's original command. Toggling through the overlay leaves the provider's model-pricing refresh and footer chip on their own lifecycle: requests carry the right tier everywhere immediately, while a running session's cost metadata and chip catch up only when the provider itself reloads.
 
 ## Reload and composition
 

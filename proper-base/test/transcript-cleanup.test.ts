@@ -86,6 +86,84 @@ class ToolExecutionComponent {
 	invalidate() {}
 }
 
+// Pi's CustomEntryComponent: expansion state lives on the host wrapper, and the
+// extension renderer draws its own disclosure marker from it.
+class CustomEntryComponent {
+	private expanded = false;
+	setExpanded(expanded: boolean) {
+		this.expanded = expanded;
+	}
+	render() {
+		return this.expanded
+			? ["", " ⌄ pacifying with m", " original prompt", ""]
+			: ["", " › pacifying with m", ""];
+	}
+	invalidate() {}
+}
+
+// @lat: [[lat.md/proper-base/tests#Verification#Settled transcript fixture]]
+test("clicking a custom entry header expands that entry", () => {
+	const chat = new Container();
+	const listeners = new Set<(data: string) => unknown>();
+	const document = new Container();
+	document.addChild(new Container());
+	document.addChild(new Container());
+	document.addChild(chat);
+	const tui = {
+		children: [document],
+		inputListeners: listeners,
+		previousScreen: [] as string[],
+		requestRender() {},
+		addInputListener(listener: (data: string) => unknown) {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+		getPrimaryScrollView: () => ({}),
+		getScrollSelectionPoint: (_view: unknown, x: number, y: number) => ({
+			row: y,
+			col: x,
+		}),
+		terminal: { rows: 24 },
+	};
+	const ctx = {
+		isIdle: () => true,
+		ui: {
+			getToolsExpanded: () => false,
+			theme: {
+				fg: (_color: string, text: string) => text,
+				bold: (text: string) => text,
+				italic: (text: string) => text,
+			},
+		},
+	};
+	const controller = installTranscriptCleanup(tui as never, ctx as never);
+	assert.ok(controller);
+	chat.addChild(new UserMessageComponent("fix it"));
+	chat.addChild(new CustomEntryComponent());
+	controller.settle();
+
+	const rendered = chat.render(80);
+	const headerRow = rendered.findIndex((line) =>
+		stripTerminalSequences(line).includes("› pacifying with m"),
+	);
+	assert.ok(headerRow >= 0);
+	tui.previousScreen = rendered.slice(0, 24);
+	let consumed = false;
+	for (const listener of listeners) {
+		const click = `\x1b[<0;3;${headerRow + 1}M`;
+		if ((listener(click) as { consume?: boolean } | undefined)?.consume) {
+			consumed = true;
+			break;
+		}
+	}
+	assert.equal(consumed, true);
+	assert.match(
+		chat.render(80).map(stripTerminalSequences).join("\n"),
+		/original prompt/,
+	);
+	controller.uninstall();
+});
+
 test("agent settlement restores the collapsed process-detail default", async () => {
 	let settled: ((event: unknown, ctx: any) => void) | undefined;
 	properBase({
