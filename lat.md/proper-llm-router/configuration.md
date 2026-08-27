@@ -40,7 +40,7 @@ The full JSON editor merges the submitted object over built-in defaults before s
 
 Most config changes affect the next routed prompt without restarting pi.
 
-The lazy exemplar index is loaded once per process. Changing `exemplarsPath` after first use needs a process restart to take effect. Quota account data may remain cached for 60 seconds as described under `Caches and simulation` in `availability.md`.
+The lazy exemplar index is loaded once per corpus path, so changing `exemplarsPath` takes effect on the next routed prompt while in-place corpus edits still need a restart. Quota account data may remain cached for 60 seconds as described under `Caches and simulation` in `availability.md`.
 
 Judge model overrides affect the next judged prompt. They do not affect command pins or sentinels, and they do not require a restart.
 

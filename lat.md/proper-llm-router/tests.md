@@ -70,6 +70,14 @@ They cover the built-in `/refine` pin, keys with and without `/`, case-insensiti
 
 These assertions exercise `commandPin()` as pure matching logic. They do not prove that the pi input event skips the judge, applies quota swapping, switches the model, or sets thinking effort; those behaviors remain integration-only.
 
+## Exemplar fixtures
+
+The exemplar fixtures verify retrieval thresholds and corpus lifecycle against temporary corpus files.
+
+They cover an overlapping query returning its measured row, an exact corpus prompt excluded as its own answer key, disjoint vocabulary scoring below the relatedness floor, `exemplarNote()` following a changed `exemplarsPath` without a restart, and task text beyond the judge's 4,000-character slice contributing nothing to similarity.
+
+These assertions exercise `ExemplarIndex` and `exemplarNote()`. Malformed corpus handling and in-place file edits remain uncovered.
+
 ## Extension-origin input fixture
 
 The extension-origin fixture invokes the registered input handler with the same `/skill:ponytail-audit` message produced by an extension command alias.
@@ -100,9 +108,9 @@ It records the real `/llm-router-config` menu, requires quota and management-key
 
 `test/ultra-thinking.test.ts` exercises the reload-safe prototype helpers against fake classes without editing pi internals. Its payload check imports the Pi 0.84.2 runtime pinned by the package lock.
 
-It verifies the shared thinking-level list ends in `ultra`, model capability filtering requires a non-empty `thinkingLevelMap.ultra`, native available-level discovery appends `ultra` only for supported models, unsupported transitions clamp to the highest available level, repeated installation does not stack patches, and the editor border reuses pi's maximum-effort theme color. A second fixture captures Pi's bundled OpenAI Responses payload before network I/O and verifies the model mapping sends `reasoning.effort: "ultra"`.
+It verifies the shared thinking-level list ends in `ultra`, model capability filtering requires a non-empty `thinkingLevelMap.ultra`, native available-level discovery appends `ultra` only for supported models, unsupported transitions clamp to the highest available level, repeated installation does not stack patches, and the editor border reuses pi's maximum-effort theme color. A resolution fixture asserts the module-load shim reached the pinned runtime's real `AgentSession` and `Theme` classes through the public package export — the global patch markers are present and reinstallation takes the idempotent no-op path. A second fixture captures Pi's bundled OpenAI Responses payload before network I/O and verifies the model mapping sends `reasoning.effort: "ultra"`.
 
-The fixture does not instantiate a complete `AgentSession`, settings selector, or interactive mode. A host-process smoke check is still required when pi changes its module layout or method names.
+The fixture does not instantiate a complete `AgentSession`, settings selector, or interactive mode. A host-process smoke check is still required when pi renames the exported classes or their thinking-level methods.
 
 ## Offline integrated route
 
@@ -124,7 +132,7 @@ Strict compiler, lint, and coverage checks prevent new dynamic-data shortcuts fr
 
 The smoke harness does not exercise every extension behavior.
 
-There are no automated fixtures for successful management API usage parsing, cache expiry and cached failures, config schema errors, exemplar similarity thresholds, malformed corpus handling, exact threshold equality, judge retries, network timeouts, Esc cancellation, repeated or empty sentinels, router-command namespace bypass, notice text, full pi dispatch ordering, failed `setModel`, complete native thinking-picker interaction, live override availability, override-picker persistence, judge-picker persistence, masked secret input, JSON editor saving, or placeholder safety when models are absent.
+There are no automated fixtures for successful management API usage parsing, cache expiry and cached failures, config schema errors, malformed corpus handling, exact threshold equality, judge retries, network timeouts, Esc cancellation, repeated or empty sentinels, router-command namespace bypass, notice text, full pi dispatch ordering, failed `setModel`, complete native thinking-picker interaction, live override availability, override-picker persistence, judge-picker persistence, masked secret input, JSON editor saving, or placeholder safety when models are absent.
 
 The offline smoke proves one integrated verdict but does not instantiate a complete Pi `AgentSession`. Changes in uncovered host-integration areas need focused manual checks or new fixtures.
 

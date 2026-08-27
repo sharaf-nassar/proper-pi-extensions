@@ -147,6 +147,24 @@ test("the reading counts prompts only while scrolled away from output", () => {
 	assert.equal(reading(empty.paint(40)), "");
 });
 
+test("the cached reading tracks appended prompts and scrolling", () => {
+	const content = [USER, "body"];
+	const app = harness(content);
+
+	assert.equal(reading(app.paint(40)), "1/1");
+	// A frame that changes neither the line count nor the scroll position
+	// serves the cached reading.
+	assert.equal(reading(app.paint(40)), "1/1");
+
+	// Streaming appends invalidate through the line count.
+	content.push(ASSISTANT, USER);
+	assert.equal(reading(app.paint(40)), "1/2");
+
+	// Scrolling invalidates through the viewport position.
+	app.setTop(3);
+	assert.equal(reading(app.paint(40)), "2/2");
+});
+
 test("the chips keep the background of the row they cover", () => {
 	const app = harness([USER]);
 	const banner = `\x1b[48;5;237m${" ".repeat(40)}\x1b[49m`;

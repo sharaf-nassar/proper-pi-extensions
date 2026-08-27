@@ -5,7 +5,12 @@ import {
 	installUltraThinkingPrototype,
 	THINKING_LEVELS,
 	thinkingLevelsForModel,
+	ULTRA_THINKING_SHIM_INSTALLED,
 } from "../llm-router.ts";
+import {
+	AgentSession,
+	Theme,
+} from "../node_modules/@earendil-works/pi-coding-agent/dist/index.js";
 import { stream as streamOpenAIResponses } from "../node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js";
 
 class FakeSession {
@@ -63,6 +68,38 @@ test("ultra is exposed only for models that advertise it", () => {
 	assert.equal(
 		session._clampThinkingLevel("ultra", ["off", "xhigh", "max"]),
 		"max",
+	);
+});
+
+test("the shim reaches the host classes through the public package export", () => {
+	// The bare specifier resolves to the same module instance in this
+	// process, so the markers prove the module-load shim patched the real
+	// pinned-runtime classes rather than a private dist path.
+	const marker = (prototype: object, key: string): unknown =>
+		(prototype as unknown as Record<symbol, unknown>)[Symbol.for(key)];
+	assert.equal(ULTRA_THINKING_SHIM_INSTALLED, true);
+	assert.equal(
+		marker(AgentSession.prototype, "proper-llm-router.ultra-session-patch"),
+		true,
+	);
+	assert.equal(
+		marker(Theme.prototype, "proper-llm-router.ultra-theme-patch"),
+		true,
+	);
+	// Same class identity: reinstalling is the idempotent no-op path.
+	assert.equal(
+		installUltraThinkingPrototype(
+			AgentSession as unknown as Parameters<
+				typeof installUltraThinkingPrototype
+			>[0],
+		),
+		false,
+	);
+	assert.equal(
+		installUltraThemePrototype(
+			Theme as unknown as Parameters<typeof installUltraThemePrototype>[0],
+		),
+		false,
 	);
 });
 

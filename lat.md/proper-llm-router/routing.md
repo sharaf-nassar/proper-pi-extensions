@@ -43,7 +43,7 @@ The measured latency covers both the judge request and the concurrent availabili
 
 The judge always runs through Pi's configured provider runtime.
 
-The strict `route_model` tool requires `model` and `rationale`, rejects extra fields, and limits `model` to the seven stable arm keys. Override targets appear only in system-message labels, paired with their selection keys. The task is truncated to 4,000 characters. Rationale permits 500 characters; UI displays 150.
+The strict `route_model` tool requires `model` and `rationale`, rejects extra fields, and limits `model` to the seven stable arm keys. Override targets appear only in system-message labels, paired with their selection keys. The task is truncated to 4,000 characters, and exemplar retrieval scores the same slice. Rationale permits 500 characters; UI displays 150.
 
 Qualified and unqualified judge names resolve against `ctx.modelRegistry.getAvailable()`. `ctx.modelRegistry.complete()` delegates credentials, endpoint selection, headers, provider serialization, and OAuth refresh to Pi. An unresolved judge fails visibly and the input handler uses `fallbackModel`; llm-router has no raw endpoint or provider-key fallback.
 

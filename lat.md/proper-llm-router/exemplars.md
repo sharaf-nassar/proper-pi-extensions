@@ -45,6 +45,8 @@ Tokenization lowercases words, keeps alphanumeric or underscore tokens beginning
 
 Retrieval sorts by cosine similarity, excludes scores below `0.05` as unrelated, excludes scores above `0.95` as near-identical answer keys, and keeps at most three rows.
 
+Document vectors are normalized once at index construction, so each query costs one dot product per row instead of re-weighting the whole corpus per call. Queries score only the first 4,000 characters of the task — the same slice the judge reads — so retrieval reflects the text behind the verdict.
+
 ## Judge note
 
 `exemplarNote()` turns retrieved rows into a short system-prompt appendix.
@@ -57,7 +59,7 @@ The note tells the judge to weigh reliable outcomes heavily. It augments the sta
 
 The corpus loads lazily on the first routed prompt that requests exemplars.
 
-A missing file, unreadable file, invalid JSON line, or row that fails during index construction disables exemplars for the rest of the process. Routing continues with the static rubric. The singleton index is not keyed by path, so editing the file or changing `exemplarsPath` requires restarting pi.
+A missing file, unreadable file, invalid JSON line, or row that fails during index construction disables exemplars for that path. Routing continues with the static rubric. The index is keyed by `exemplarsPath`, so a changed configured path takes effect on the next routed prompt and a load failure is retried only when the path changes; editing the corpus file in place still requires restarting pi.
 
 The loader does not validate the row schema. A structurally bad row that still indexes, such as one with invalid `rates`, can fail later while building the judge note; that failure follows the normal judged-path fallback rather than cleanly disabling exemplars.
 

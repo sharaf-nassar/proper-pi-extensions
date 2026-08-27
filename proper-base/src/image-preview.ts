@@ -502,7 +502,11 @@ export function installImagePreview(
 	target.render = (width: number) => {
 		const lines = render.call(target, width);
 		sync(target.getText?.() ?? "");
-		margin.bottom = lines.length + rowsBelow(tui, target, width);
+		// rowsBelow re-renders every component below the editor, so frames
+		// without a visible preview skip the measurement entirely.
+		if (isVisible()) {
+			margin.bottom = lines.length + rowsBelow(tui, target, width);
+		}
 		return lines;
 	};
 	target[INSTALLED] = controller;

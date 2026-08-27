@@ -136,9 +136,10 @@ function isPromptRow(line: string): boolean {
  * above the first prompt reports position zero, so one down click always
  * advances the reading by one.
  */
-function promptCount(view: Scroller): string | undefined {
-	const lines = contentLines(view) ?? [];
-	const top = view.viewportTop;
+function promptCount(
+	lines: readonly string[],
+	top: number,
+): string | undefined {
 	let current = 0;
 	let total = 0;
 	for (let row = 0; row < lines.length; row++) {
@@ -194,6 +195,14 @@ export function installPromptJump(
 	target[INSTALLED]?.();
 
 	let hit: Hit | undefined;
+	// The prompt scan walks every transcript line and runs once per frame
+	// while the viewport is scrolled up, so it is cached on the pair that
+	// changes when the reading can change.
+	// ponytail: keyed on (line count, scroll top) — an in-place rewrite that
+	// keeps the length can show a stale reading until either key moves.
+	let countCache:
+		| { length: number; top: number; value: string | undefined }
+		| undefined;
 	const chipWidth = visibleWidth(UP) + visibleWidth(DOWN);
 	const hadOwnMethod = Object.hasOwn(view, "compositeFlashes");
 	const flashes = view.compositeFlashes;
@@ -218,7 +227,23 @@ export function installPromptJump(
 		);
 		// The reading only answers "where am I", so it stays out of the way while
 		// the viewport is already following the newest output.
-		const count = view.isFollowingOutput ? undefined : promptCount(view);
+		let count: string | undefined;
+		if (!view.isFollowingOutput) {
+			const lines = contentLines(view) ?? [];
+			const top = view.viewportTop;
+			if (
+				!countCache ||
+				countCache.length !== lines.length ||
+				countCache.top !== top
+			) {
+				countCache = {
+					length: lines.length,
+					top,
+					value: promptCount(lines, top),
+				};
+			}
+			count = countCache.value;
+		}
 		if (count) {
 			const countWidth = visibleWidth(count);
 			// Centred on the chips rather than the screen edge: the chips carry a

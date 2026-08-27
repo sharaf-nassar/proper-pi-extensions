@@ -48,6 +48,62 @@ test("large previews use bounded thumbnail payloads", () => {
 	}
 });
 
+test("frames without a visible preview skip measuring rows below the editor", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "proper-base-image-margin-"));
+	const imagePath = join(
+		dir,
+		"pi-clipboard-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.png",
+	);
+	await writeFile(imagePath, PNG_1X1);
+	let text = "";
+	let belowRenders = 0;
+	const editor = {
+		onChange: undefined as ((value: string) => void) | undefined,
+		getText: () => text,
+		setText(value: string) {
+			text = value;
+			this.onChange?.(text);
+		},
+		insertTextAtCursor(value: string) {
+			text += value;
+			this.onChange?.(text);
+		},
+		render: (_width: number) => [text],
+		invalidate() {},
+	};
+	const below = {
+		render() {
+			belowRenders++;
+			return ["footer"];
+		},
+		invalidate() {},
+	};
+	const tui = {
+		children: [editor, below],
+		terminal: { rows: 24 },
+		requestRender() {},
+		showOverlay: () => ({ hide() {} }),
+	};
+
+	try {
+		installImagePreview(editor, tui as never, {
+			fallbackColor: (value) => value,
+		});
+
+		// Idle frames must not re-render the components below the editor just
+		// to position an overlay that cannot show.
+		editor.render(20);
+		assert.equal(belowRenders, 0);
+
+		editor.insertTextAtCursor(imagePath);
+		assert.equal(text, "[image 1]");
+		editor.render(20);
+		assert.ok(belowRenders > 0);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
 test("thumbnail completion promotes path fallback to Kitty preview", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "proper-base-image-thumbnail-"));
 	const imagePath = join(

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { stripTerminalSequences } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, type TUI } from "@earendil-works/pi-tui";
 import properBase from "../index.ts";
 import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import {
@@ -61,6 +61,44 @@ test("hidden autocomplete details release their TUI overlay", async () => {
 	assert.equal(isOverlayVisible?.(), false);
 	await Promise.resolve();
 	assert.equal(activeOverlays, 0);
+});
+
+test("no selected description skips measuring rows below the editor", () => {
+	let description: string | undefined;
+	let belowRenders = 0;
+	const editor = {
+		autocompleteList: {
+			getSelectedItem: () => (description ? { description } : null),
+		},
+		render: (_width: number) => ["editor"],
+		invalidate() {},
+	};
+	const below = {
+		render() {
+			belowRenders++;
+			return ["footer"];
+		},
+		invalidate() {},
+	};
+	const tui = {
+		children: [editor, below],
+		terminal: { rows: 24 },
+		showOverlay: () => ({ hide() {} }),
+	};
+
+	installAutocompleteDetails(editor, tui as unknown as TUI, {
+		borderColor: (text: string) => text,
+		selectList: { description: (text: string) => text },
+	});
+
+	// Idle frames must not re-render the components below the editor just to
+	// position an overlay that cannot show.
+	editor.render(20);
+	assert.equal(belowRenders, 0);
+
+	description = "details";
+	editor.render(20);
+	assert.ok(belowRenders > 0);
 });
 
 test("inline slash autocomplete targets only the active command", async () => {

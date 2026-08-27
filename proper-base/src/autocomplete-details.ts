@@ -19,6 +19,16 @@ const INLINE_SLASH_INSTALLED = Symbol.for(
 	"pi-proper-base.inline-slash-autocomplete",
 );
 
+/**
+ * One collator for the `/model` sort. `localeCompare` with an options object
+ * constructs a collator per call, which the per-keystroke sort would pay
+ * hundreds of times per keypress.
+ */
+const MODEL_ORDER = new Intl.Collator("en", {
+	numeric: true,
+	sensitivity: "base",
+});
+
 type AutocompleteEditor = Component & {
 	autocompleteList?: {
 		getSelectedItem(): { description?: string } | null;
@@ -192,10 +202,8 @@ export function sortModelAutocompleteDescending(
 				...suggestions,
 				items: [...items].sort(
 					(a, b) =>
-						b.label.localeCompare(a.label, "en", {
-							numeric: true,
-							sensitivity: "base",
-						}) || b.value.localeCompare(a.value),
+						MODEL_ORDER.compare(b.label, a.label) ||
+						b.value.localeCompare(a.value),
 				),
 			};
 		},
@@ -335,9 +343,17 @@ export function installAutocompleteDetails(
 	const render = target.render.bind(target);
 	target.render = (width: number) => {
 		const lines = render(width);
+		// rowsBelow re-renders every component below the editor, so frames
+		// without a selected description skip the measurement entirely.
+		const description = target.autocompleteList?.getSelectedItem()?.description;
+		if (!description) {
+			detail.setDescription(undefined, 0);
+			releaseOverlay();
+			return lines;
+		}
 		margin.bottom = lines.length + rowsBelow(tui, target, width);
 		detail.setDescription(
-			target.autocompleteList?.getSelectedItem()?.description,
+			description,
 			Math.max(0, tui.terminal.rows - margin.bottom),
 		);
 		if (detail.isVisible() && isMounted(tui, target)) ensureOverlay();

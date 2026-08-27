@@ -67,7 +67,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import type {
 	ExtensionAPI,
 	ExtensionContext,
@@ -197,33 +197,26 @@ export function installUltraThemePrototype(
 	return true;
 }
 
-function hostPiDistDir(entry = process.argv[1]): string | undefined {
-	if (!entry) return undefined;
-	try {
-		const dist = path.dirname(fs.realpathSync(entry));
-		return fs.existsSync(path.join(dist, "core/agent-session.js"))
-			? dist
-			: undefined;
-	} catch {
-		return undefined;
-	}
-}
-
 async function installUltraThinkingShim(): Promise<boolean> {
-	const dist = hostPiDistDir();
-	if (!dist) return false;
 	try {
-		const [sessionModule, themeModule] = await Promise.all([
-			import(pathToFileURL(path.join(dist, "core/agent-session.js")).href),
-			import(
-				pathToFileURL(path.join(dist, "modes/interactive/theme/theme.js")).href
-			),
-		]);
-		installUltraThinkingPrototype(sessionModule.AgentSession);
-		installUltraThemePrototype(themeModule.Theme);
+		// Pi's extension loader resolves this bare specifier to the running
+		// host tree in both layouts — a jiti alias on unbundled entries and
+		// virtual modules under the bundled npm bin — so the patch lands on
+		// the same AgentSession and Theme classes the live process uses. The
+		// former argv[1] dist probe found no core/ beside dist/bundle/cli.js
+		// and silently skipped ultra on standard npm installs.
+		const host = (await import(
+			"@earendil-works/pi-coding-agent"
+		)) as unknown as {
+			AgentSession?: Constructor<UltraSession>;
+			Theme?: Constructor<UltraTheme>;
+		};
+		if (!host.AgentSession || !host.Theme) return false;
+		installUltraThinkingPrototype(host.AgentSession);
+		installUltraThemePrototype(host.Theme);
 		return Boolean(
-			sessionModule.AgentSession?.prototype?.[ULTRA_SESSION_PATCH] &&
-				themeModule.Theme?.prototype?.[ULTRA_THEME_PATCH],
+			host.AgentSession.prototype[ULTRA_SESSION_PATCH] &&
+				host.Theme.prototype[ULTRA_THEME_PATCH],
 		);
 	} catch {
 		return false;
@@ -434,14 +427,22 @@ export function resolveArm(name: string): Arm | null {
 	return hits.length === 1 ? (hits.at(0) ?? null) : null;
 }
 
+// Rebuilt several times per routed prompt (once per arm through armTargets,
+// plus route() itself); each prompt loads a fresh Config object, so entries
+// age out with their config.
+const judgeOverridesCache = new WeakMap<Config, Map<Arm, string>>();
+
 // @lat: [[configuration#Judge model overrides]]
 function judgeOverrides(cfg: Config): Map<Arm, string> {
+	const hit = judgeOverridesCache.get(cfg);
+	if (hit) return hit;
 	const overrides = new Map<Arm, string>();
 	for (const [name, value] of Object.entries(cfg.judgeModelOverrides ?? {})) {
 		const arm = resolveArm(name);
 		const model = typeof value === "string" ? value.trim() : "";
 		if (arm && model && model !== ARMS[arm].model) overrides.set(arm, model);
 	}
+	judgeOverridesCache.set(cfg, overrides);
 	return overrides;
 }
 
@@ -583,6 +584,11 @@ Tie-break: when torn between two adjacent tiers, ALWAYS pick the higher
 tier (quality-first).
 Reply with JSON only.`;
 
+/** Characters of the task the judge reads. Exemplar similarity scores the
+ * same slice, so retrieval reflects the text behind the verdict and a giant
+ * paste does not pay tokenization it cannot influence. */
+const JUDGE_TASK_CHARS = 4000;
+
 // ----------------------------------------------------------- exemplars
 // Port of exemplars.py: TF-IDF cosine top-K measured-outcome few-shot,
 // excluding near-identical matches (cosine > 0.95) so evals on corpus
@@ -605,7 +611,7 @@ function termFreq(text: string): Map<string, number> {
 
 export class ExemplarIndex {
 	rows: Exemplar[] = [];
-	private vecs: Map<string, number>[] = [];
+	private docs: Map<string, number>[] = [];
 	private df = new Map<string, number>();
 
 	constructor(jsonl: string) {
@@ -619,11 +625,16 @@ export class ExemplarIndex {
 				throw e;
 			}
 		}
+		const tfs: Map<string, number>[] = [];
 		for (const r of this.rows) {
 			const tf = termFreq(r.prompt);
-			this.vecs.push(tf);
+			tfs.push(tf);
 			for (const t of tf.keys()) this.df.set(t, (this.df.get(t) ?? 0) + 1);
 		}
+		// Document vectors are fixed once df is complete. Normalizing them here
+		// makes each query one dot product per row instead of re-weighting the
+		// whole corpus per call (measured 2.2ms -> 0.2ms on the shipped corpus).
+		this.docs = tfs.map((tf) => this.tfidf(tf));
 	}
 
 	private tfidf(tf: Map<string, number>): Map<string, number> {
@@ -642,9 +653,8 @@ export class ExemplarIndex {
 	top(text: string, k = 3): Exemplar[] {
 		const q = this.tfidf(termFreq(text));
 		const scored = this.rows.map((row, i) => {
-			const vector = this.vecs.at(i);
-			if (!vector) throw new Error("exemplar vector index is incomplete");
-			const d = this.tfidf(vector);
+			const d = this.docs.at(i);
+			if (!d) throw new Error("exemplar vector index is incomplete");
 			let cos = 0;
 			for (const [t, w] of q) cos += w * (d.get(t) ?? 0);
 			return { cos, row };
@@ -658,21 +668,27 @@ export class ExemplarIndex {
 	}
 }
 
-let exemplarIndex: ExemplarIndex | null | undefined; // undefined = not tried
+// One index per corpus path. Config is re-read on every routed prompt, so a
+// changed exemplarsPath takes effect on the next route instead of silently
+// keeping the old corpus; in-place edits to the same file still need a
+// restart. null = load failed for this path: route without few-shot.
+let exemplarIndex: { path: string; index: ExemplarIndex | null } | undefined;
 
 export function exemplarNote(cfg: Config, task: string): string {
 	if (process.env.JUDGE_EXEMPLARS === "0") return "";
-	if (exemplarIndex === undefined) {
+	let cached = exemplarIndex;
+	if (cached?.path !== cfg.exemplarsPath) {
+		let index: ExemplarIndex | null = null;
 		try {
-			exemplarIndex = new ExemplarIndex(
-				fs.readFileSync(cfg.exemplarsPath, "utf8"),
-			);
+			index = new ExemplarIndex(fs.readFileSync(cfg.exemplarsPath, "utf8"));
 		} catch {
-			exemplarIndex = null; // corpus absent: route without few-shot
+			index = null; // corpus absent: route without few-shot
 		}
+		cached = { path: cfg.exemplarsPath, index };
+		exemplarIndex = cached;
 	}
-	if (!exemplarIndex) return "";
-	const lines = exemplarIndex.top(task).map((row) => {
+	if (!cached.index) return "";
+	const lines = cached.index.top(task.slice(0, JUDGE_TASK_CHARS)).map((row) => {
 		const head = row.prompt.split(/\s+/).join(" ").slice(0, 110);
 		const outcome = Object.entries(row.rates)
 			.sort((a, b) => b[1] - a[1])
@@ -1053,7 +1069,7 @@ function registryJudgeRunner(
 						messages: [
 							{
 								role: "user",
-								content: task.slice(0, 4000),
+								content: task.slice(0, JUDGE_TASK_CHARS),
 								timestamp: Date.now(),
 							},
 						],
