@@ -24,6 +24,7 @@ import {
 	installModelAutocompleteSubmit,
 	sortModelAutocompleteDescending,
 } from "./src/autocomplete-details.ts";
+import { installClipboardLeakGuard } from "./src/clipboard-guard.ts";
 import { commitGuardReason } from "./src/commit-guard.ts";
 import {
 	installEditorNavigation,
@@ -247,6 +248,8 @@ function decodeModelReference(value: string): ModelReference | undefined {
 }
 
 export default function (pi: ExtensionAPI) {
+	// @lat: [[lat.md/proper-base/proper-base#proper-base#Clipboard leak guard]]
+	installClipboardLeakGuard();
 	enableScribeImageCapability();
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Session listing]]
 	installFastSessionList(SessionManager, getAgentDir());

@@ -60,6 +60,12 @@ A focus-return fixture models pi-tui's fullscreen upload cache and viewport inpu
 
 A focused cursor fixture uses a fake editor whose `setText()` moves to prompt end. It proves path-to-marker replacement restores the cursor after the marker and deleting one marker character removes the full marker while restoring its former start position. An editor-navigation fixture proves Left and Right jump across a complete multi-digit marker from either boundary or interior, while movement outside it and malformed marker-like text remain native. A real pi-tui `Editor` fixture places the cursor on a complete marker, observes Pi inverse-highlight the whole token, presses Backspace, and verifies native deletion removes the marker and leaves the cursor at its former start; a zero-id malformed marker retains one-character highlighting. A history fixture recalls an image prompt followed by an older plain prompt and verifies marker replacement does not reset Pi's history index, so repeated Up presses keep moving backward.
 
+## Clipboard leak guard fixture
+
+The fixture drives `installClipboardLeakGuard` against fake addon modules and the subprocess reader against an empty `PATH`, with no live clipboard or X server.
+
+It asserts that on Linux the fake addon's `getText` and `hasImage` are replaced while `setText` and `getImageBinary` keep their native functions, that the replacement reader supplies awaited text and reports no image, and that a second installation — standing in for `/reload` against pi's same cached module object — keeps the first wrappers instead of stacking. Off Linux the module must never be resolved, and a missing, malformed, or unresolvable addon fails open. The tool reader returns empty text when no clipboard tool exists on `PATH`, for both the X11 and Wayland tool orders.
+
 ## Image context fixture
 
 A focused fixture verifies old image bytes leave outbound model context without changing the stored messages.

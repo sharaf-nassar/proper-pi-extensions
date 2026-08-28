@@ -15,6 +15,7 @@ The runtime is split by responsibility.
 - `index.ts` wires `session_start`, first-response session naming, model-preserving `/clear`, editor replacement, early-cancel branch recovery, base keybinding overrides, `ask_user_question` cancellation, the commit-guard `tool_call` handler, and the package entry point.
 - `src/autocomplete-details.ts` owns overlay lifecycle, boxed rendering, terminal positioning, selected-description updates, descending `/model` argument ordering, and immediate submission of selected model completions.
 - `src/commit-guard.ts` ports the commit-message validator hook: shell tokenization, direct-invocation and literal-message checks, and 72-column, blank-second-line, trailer, and attribution rules.
+- `src/clipboard-guard.ts` neutralizes the X-connection leak in pi's bundled native clipboard addon by swapping its Linux read entry points for the platform tools pi already trusts.
 - `src/editor-navigation.ts` implements three-stage Ctrl+C clearing and exit, terminal-style Ctrl+R reverse history search, private-segmenter composition for whole-marker highlighting and native atomic deletion, atomic Left/Right movement across image markers, recalled-history cursor placement, and two-stage Home/End behavior while preserving configured keybindings and custom editor fallback.
 - `src/footer-colors.ts` rearranges Pi's built-in footer statistics, applies model and effort colors, and owns the bounded maximum-effort animation timer.
 - `src/jump-to-bottom.ts` renders the scrolled-up jump-to-bottom button as an editor row and claims mouse input ahead of the alternate-screen renderer.
@@ -69,6 +70,17 @@ These rules preserve history and autocomplete details without destabilizing the 
 29. Session listing reads only what the `/resume` picker draws: no entry is assembled or decoded beyond its head, an entry near a read boundary is taken exactly once, activity time comes from the last user or assistant entry rather than the file's mtime, and message-body search text refills in the background instead of blocking the picker.
 30. A keystroke or bracketed paste reaching the fullscreen editor dismisses the mouse selection without consuming the input; mouse gestures, viewport keys, key releases, terminal reports, and an in-progress drag leave it standing, and renderers without the selection surface install nothing.
 31. `/fast` affects only the current session and every new session starts with it off, while `/fast-global` persists the provider's `fast` key and reaches every running session's next request; the overlay adds the priority tier only for catalog-capable models of the configured provider, strips exactly that tier when Fast is off, and never touches other providers' requests or `modelRegistry.complete` side calls.
+32. The clipboard guard patches only pi's cached addon object, only on Linux, replaces only `getText` and `hasImage`, installs once per process, and fails open: an unresolvable or unrecognized addon leaves every pi clipboard path unchanged.
+
+## Clipboard leak guard
+
+At activation on Linux, the extension replaces the two clipboard read entry points that route through pi's bundled `@mariozechner/clipboard` addon.
+
+The addon constructs a fresh clipboard-rs `ClipboardContext` on every exported call. On X11 each context opens two X connections plus a detached service thread, and the crate defines no `Drop` for the context, so every clipboard read leaks both connections for the life of the pi process. Long-lived sessions accumulate toward Xorg's client limit, after which every X client on the machine — including the `xclip` behind pi's image paste — fails, which presents as paste silently doing nothing. pi already shells out to platform tools for Linux clipboard writes because it distrusts this crate; the guard extends that policy to reads.
+
+`src/clipboard-guard.ts` resolves pi's own cached addon instance with a require rooted at the realpath of pi's entry script, which lands inside the pi package in both the plain and bundled layouts, so Node's CJS module cache returns the exact exports object pi calls through. `getText` becomes an asynchronous `wl-paste`/`xclip`/`xsel` subprocess read mirroring pi's write-side tool order and read bounds — asynchronous because pi awaits it and because of [[lat#Runtime responsiveness]] — and `hasImage` returns false so pi's complete `xclip`/`wl-paste` image path — already positioned as the fallback — runs directly; image paste loses nothing. `setText` and `getImageBinary` stay native because pi never calls them on Linux. A symbol flag on the shared module object makes installation idempotent across `/reload`.
+
+macOS and Windows keep the addon untouched: pi implements no subprocess clipboard there, so the addon is load-bearing rather than redundant. The guard is a local containment for the running process; the durable fix belongs upstream in pi's addon or its Linux read paths.
 
 ## Documentation map
 
