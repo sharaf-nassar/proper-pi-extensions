@@ -119,11 +119,18 @@ function installFocusRefresh(tui: TUI, refresh: () => void): () => void {
 	return () => controller.restore();
 }
 
-export function enableScribeImageCapability(): void {
+/**
+ * Pi's terminal allowlist does not know Scribe, so detection leaves Kitty
+ * images and OSC 8 hyperlinks off. Scribe supports both. Hyperlinks matter
+ * because Pi reopens the OSC 8 sequence on every wrapped physical row, so
+ * the terminal's ctrl+click opens the full URL instead of one row's
+ * fragment of a hard-wrapped link.
+ */
+export function enableScribeCapabilities(): void {
 	if (process.env.TERM_PROGRAM?.toLowerCase() !== "scribe") return;
 	const capabilities = getCapabilities();
-	if (capabilities.images !== "kitty") {
-		setCapabilities({ ...capabilities, images: "kitty" });
+	if (capabilities.images !== "kitty" || !capabilities.hyperlinks) {
+		setCapabilities({ ...capabilities, images: "kitty", hyperlinks: true });
 	}
 }
 

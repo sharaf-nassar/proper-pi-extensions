@@ -97,7 +97,6 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 			writes.push(data);
 		},
 	};
-	const originalWrite = terminal.write;
 
 	try {
 		await onSessionStart?.(
@@ -131,11 +130,14 @@ test("base keybindings add image paste, prompt newlines, and transcript shortcut
 			keybindings,
 		);
 
-		assert.equal(terminal.write, originalWrite);
+		// The link-id wrapper may replace `write`, but everything without an
+		// anonymous OSC 8 open must reach the terminal byte-identical.
 		const mouseEnable =
 			"\x1b[?1049h\x1b[?1000h\x1b[?1003h\x1b[?1004h\x1b[?1006h";
 		terminal.write(mouseEnable);
 		assert.deepEqual(writes, [mouseEnable]);
+		terminal.write("\x1b]8;;https://x.test/a\x1b\\a\x1b]8;;\x1b\\");
+		assert.ok(writes[1]?.startsWith("\x1b]8;id="));
 
 		assert.deepEqual(keybindings.getKeys("tui.altScreen.pageUp"), [
 			"ctrl+shift+pageUp",

@@ -98,7 +98,7 @@ Clipboard image paths use compact editor markers while their source paths remain
 
 proper-base binds Pi's `app.clipboard.pasteImage` action to Ctrl+V and Ctrl+Shift+V; either chord invokes Pi's native image-or-text clipboard handler when the terminal forwards it. Every insertion route detects readable absolute `pi-clipboard-*` GIF, JPEG, PNG, or WebP paths and replaces each with `[image N]`. Active markers render in a non-capturing overlay above the editor. Image-capable terminals show compact previews, text-only terminals show full-width marker and source-path rows, and multiple entries stack. An autocomplete description temporarily hides the image overlay to avoid overlap. The overlay's bottom margin — measured by re-rendering the components below the editor — is computed only while a preview is visible, so frames without one skip that traversal.
 
-At extension load, `TERM_PROGRAM=Scribe` promotes Pi's detected image capability to Kitty before the fullscreen renderer snapshots it. This restores previews now that Scribe preserves Kitty placement inside synchronized output. Other terminals retain Pi's native capability detection.
+At extension load, `TERM_PROGRAM=Scribe` promotes Pi's detected image capability to Kitty and enables OSC 8 hyperlinks before the fullscreen renderer snapshots them. This restores previews now that Scribe preserves Kitty placement inside synchronized output, and makes Pi render markdown links as OSC 8 hyperlinks. Pi reopens the OSC 8 sequence on every wrapped physical row, so Scribe's ctrl+click resolves the full URL on any row of a hard-wrapped link instead of that row's text fragment. Other terminals retain Pi's native capability detection.
 
 Before creating a terminal image, proper-base compares the source dimensions with the 24-by-6-cell preview's current pixel envelope. A larger PNG, JPEG, GIF, or WebP source is decoded and auto-oriented asynchronously by the declared `sharp` runtime dependency, resized with `fit: inside` and `withoutEnlargement`, and encoded as a bounded PNG; animated inputs use the first page. The original clipboard file remains untouched and still expands into submitted prompts. `sharp` performs work through libuv/libvips rather than synchronously blocking Pi, and its five-second pipeline timeout bounds damaged or pathological input. Its npm optional artifacts cover macOS arm64, macOS x64 (10.15+), glibc/musl Linux, and other supported platforms under the package's Node 20.9+ floor, which proper-base's Node 22.19+ requirement exceeds.
 
@@ -215,6 +215,14 @@ Pi's fullscreen renderer already maps mouse coordinates into scroll-view content
 Unrecognized text, prompt and footer rows, regular TUI mode, and renderer shapes without both internal selection methods use Pi's native word selection unchanged. The wrapper restores the original method during session shutdown and refuses to stack on repeated editor-factory installation.
 
 This is deliberately a guarded compatibility layer over private pi-tui methods because the extension API exposes no selection-range hook. A future rename disables token expansion rather than mouse selection. Tokens split across rendered rows remain separate, and proper-base's clickable compact tool and error rows keep their single-click expansion behavior instead of participating in double-click selection.
+
+## Hyperlink identity
+
+Every physical row of one wrapped transcript hyperlink shares one OSC 8 id, so id-aware terminals hover-highlight and activate the whole link as a unit.
+
+Pi emits OSC 8 hyperlinks without an id and reopens the sequence on each wrapped row, so a terminal following the OSC 8 spec assigns every row its own link identity: activation still resolves the full URI, but hovering highlights only the row under the pointer. proper-base wraps the fullscreen renderer's terminal `write` and gives each anonymous open an `id=` parameter derived from an FNV-1a hash of its URI. Rows of one logical link then compare equal, which is the exact condition Scribe's existing adjacent-row OSC 8 span join and kitty-style id grouping key on. Two distinct links to the same URI share an id; they open the same target, so broader hover grouping is the accepted trade-off.
+
+Closes, opens that already carry params, and writes without an anonymous open pass through untouched — a sequence split across writes simply goes untagged. Terminal shapes without a `write` method install nothing, repeated editor-factory installation reuses the live wrapper, and disposal restores the original method only while the wrapper is still installed.
 
 ## Selection dismissal
 

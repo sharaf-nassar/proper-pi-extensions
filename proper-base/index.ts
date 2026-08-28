@@ -47,11 +47,12 @@ import {
 import { type HistoryGuard, installHistoryGuard } from "./src/history-guard.ts";
 import { omitPriorTurnImages } from "./src/image-context.ts";
 import {
-	enableScribeImageCapability,
+	enableScribeCapabilities,
 	type ImagePreviewController,
 	installImagePreview,
 } from "./src/image-preview.ts";
 import { installJumpToBottom } from "./src/jump-to-bottom.ts";
+import { installOsc8LinkIds } from "./src/osc8-link-ids.ts";
 import {
 	createPromptDisplay,
 	PROMPT_DISPLAY_ENTRY,
@@ -250,7 +251,7 @@ function decodeModelReference(value: string): ModelReference | undefined {
 export default function (pi: ExtensionAPI) {
 	// @lat: [[lat.md/proper-base/proper-base#proper-base#Clipboard leak guard]]
 	installClipboardLeakGuard();
-	enableScribeImageCapability();
+	enableScribeCapabilities();
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Session listing]]
 	installFastSessionList(SessionManager, getAgentDir());
 
@@ -290,6 +291,7 @@ export default function (pi: ExtensionAPI) {
 	let removePromptClear: (() => void) | undefined;
 	let removeSmartSelection: (() => void) | undefined;
 	let removeSelectionDismiss: (() => void) | undefined;
+	let removeOsc8LinkIds: (() => void) | undefined;
 	let imagePreview: ImagePreviewController | undefined;
 	let removeTerminalInput: (() => void) | undefined;
 	let transcriptCleanup: TranscriptCleanupController | undefined;
@@ -564,6 +566,8 @@ export default function (pi: ExtensionAPI) {
 		removeSmartSelection = undefined;
 		removeSelectionDismiss?.();
 		removeSelectionDismiss = undefined;
+		removeOsc8LinkIds?.();
+		removeOsc8LinkIds = undefined;
 		imagePreview?.dispose();
 		imagePreview = undefined;
 		removeTerminalInput?.();
@@ -670,6 +674,9 @@ export default function (pi: ExtensionAPI) {
 			removeSmartSelection = installSmartSelection(tui);
 			removeSelectionDismiss?.();
 			removeSelectionDismiss = installSelectionDismiss(tui);
+			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Hyperlink identity]]
+			removeOsc8LinkIds?.();
+			removeOsc8LinkIds = installOsc8LinkIds(tui);
 			historyGuard = installHistoryGuard(editor);
 			removeJumpToBottom?.();
 			removeJumpToBottom = installJumpToBottom(editor, tui);

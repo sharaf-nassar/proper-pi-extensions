@@ -48,7 +48,7 @@ A focused wrapper fixture starts with draft text and proves the first Ctrl+C onl
 
 A session integration fixture verifies Scribe Kitty previews and text fallback remain usable downstream.
 
-It starts with text-only capabilities, loads proper-base under `TERM_PROGRAM=Scribe`, and verifies Kitty capability is enabled before the fake fullscreen renderer snapshots it. A real one-pixel PNG becomes `[image 1]`; the non-capturing overlay emits a Kitty image sequence, then a forced text-only capability renders the marker and source path without Kitty escapes. Submission expands the marker so Pi's downstream handler receives the original path.
+It starts with text-only capabilities, loads proper-base under `TERM_PROGRAM=Scribe`, and verifies the Kitty and OSC 8 hyperlink capabilities are enabled before the fake fullscreen renderer snapshots them. A real one-pixel PNG becomes `[image 1]`; the non-capturing overlay emits a Kitty image sequence, then a forced text-only capability renders the marker and source path without Kitty escapes. Submission expands the marker so Pi's downstream handler receives the original path.
 
 A thumbnail fixture gives the dimension parser a 4096-by-2160 PNG header and proves the plan is bounded to the 24-by-6-cell pixel envelope while an already-small image bypasses conversion. An asynchronous fixture injects a deterministic thumbnailer, verifies Pi's braille loader renders without exposing the source path, then observes the completed bounded PNG replace it with a Kitty preview. Waiting past one animation interval proves the loader timer stopped after completion.
 
@@ -125,6 +125,12 @@ It verifies Ctrl+V and Ctrl+Shift+V both match Pi's clipboard paste action witho
 Smart-selection fixtures verify token-aware ranges extend Pi's native fullscreen word selection without replacing it.
 
 Pure cases cover wrapped URLs, source paths with line and column suffixes, command flags, qualified identifiers, quoted values, ANSI-styled paths, ordinary prose fallback, and fraction rejection. A fake fullscreen renderer proves only scroll-view points receive smart ranges, native selection handles other rows, and disposal restores the original resolver.
+
+## Hyperlink identity fixture
+
+Tagging cases verify anonymous OSC 8 opens gain one stable URI-derived id while everything else passes through.
+
+Two rows reopening the same URI receive the same id and a different URI receives a different one, with ST and BEL terminators both preserved. Closes, opens with explicit params, and plain text stay byte-identical. A fake terminal proves installation wraps `write`, reinstallation reuses the live wrapper, tagged output reaches the terminal, and disposal restores the original prototype method so later writes leave links anonymous. A shape without a terminal installs nothing.
 
 ## Selection dismissal fixture
 

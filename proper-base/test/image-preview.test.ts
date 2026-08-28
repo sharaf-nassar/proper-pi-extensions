@@ -478,6 +478,7 @@ test("clipboard image markers render Kitty previews and expand before submission
 		getCommands: () => [],
 	} as any);
 	assert.equal(getCapabilities().images, "kitty");
+	assert.equal(getCapabilities().hyperlinks, true);
 
 	const editor = {
 		onSubmit: undefined as ((text: string) => void) | undefined,
