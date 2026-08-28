@@ -1,6 +1,6 @@
 {
   "name": "proper-pacify",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Optimize the tone of Pi prompts without changing their content",
   "keywords": [
     "pi-package",
