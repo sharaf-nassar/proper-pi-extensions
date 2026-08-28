@@ -60,6 +60,18 @@ It covers slash-token preservation, interactive and extension-origin input, one-
 
 It asserts that the entry holds exactly the original text and the target model, that a successful rewrite emits no notification beside it, and that a provider failure reports the error without appending a second entry.
 
+## Word diff fixture
+
+The fixture drives `diffWords` directly, with no session or renderer.
+
+It asserts that an unchanged prompt yields one same span, that a replacement emits its deletion before its insertion, that adjacent edited words merge into one span, that same spans carry the rewrite's whitespace so line structure survives, and that an implausibly large pair skips the quadratic table and reports no diff.
+
+## Message diff fixture
+
+The fixture captures the registered markdown transformer and drives it with a stubbed session manager and marker theme supplied through `session_start`.
+
+It asserts that a settled user message matching a recorded rewrite renders the original's deleted words struck through in the removed-diff color ahead of the kept text, and that everything else passes through byte-identical: assistant markdown, streaming user updates, text no pacify entry produced, and a rewrite that changed nothing. Storing `diff: false` suppresses the display for the same message and storing `diff: true` restores it, without a reload.
+
 ## Transcript entry fixture
 
 The fixture captures the registered entry renderer and renders it at one width with a plain-text theme.

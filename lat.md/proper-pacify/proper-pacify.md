@@ -124,9 +124,9 @@ The configuration menu title appends the active override so the stored value and
 
 `/pacify-config` edits `~/.pi/agent/pacify.json` through Pi's standard UI dialogs.
 
-The menu selects an authenticated scoped model, model-supported reasoning effort, priority service tier, additional tone prompt, and automatic mode. It filters effort through the model's `thinkingLevelMap`; unsupported stored values clamp to the lowest supported level. Configuration is read before each rewrite.
+The menu selects an authenticated scoped model, model-supported reasoning effort, priority service tier, additional tone prompt, automatic mode, and whether the rendered user message shows the rewrite diff. It filters effort through the model's `thinkingLevelMap`; unsupported stored values clamp to the lowest supported level. Configuration is read before each rewrite.
 
-Missing files, invalid JSON, and invalid field values use built-in defaults; saves create the parent directory. The default model is `gpt-5.6-luna`, effort is `medium`, and fast and automatic modes are off.
+Missing files, invalid JSON, and invalid field values use built-in defaults; saves create the parent directory. The default model is `gpt-5.6-luna`, effort is `medium`, fast and automatic modes are off, and the diff display is on.
 
 Default tone guidance enumerates the span categories the model may edit — profanity and contempt, exasperation markers, flattery, pleading, deference frames, and feeling-only drama — and declares everything else content that must be copied verbatim.
 
@@ -142,6 +142,12 @@ The entry is written before the model call rather than after it, so the prompt a
 
 The entry records nothing else. The rewrite is the user message rendered directly below it, so repeating it there would duplicate it. Effort, fast, and source are configuration the user already set and can read from [[proper-pacify#Configuration]], so restating them on every prompt costs a line and tells the reader nothing about that prompt.
 
+What the rewrite changed renders on the user message itself, not inside the entry. A display-only markdown transformer rewrites settled user-message markdown at render time: it matches the rendered text against each recorded entry's child user message in the session and, when the recorded original differs, displays a word-level LCS diff in the prompt block — deletions struck through in the theme's removed-diff color, insertions in its added-diff color, kept text left as ordinary markdown. Raw ANSI survives Pi's markdown renderer and is reopened across wrapped lines, so the styling needs no markdown syntax. No second entry, schema change, or dependency is involved, and a resumed session re-derives the same diff from the stored pair.
+
+The diff briefly lived in the entry's expanded body and moved for two reasons. The prompt block is where the user reads the sent text, so the strikethrough belongs beside it. And a custom entry renders when appended — before the rewrite exists — and rebuilds only on an expand toggle, theme change, or restore, so an entry-hosted diff was invisible in a live session until something forced a rebuild; the transformer runs for new user messages, restored sessions, and width changes, so the diff appears the moment the rewritten prompt does. The expanded entry shows the plain original it recorded.
+
+The transformer receives no context of its own, so the session manager and active theme reach it through the extension's shared runtime state, refreshed at session start — which fires before Pi renders restored messages — and on every eligible input, surviving `/reload` and session switches. Everything unmatched passes through untouched: assistant and streaming content, prompts pacification never saw, a prompt template whose stored message is the expanded body rather than the typed invocation, and a failed or cancelled rewrite whose message equals the recorded original. The `diff` flag in [[proper-pacify#Configuration]] disables the display entirely; it is re-read on each render so toggling it needs no reload, and it never affects the rewrite itself or the entry's record.
+
 The entry follows Pi's global tool-expansion state: collapsed it is the header alone, expanded it adds the original prompt beneath it. A bold `›` or `⌄` disclosure marker in `borderAccent` opens the header, matching the summaries proper-base renders, so a run of prompts reads as one line each until `app.tools.expand` opens them. Reusing that host state keeps the behavior free of the per-item click machinery that would otherwise have to be duplicated here, and leaves the package independent of proper-base. When proper-base's settled transcript is installed, it drives that same state per entry and makes the header clickable; without it the entry still opens under `app.tools.expand`.
 
 The entry renders as progress output rather than as a message: no background fill, and an italic unbolded header whose fixed label and varying model name take separate theme colors. A terminal cell has no size, so weight and slant are the only levers for making the header subordinate to the prompt beneath it. Colors come from the theme's custom-entry tokens rather than fixed intents, so the entry follows whichever theme is active.
@@ -150,7 +156,7 @@ A failed transcript write is swallowed. The record is worth less than the prompt
 
 Cancellation and failure are reported through `ctx.ui.notify()` so they appear in the transcript beside the entry the call already wrote; a failure adds no second entry. The extension sets no footer status, because such a message in the footer competes with other extensions for one truncated line.
 
-Custom entries remain durable in Pi's JSONL session and render in the transcript, but `buildSessionContext()` excludes them from LLM context. Automatic failures append the same before and after text plus the error, proving that the original prompt was sent unchanged.
+Custom entries remain durable in Pi's JSONL session and render in the transcript, but `buildSessionContext()` excludes them from LLM context. After a failure the user message below the entry equals the recorded original, so the transcript itself proves the prompt was sent unchanged and no diff markup appears.
 
 ## Installation status
 

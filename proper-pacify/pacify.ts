@@ -41,6 +41,8 @@ export interface Config {
 	fast: boolean;
 	prompt: string;
 	auto: AutoSetting;
+	/** Show what pacification changed on the rendered user message. */
+	diff: boolean;
 }
 
 export const DEFAULTS: Config = {
@@ -59,6 +61,7 @@ Editable spans:
 
 Everything else is content. Keep claims about past behavior, consequences, conditions, urgency, modality, scope, emphasis, interrogative words, question marks, and imperative verbs. Add no politeness markers, greetings, apologies, gratitude, encouragement, or reassurance. If the input contains none of the listed spans, return it unchanged.`,
 	auto: false,
+	diff: true,
 };
 
 interface PacifyLog {
@@ -143,6 +146,7 @@ function normalizeConfig(value: unknown): Config {
 		fast: typeof value.fast === "boolean" ? value.fast : DEFAULTS.fast,
 		prompt: typeof value.prompt === "string" ? value.prompt : DEFAULTS.prompt,
 		auto: normalizeAuto(value.auto),
+		diff: typeof value.diff === "boolean" ? value.diff : DEFAULTS.diff,
 	};
 }
 
@@ -271,6 +275,120 @@ function completionOptions(
 	}
 	if (config.fast) options.serviceTier = "priority";
 	return options;
+}
+
+export interface DiffSpan {
+	kind: "same" | "removed" | "added";
+	text: string;
+}
+
+interface DiffToken {
+	word: string;
+	raw: string;
+}
+
+function diffTokens(text: string): DiffToken[] {
+	const out: DiffToken[] = [];
+	for (const match of text.matchAll(/\S+\s*/g)) {
+		out.push({ word: match[0].trimEnd(), raw: match[0] });
+	}
+	return out;
+}
+
+// Word-level LCS diff between the typed prompt and the rewrite, so the entry
+// can show what pacification changed instead of a second copy of the original.
+// Same-spans take the rewrite's whitespace, matching the text that was sent.
+// @lat: [[proper-pacify#Session transcript]]
+export function diffWords(
+	before: string,
+	after: string,
+): DiffSpan[] | undefined {
+	const a = diffTokens(before);
+	const b = diffTokens(after);
+	// ponytail: O(n*m) LCS table; prompts are short. Myers if huge inputs matter.
+	if (a.length * b.length > 262_144) return undefined;
+	const width = b.length + 1;
+	const lcs = new Uint32Array((a.length + 1) * width);
+	for (let i = a.length - 1; i >= 0; i--) {
+		for (let j = b.length - 1; j >= 0; j--) {
+			lcs[i * width + j] =
+				a[i]?.word === b[j]?.word
+					? (lcs[(i + 1) * width + j + 1] ?? 0) + 1
+					: Math.max(
+							lcs[(i + 1) * width + j] ?? 0,
+							lcs[i * width + j + 1] ?? 0,
+						);
+		}
+	}
+	const spans: DiffSpan[] = [];
+	const push = (kind: DiffSpan["kind"], text: string): void => {
+		const last = spans[spans.length - 1];
+		if (last?.kind === kind) last.text += text;
+		else spans.push({ kind, text });
+	};
+	let i = 0;
+	let j = 0;
+	while (i < a.length || j < b.length) {
+		if (i < a.length && j < b.length && a[i]?.word === b[j]?.word) {
+			push("same", b[j]?.raw ?? "");
+			i++;
+			j++;
+		} else if (
+			i < a.length &&
+			(j >= b.length ||
+				(lcs[(i + 1) * width + j] ?? 0) >= (lcs[i * width + j + 1] ?? 0))
+		) {
+			push("removed", a[i]?.raw ?? "");
+			i++;
+		} else {
+			push("added", b[j]?.raw ?? "");
+			j++;
+		}
+	}
+	return spans;
+}
+
+// The diff displays on the user message itself, through Pi's display-only
+// markdown transformer. A custom entry renders when appended — before the
+// rewrite exists — and rebuilds only on an expand toggle or restore, so a diff
+// placed there goes stale in live sessions; the transformer re-runs for new
+// messages, restored sessions, and width changes. Both texts are durable in
+// the session, so the pair is re-derived rather than stored again.
+// @lat: [[proper-pacify#Session transcript]]
+export function pacifiedOriginalFor(text: string): string | undefined {
+	const manager = runtime()?.sessionManager;
+	if (!manager || !text) return undefined;
+	try {
+		// ponytail: linear scan per render; transcripts are small. Entries are
+		// chronological, so each pacify entry precedes its user-message child.
+		const originals = new Map<string, string>();
+		for (const entry of manager.getEntries()) {
+			if (entry.type === "custom" && entry.customType === ENTRY_TYPE) {
+				const before = (entry.data as Partial<PacifyLog> | undefined)?.before;
+				if (typeof before === "string" && before !== text) {
+					originals.set(entry.id, before);
+				}
+				continue;
+			}
+			if (entry.type !== "message" || !entry.parentId) continue;
+			const before = originals.get(entry.parentId);
+			if (before === undefined) continue;
+			const message = entry.message;
+			if (message.role !== "user") continue;
+			const content = message.content;
+			const rendered =
+				typeof content === "string"
+					? content
+					: content
+							.filter((part) => part.type === "text")
+							.map((part) => part.text)
+							.join("");
+			if (rendered === text) return before;
+		}
+	} catch {
+		// A display nicety must never break rendering.
+	}
+	return undefined;
 }
 
 export interface PacifiedPrompt {
@@ -441,7 +559,7 @@ function configSummary(config: Config): string {
 	const sessionAuto = runtime()?.sessionAuto;
 	const override =
 		sessionAuto === undefined ? "" : `, session ${sessionAuto ? "on" : "off"}`;
-	return `${config.model}, effort ${config.effort ?? "none"}, fast ${config.fast ? "on" : "off"}, auto ${describeAuto(config.auto)}${override}`;
+	return `${config.model}, effort ${config.effort ?? "none"}, fast ${config.fast ? "on" : "off"}, diff ${config.diff ? "on" : "off"}, auto ${describeAuto(config.auto)}${override}`;
 }
 
 // Pi chains input handlers in extension load order, and load order follows the
@@ -491,6 +609,10 @@ interface PacifyRuntime {
 	depth: number;
 	/** Session-scoped automatic mode; `undefined` follows the stored default. */
 	sessionAuto: boolean | undefined;
+	/** Latest session manager, for the markdown transformer's pair lookup. */
+	sessionManager: ExtensionContext["sessionManager"] | undefined;
+	/** Active theme, for styling the diff inside user-message markdown. */
+	theme: ExtensionContext["ui"]["theme"] | undefined;
 }
 
 // A reload replaces this module but leaves the installed prototype wrapper in
@@ -600,6 +722,11 @@ export async function pacifyIncoming(
 	// to "interactive", so nothing else distinguishes it. Rewriting it would
 	// spend a model call per run and edit instructions whose sender expects them
 	// to arrive verbatim.
+	const live = runtime();
+	if (live) {
+		live.sessionManager = ctx.sessionManager;
+		live.theme = ctx.ui?.theme ?? live.theme;
+	}
 	if (ctx.mode === "print" || ctx.mode === "json") {
 		return { action: "continue" };
 	}
@@ -645,7 +772,36 @@ export default function properPacify(pi: ExtensionAPI): void {
 		pacify: pacifyIncoming,
 		depth: previous?.depth ?? 0,
 		sessionAuto: previous?.sessionAuto,
+		sessionManager: previous?.sessionManager,
+		theme: previous?.theme,
 	};
+
+	// The rewritten prompt is the message the user reads, so the diff renders
+	// there: deletions struck through in the removed-diff color, insertions in
+	// the added color, kept text left as ordinary markdown. Pi's transformer is
+	// display-only, so session content and model context stay untouched.
+	// @lat: [[proper-pacify#Session transcript]]
+	pi.registerMarkdownTransformer?.((markdown, { messageType, isStreaming }) => {
+		if (messageType !== "user" || isStreaming) return markdown;
+		const theme = runtime()?.theme;
+		if (!theme) return markdown;
+		// Re-read per render so /pacify-config takes effect without a reload; the
+		// stored file is tiny and renders are far rarer than keystrokes.
+		if (!loadConfig().diff) return markdown;
+		const before = pacifiedOriginalFor(markdown);
+		if (before === undefined) return markdown;
+		const spans = diffWords(before, markdown);
+		if (!spans) return markdown;
+		return spans
+			.map((span) =>
+				span.kind === "removed"
+					? theme.strikethrough(theme.fg("toolDiffRemoved", span.text))
+					: span.kind === "added"
+						? theme.fg("toolDiffAdded", span.text)
+						: span.text,
+			)
+			.join("");
+	});
 
 	// @lat: [[proper-pacify#Session transcript]]
 	pi.registerEntryRenderer<PacifyLog>(
@@ -663,6 +819,8 @@ export default function properPacify(pi: ExtensionAPI): void {
 			const header = theme.italic(
 				`${marker} ${theme.fg("customMessageLabel", "pacifying with")} ${theme.fg("accent", data.model)}`,
 			);
+			// The expanded body is the plain recorded original; the diff renders on
+			// the user message below, where the rewritten prompt already displays.
 			box.addChild(
 				new Text(expanded ? `${header}\n${data.before}` : header, 0, 0),
 			);
@@ -721,9 +879,17 @@ export default function properPacify(pi: ExtensionAPI): void {
 
 	// A replacement session must not inherit the previous session's override.
 	// Reload keeps it, because the session itself continues across a reload.
-	pi.on("session_start", (event) => {
+	pi.on("session_start", (event, ctx) => {
 		const live = runtime();
-		if (live && event.reason !== "startup" && event.reason !== "reload") {
+		if (!live) return;
+		// Stash session and theme for the markdown transformer, which receives no
+		// context of its own; session_start fires before Pi renders restored
+		// messages, so a resumed transcript can diff from its first paint.
+		if (ctx) {
+			live.sessionManager = ctx.sessionManager;
+			live.theme = ctx.ui?.theme ?? live.theme;
+		}
+		if (event.reason !== "startup" && event.reason !== "reload") {
 			live.sessionAuto = undefined;
 		}
 	});
@@ -756,6 +922,7 @@ export default function properPacify(pi: ExtensionAPI): void {
 					"Fast",
 					"Tone prompt",
 					"Auto",
+					"Diff",
 					"Done",
 				]);
 				if (!action || action === "Done") return;
@@ -799,6 +966,12 @@ export default function properPacify(pi: ExtensionAPI): void {
 						config.prompt,
 					);
 					if (selected !== undefined) config.prompt = selected;
+				} else if (action === "Diff") {
+					const selected = await ctx.ui.select(
+						"Pacify prompt diff",
+						orderedChoices(config.diff ? "on" : "off", ["on", "off"]),
+					);
+					if (selected) config.diff = selected === "on";
 				} else if (action === "Auto") {
 					const current =
 						typeof config.auto === "boolean"

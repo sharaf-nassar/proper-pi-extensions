@@ -13,6 +13,7 @@ const {
 	buildSystemPrompt,
 	buildUserTurn,
 	describeAuto,
+	diffWords,
 	default: properPacify,
 	isWithinSchedule,
 	loadConfig,
@@ -104,6 +105,7 @@ test("configuration and model resolution stay deterministic", () => {
 			fast: true,
 			prompt: "Keep it gentle.",
 			auto: true,
+			diff: true,
 		},
 		configPath,
 	);
@@ -111,7 +113,13 @@ test("configuration and model resolution stay deterministic", () => {
 
 	writeFileSync(
 		configPath,
-		JSON.stringify({ model: "", effort: "extreme", fast: "yes", auto: 1 }),
+		JSON.stringify({
+			model: "",
+			effort: "extreme",
+			fast: "yes",
+			auto: 1,
+			diff: "yes",
+		}),
 	);
 	assert.deepEqual(loadConfig(configPath), DEFAULTS);
 	assert.equal(
@@ -371,7 +379,15 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 		{ action: "continue" },
 	);
 
-	const menu = ["Effort", "Model", "Fast", "Tone prompt", "Auto", "Done"];
+	const menu = [
+		"Effort",
+		"Model",
+		"Fast",
+		"Tone prompt",
+		"Auto",
+		"Diff",
+		"Done",
+	];
 	await commands.get("pacify-config").handler("", {
 		...ctx,
 		hasUI: true,
@@ -390,6 +406,7 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 				}
 				if (title === "Priority service tier") return "on";
 				if (title === "Pacify every user prompt") return "off";
+				if (title === "Pacify prompt diff") return "off";
 				return undefined;
 			},
 			async editor() {
@@ -403,6 +420,7 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 		fast: true,
 		prompt: "Keep it kind.",
 		auto: false,
+		diff: false,
 	});
 	assert.deepEqual(
 		await inputHandler({ text: "auto is off", source: "interactive" }, ctx),
@@ -880,6 +898,118 @@ test("wrapper survives reload, bare commands, and transcript failures", async ()
 		"x",
 	);
 	assert.deepEqual(survived, { action: "transform", text: "rewritten" });
+});
+
+// @lat: [[proper-pacify/tests#Verification#Word diff fixture]]
+test("diffWords marks tone edits and keeps content spans verbatim", () => {
+	assert.deepEqual(diffWords("fix the parser", "fix the parser"), [
+		{ kind: "same", text: "fix the parser" },
+	]);
+	// Deletions come before insertions at a replacement, and adjacent edited
+	// words merge into one span so the strikethrough is continuous.
+	assert.deepEqual(
+		diffWords("Ugh, fix this stupid parser now", "Fix this parser now"),
+		[
+			{ kind: "removed", text: "Ugh, fix " },
+			{ kind: "added", text: "Fix " },
+			{ kind: "same", text: "this " },
+			{ kind: "removed", text: "stupid " },
+			{ kind: "same", text: "parser now" },
+		],
+	);
+	// Same-spans carry the rewrite's whitespace, so line structure survives.
+	assert.deepEqual(
+		diffWords("keep this\nline order", "keep this\nline order"),
+		[{ kind: "same", text: "keep this\nline order" }],
+	);
+	// An implausibly large pair skips the quadratic table and reports no diff.
+	assert.equal(diffWords("a ".repeat(600), "b ".repeat(600)), undefined);
+});
+
+// @lat: [[proper-pacify/tests#Verification#Message diff fixture]]
+test("the user message markdown renders the tone diff in place", () => {
+	let transformer: any;
+	let sessionStart: any;
+	properPacify({
+		registerEntryRenderer() {},
+		registerCommand() {},
+		registerMarkdownTransformer(fn: unknown) {
+			transformer = fn;
+		},
+		on(name: string, handler: any) {
+			if (name === "session_start") sessionStart = handler;
+		},
+	} as unknown as TestPi);
+	assert.ok(transformer);
+	assert.ok(sessionStart);
+
+	const theme = {
+		fg: (token: string, text: string) =>
+			token === "toolDiffAdded"
+				? `+[${text}]`
+				: token === "toolDiffRemoved"
+					? `-[${text}]`
+					: text,
+		strikethrough: (text: string) => `~[${text}]`,
+	};
+	// The pair is re-derived from the session: the entry holds the original and
+	// its child user message holds the rewrite the transcript displays.
+	sessionStart(
+		{ reason: "startup" },
+		{
+			ui: { theme },
+			sessionManager: {
+				getEntries: () => [
+					{
+						id: "pacify-1",
+						type: "custom",
+						customType: "proper-pacify",
+						data: { before: "WHAT? how did it happen?!", model: "m" },
+					},
+					{
+						id: "user-1",
+						parentId: "pacify-1",
+						type: "message",
+						message: { role: "user", content: "how did it happen?!" },
+					},
+					{
+						id: "pacify-2",
+						type: "custom",
+						customType: "proper-pacify",
+						data: { before: "fix it", model: "m" },
+					},
+					{
+						id: "user-2",
+						parentId: "pacify-2",
+						type: "message",
+						message: { role: "user", content: "fix it" },
+					},
+				],
+			},
+		},
+	);
+
+	const run = (markdown: string, messageType = "user", isStreaming = false) =>
+		transformer(markdown, { messageType, isStreaming });
+
+	// Deletions render struck through in the removed color; kept text is left
+	// as ordinary markdown for Pi's renderer.
+	assert.equal(run("how did it happen?!"), "~[-[WHAT? ]]how did it happen?!");
+
+	// Only settled user messages transform; everything else passes through.
+	assert.equal(run("how did it happen?!", "assistant"), "how did it happen?!");
+	assert.equal(run("how did it happen?!", "user", true), "how did it happen?!");
+	assert.equal(run("unrelated prompt"), "unrelated prompt");
+	// A rewrite that changed nothing shows no diff markup.
+	assert.equal(run("fix it"), "fix it");
+
+	// The configuration flag turns the display off without touching anything
+	// else, and back on again.
+	const configPath = join(testDir, "pacify.json");
+	writeFileSync(configPath, JSON.stringify({ ...DEFAULTS, diff: false }));
+	assert.equal(run("how did it happen?!"), "how did it happen?!");
+	writeFileSync(configPath, JSON.stringify({ ...DEFAULTS, diff: true }));
+	assert.equal(run("how did it happen?!"), "~[-[WHAT? ]]how did it happen?!");
 });
 
 // @lat: [[proper-pacify/tests#Verification#Transcript entry fixture]]
