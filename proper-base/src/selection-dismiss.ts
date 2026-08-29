@@ -52,7 +52,11 @@ export function isTypingInput(data: string): boolean {
  *
  * The listener registers after the renderer's own constructor-installed
  * listener, so it only sees input the viewport declined: scroll keys and
- * mouse gestures keep the selection, matching terminal convention. It resets
+ * mouse gestures keep the selection, matching terminal convention. Keys the
+ * caller marks preserved also keep it: Pi 0.84.4's `app.message.copy` action
+ * (Ctrl+X) copies the active selection when `fullscreenCopyOnSelect` is
+ * disabled, and it runs at the editor after this listener, so dismissing on
+ * that keystroke would clear the selection before the copy reads it. It resets
  * the same private fields the renderer's focus-loss branch resets and never
  * consumes the input, so the keystroke still reaches the editor.
  *
@@ -62,7 +66,10 @@ export function isTypingInput(data: string): boolean {
  *
  * @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Selection dismissal]]
  */
-export function installSelectionDismiss(tui: TUI): (() => void) | undefined {
+export function installSelectionDismiss(
+	tui: TUI,
+	isPreservedInput?: (data: string) => boolean,
+): (() => void) | undefined {
 	const host = tui as SelectionHost;
 	if (
 		typeof host.getSelectionBounds !== "function" ||
@@ -79,6 +86,7 @@ export function installSelectionDismiss(tui: TUI): (() => void) | undefined {
 		if (host.selectionPressActive) return undefined;
 		if (host.getSelectionBounds?.() === undefined) return undefined;
 		if (!isTypingInput(data)) return undefined;
+		if (isPreservedInput?.(data)) return undefined;
 		host.stopSelectionAutoScroll?.();
 		host.selectionAnchor = undefined;
 		host.selectionFocus = undefined;

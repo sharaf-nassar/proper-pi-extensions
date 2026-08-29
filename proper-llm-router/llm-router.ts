@@ -91,7 +91,7 @@ export interface JudgeConfig {
 	// request the provider's priority service tier when supported
 	fast: boolean;
 }
-// Pi 0.84.2 stops at max, while CLIProxyAPI already advertises ultra for
+// Pi 0.84.4 stops at max, while CLIProxyAPI already advertises ultra for
 // supported GPT models. The compatibility patch below extends Pi's runtime
 // list until core gains the same level natively.
 export type ThinkingLevel =

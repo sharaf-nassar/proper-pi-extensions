@@ -131,6 +131,23 @@ test("mouse gestures, viewport keys, and reports keep the selection", () => {
 	assert.notEqual(app.tui.selectionAnchor, undefined);
 });
 
+test("a preserved copy keystroke keeps the selection for the copy action", () => {
+	const app = harness();
+	// Pi 0.84.4's app.message.copy (Ctrl+X, \x18) copies the active selection
+	// after this listener runs, so the caller marks its keys preserved.
+	installSelectionDismiss(app.tui as never, (data) => data === "\x18");
+
+	app.select();
+	assert.equal(app.send("\x18"), false);
+	assert.notEqual(app.tui.selectionAnchor, undefined);
+	assert.equal(app.renders(), 0);
+
+	// Any other keystroke still dismisses.
+	assert.equal(app.send("a"), false);
+	assert.equal(app.tui.selectionAnchor, undefined);
+	assert.equal(app.renders(), 1);
+});
+
 test("renderers without the selection surface install nothing", () => {
 	const listeners = new Set<TuiInputListener>();
 	const bare = {

@@ -17,6 +17,7 @@ import {
 	getAgentDir,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { matchesKey } from "@earendil-works/pi-tui";
 
 import {
 	installAutocompleteDetails,
@@ -673,7 +674,13 @@ export default function (pi: ExtensionAPI) {
 			removeSmartSelection?.();
 			removeSmartSelection = installSmartSelection(tui);
 			removeSelectionDismiss?.();
-			removeSelectionDismiss = installSelectionDismiss(tui);
+			// The copy action reads the active selection after this listener runs,
+			// so its keystroke must not dismiss the selection it is about to copy.
+			removeSelectionDismiss = installSelectionDismiss(tui, (data) =>
+				keybindings
+					.getKeys("app.message.copy")
+					.some((key) => matchesKey(data, key)),
+			);
 			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Hyperlink identity]]
 			removeOsc8LinkIds?.();
 			removeOsc8LinkIds = installOsc8LinkIds(tui);

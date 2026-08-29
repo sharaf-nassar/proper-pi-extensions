@@ -22,7 +22,7 @@ Ponytail, without copying local credentials or private integrations.
 can also use pi-subagents for parallel workers and
 `proper-llm-router` for per-task model selection. With both runtime extensions
 installed, proper-base's `/clear` keeps the outgoing model instead of re-arming
-the router. The tested Pi compatibility target is 0.84.2; dependency-backed
+the router. The tested Pi compatibility target is 0.84.4; dependency-backed
 local setup requires Node 22.19 or newer.
 
 ## Install

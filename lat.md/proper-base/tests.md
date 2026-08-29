@@ -116,7 +116,7 @@ It settles a transcript containing a tool-calling assistant message and a collap
 
 ## Base keybinding fixture
 
-A session integration fixture applies the real Pi 0.84.2 `KeybindingsManager` to the installed editor factory.
+A session integration fixture applies the real Pi 0.84.4 `KeybindingsManager` to the installed editor factory.
 
 It verifies Ctrl+V and Ctrl+Shift+V both match Pi's clipboard paste action without removing an existing Alt+V alias. Alt+Enter matches prompt newline and no longer matches follow-up queueing, a user's own newline alias survives beside it, and proper-base adds no Shift+Enter of its own — under a user override that chord stops matching, while Pi's untouched defaults keep both Shift+Enter and Ctrl+J. Fullscreen transcript actions claim Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown instead of unmodified or Shift-only keys; the editor retains its native unmodified bindings; and modern modifier sequences match the intended actions. Navigation fixtures verify a recalled prompt ends at line 0, column 0; Home first reaches a soft-wrapped visible-row start and then the full prompt start, including across a hard newline; and End reaches the logical line end and then the full prompt end. They also prove native reload reapplies current bindings without losing unrelated user values, repeated installation remains idempotent, and the terminal writer stays untouched for Pi's native mouse handling.
 
@@ -136,7 +136,7 @@ Two rows reopening the same URI receive the same id and a different URI receives
 
 A fake fullscreen renderer with a consuming viewport listener verifies typing dismisses the selection while every other input leaves it standing.
 
-Classifier cases accept printable characters, non-ASCII graphemes, multi-character bursts, Enter, Backspace, bare escape, encoded keys, and a bracketed paste whose body resembles a release encoding, and reject empty input, cell-size reports, and key-release encodings. A keystroke with an active selection resets every selection field, stops auto-scroll, requests one render, and leaves the input unconsumed; without a selection nothing re-renders. Mouse gestures and viewport keys consumed by the renderer's earlier listener, terminal reports, and an in-progress drag all keep the selection. A shape without the selection surface installs nothing, reinstallation takes over with one live listener, the replaced install's stale disposer is a no-op, and the owning disposer removes the listener.
+Classifier cases accept printable characters, non-ASCII graphemes, multi-character bursts, Enter, Backspace, bare escape, encoded keys, and a bracketed paste whose body resembles a release encoding, and reject empty input, cell-size reports, and key-release encodings. A keystroke with an active selection resets every selection field, stops auto-scroll, requests one render, and leaves the input unconsumed; without a selection nothing re-renders. Mouse gestures and viewport keys consumed by the renderer's earlier listener, terminal reports, and an in-progress drag all keep the selection. A keystroke the caller's preserved-input predicate matches — the copy action key in the installed wiring — keeps the selection without rendering while other keystrokes still dismiss. A shape without the selection surface installs nothing, reinstallation takes over with one live listener, the replaced install's stale disposer is a no-op, and the owning disposer removes the listener.
 
 ## Jump-to-bottom fixture
 

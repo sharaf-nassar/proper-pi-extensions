@@ -77,4 +77,4 @@ publish-npm.yml --repo sharaf-nassar/proper-pi-extensions --env npm-release`.
 - Router self-registers the `llm-router/auto` placeholder at load; a
   manual models.json entry is optional. Its port-1 URL is an intentional
   dead placeholder, not a service.
-- Toolchain: Node 22.19+, Pi 0.84.2 compatibility, TypeScript 6.
+- Toolchain: Node 22.19+, Pi 0.84.4 compatibility, TypeScript 6.

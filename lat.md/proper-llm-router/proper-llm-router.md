@@ -12,7 +12,7 @@ It separates seven semantic model slots into a repository-oriented Claude lane a
 
 The runtime is intentionally small and local to pi.
 
-- `llm-router.ts` contains configuration, model selection, judge calls, quota probes, swaps, pi event handlers, notices, configuration UI, and the capability-gated `ultra` compatibility patch for Pi 0.84.2.
+- `llm-router.ts` contains configuration, model selection, judge calls, quota probes, swaps, pi event handlers, notices, configuration UI, and the capability-gated `ultra` compatibility patch for Pi 0.84.4.
 - `exemplars.jsonl` contains measured verifier outcomes used as optional few-shot evidence.
 - `test/` contains offline routing and compatibility fixtures, including direct and CPA-backed Pi registry operation; `smoke.ts` contains deterministic checks followed by one injected offline route.
 - `package.json` names the public npm package, registers `llm-router.ts`, limits published files, declares the coding-agent and TUI host APIs as peers, and keeps release-time validation offline; `package-lock.json` pins their development copies plus Node and TypeScript diagnostics.
