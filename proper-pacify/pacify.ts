@@ -67,6 +67,10 @@ Everything else is content. Keep claims about past behavior, consequences, condi
 interface PacifyLog {
 	before: string;
 	model: string;
+	/** The rewrite ended without a sent message; no child can be its rewrite. */
+	cancelled?: boolean;
+	/** Command dispatch appends no user message; no child can be its rewrite. */
+	command?: boolean;
 }
 
 type RegistryModel = ReturnType<
@@ -364,9 +368,18 @@ export function pacifiedOriginalFor(text: string): string | undefined {
 		const originals = new Map<string, string>();
 		for (const entry of manager.getEntries()) {
 			if (entry.type === "custom" && entry.customType === ENTRY_TYPE) {
-				const before = (entry.data as Partial<PacifyLog> | undefined)?.before;
-				if (typeof before === "string" && before !== text) {
-					originals.set(entry.id, before);
+				const data = entry.data as Partial<PacifyLog> | undefined;
+				// A cancelled rewrite and a dispatched command append no user message
+				// of their own, so their entry's next user-message child is a later,
+				// unrelated prompt — pairing it would strike out text the user never
+				// typed. Only entries that can be followed by their rewrite register.
+				if (
+					typeof data?.before === "string" &&
+					data.before !== text &&
+					!data.cancelled &&
+					!data.command
+				) {
+					originals.set(entry.id, data.before);
 				}
 				continue;
 			}
@@ -522,12 +535,24 @@ async function pacifyInput(
 // Appended before the model call, so the prompt appears the moment it is sent
 // rather than only once the rewrite returns. The rewrite is the user message
 // rendered directly below this entry and is never repeated inside it.
-function appendLog(pi: ExtensionAPI, model: string, before: string): void {
+function appendLog(
+	pi: ExtensionAPI,
+	model: string,
+	before: string,
+	flags?: Partial<Pick<PacifyLog, "cancelled" | "command">>,
+): void {
 	try {
-		pi.appendEntry<PacifyLog>(ENTRY_TYPE, { before, model });
+		pi.appendEntry<PacifyLog>(ENTRY_TYPE, { before, model, ...flags });
 	} catch {
 		// Losing the transcript record must never cost the user their prompt.
 	}
+}
+
+/** Flags a logged input whose dispatch will never append a user message. */
+function commandFlags(
+	text: string,
+): Partial<Pick<PacifyLog, "command">> | undefined {
+	return /^\s*\//.test(text) ? { command: true } : undefined;
 }
 
 async function withCancellation<T>(
@@ -738,9 +763,14 @@ export async function pacifyIncoming(
 	// `/unpacify …` is a request not to rewrite, so its argument must reach
 	// command dispatch exactly as typed.
 	if (/^\s*\/unpacify\b/.test(event.text)) return { action: "continue" };
+	// A command with no argument is entirely dispatch syntax with no prose to
+	// rewrite. Returning before the transcript entry keeps phantom "pacifying"
+	// rows out of the session — proper-base's internal cancelled-prompt repair
+	// command would otherwise log one at the very leaf it is about to abandon.
+	if (/^\s*\/\S+\s*$/.test(event.text)) return { action: "continue" };
 	const config = loadConfig();
 	if (!automaticModeEnabled(config)) return { action: "continue" };
-	appendLog(pi, config.model, event.text);
+	appendLog(pi, config.model, event.text, commandFlags(event.text));
 	try {
 		const result = await withCancellation(ctx, (signal) =>
 			pacifyInput(ctx, config, event.text, signal),
@@ -752,6 +782,11 @@ export async function pacifyIncoming(
 		};
 	} catch (error) {
 		if (error instanceof PacifyCancelledError) {
+			// The marker becomes the leaf, so the next unpacified user message is
+			// its child rather than the pending entry's, and the transformer never
+			// pairs that message with the discarded prompt. It also renders the
+			// outcome beneath the entry that promised a rewrite.
+			appendLog(pi, config.model, event.text, { cancelled: true });
 			ctx.ui.notify("pacify: cancelled; prompt discarded", "info");
 			return { action: "handled" };
 		}
@@ -817,7 +852,9 @@ export default function properPacify(pi: ExtensionAPI): void {
 			// a terminal cell has no size, so weight is the only lever for "smaller".
 			const marker = theme.fg("borderAccent", theme.bold(expanded ? "⌄" : "›"));
 			const header = theme.italic(
-				`${marker} ${theme.fg("customMessageLabel", "pacifying with")} ${theme.fg("accent", data.model)}`,
+				data.cancelled
+					? `${marker} ${theme.fg("customMessageLabel", "pacify cancelled")}`
+					: `${marker} ${theme.fg("customMessageLabel", "pacifying with")} ${theme.fg("accent", data.model)}`,
 			);
 			// The expanded body is the plain recorded original; the diff renders on
 			// the user message below, where the rewritten prompt already displays.
@@ -837,13 +874,16 @@ export default function properPacify(pi: ExtensionAPI): void {
 			}
 			await ctx.waitForIdle();
 			const config = loadConfig();
-			appendLog(pi, config.model, args);
+			appendLog(pi, config.model, args, commandFlags(args));
 			try {
 				const result = await withCancellation(ctx, (signal) =>
 					pacifyInput(ctx, config, args, signal),
 				);
 				sendBypassed(pi, result.text);
 			} catch (error) {
+				// Cancelled or failed: nothing was sent, so the entry must not pair
+				// with whatever user message lands below it next.
+				appendLog(pi, config.model, args, { cancelled: true });
 				ctx.ui.notify(`pacify: ${errorMessage(error)}`, "error");
 			}
 		},

@@ -58,7 +58,7 @@ The fixture verifies commands, automatic mode, transcript entries, and failure b
 
 It covers slash-token preservation, interactive and extension-origin input, one-shot recursion avoidance, template expansion, and cancellation. Print and JSON run modes receive an otherwise eligible prompt and must return it untouched without adding a transcript entry, proving headless children never pay for a rewrite.
 
-It asserts that the entry holds exactly the original text and the target model, that a successful rewrite emits no notification beside it, and that a provider failure reports the error without appending a second entry.
+It asserts that the entry holds exactly the original text and the target model — plus the pairing opt-out flag when the input is a command dispatch — that a successful rewrite emits no notification beside it, that a provider failure reports the error without appending a second entry, and that a cancelled rewrite appends a `cancelled` marker entry recording the discarded prompt. Bare commands pass through the wrapper without writing any entry.
 
 ## Word diff fixture
 
@@ -70,10 +70,10 @@ It asserts that an unchanged prompt yields one same span, that a replacement emi
 
 The fixture captures the registered markdown transformer and drives it with a stubbed session manager and marker theme supplied through `session_start`.
 
-It asserts that a settled user message matching a recorded rewrite renders the original's deleted words struck through in the removed-diff color ahead of the kept text, and that everything else passes through byte-identical: assistant markdown, streaming user updates, text no pacify entry produced, and a rewrite that changed nothing. Storing `diff: false` suppresses the display for the same message and storing `diff: true` restores it, without a reload.
+It asserts that a settled user message matching a recorded rewrite renders the original's deleted words struck through in the removed-diff color ahead of the kept text, and that everything else passes through byte-identical: assistant markdown, streaming user updates, text no pacify entry produced, a rewrite that changed nothing, and — through the pairing opt-outs — prompts that land beneath a cancelled rewrite's marker or a dispatched command's entry, which must never render as a diff of text the user did not type. Storing `diff: false` suppresses the display for the same message and storing `diff: true` restores it, without a reload.
 
 ## Transcript entry fixture
 
 The fixture captures the registered entry renderer and renders it at one width with a plain-text theme.
 
-It asserts that the collapsed form is the `›` header alone with the original prompt withheld, and that the expanded form carries the `⌄` marker and the prompt beneath it.
+It asserts that the collapsed form is the `›` header alone with the original prompt withheld, and that the expanded form carries the `⌄` marker and the prompt beneath it. A `cancelled` marker entry renders the `pacify cancelled` header instead, withholding the discarded text until expanded.

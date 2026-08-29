@@ -254,6 +254,89 @@ test("cancelling an unprocessed prompt restores it and leaves its session branch
 		});
 		assert.equal(navigatedTo, "prior-assistant");
 		assert.equal(entries.at(-1)?.id, "pacified-entry");
+
+		// A streaming provider opens the assistant message with a "pending"
+		// partial the moment response headers arrive. With zero content
+		// streamed, Esc must still restore and remove the turn: the connection
+		// alone is not assistant processing.
+		entries.length = 0;
+		editorText = "";
+		sentCommand = undefined;
+		navigatedTo = undefined;
+		leafId = null;
+		await handlers.get("input")?.(
+			{ source: "interactive", text: "cancel while connecting" },
+			ctx,
+		);
+		const connectingMessage = {
+			role: "user",
+			content: [{ type: "text", text: "cancel while connecting" }],
+			timestamp: 900,
+		};
+		await handlers.get("message_start")?.({ message: connectingMessage }, ctx);
+		entries.push({
+			type: "message",
+			id: "connecting-entry",
+			parentId: null,
+			message: connectingMessage,
+		});
+		leafId = "connecting-entry";
+		await handlers.get("message_start")?.(
+			{
+				message: {
+					role: "assistant",
+					content: [],
+					stopReason: "pending",
+					timestamp: 901,
+				},
+			},
+			ctx,
+		);
+		terminalInput?.("\x1b");
+		assert.equal(editorText, "cancel while connecting");
+		await handlers.get("agent_settled")?.({}, ctx);
+		assert.equal(sentCommand, "/__proper-cancel-prompt");
+		await commandHandler?.("", {
+			...ctx,
+			navigateTree: async (targetId: string) => {
+				navigatedTo = targetId;
+				return { cancelled: false };
+			},
+		});
+		assert.equal(navigatedTo, "connecting-entry");
+
+		// Once deltas stream into that pending partial, the window closes.
+		editorText = "";
+		sentCommand = undefined;
+		await handlers.get("input")?.(
+			{ source: "interactive", text: "streamed already" },
+			ctx,
+		);
+		await handlers.get("message_start")?.(
+			{
+				message: {
+					role: "user",
+					content: [{ type: "text", text: "streamed already" }],
+					timestamp: 902,
+				},
+			},
+			ctx,
+		);
+		const streamingPartial = {
+			role: "assistant",
+			content: [],
+			stopReason: "pending",
+			timestamp: 903,
+		};
+		await handlers.get("message_start")?.({ message: streamingPartial }, ctx);
+		await handlers.get("message_update")?.(
+			{ message: streamingPartial, assistantMessageEvent: {} },
+			ctx,
+		);
+		terminalInput?.("\x1b");
+		assert.equal(editorText, "");
+		await handlers.get("agent_settled")?.({}, ctx);
+		assert.equal(sentCommand, undefined);
 	} finally {
 		await rm(cwd, { recursive: true, force: true });
 	}

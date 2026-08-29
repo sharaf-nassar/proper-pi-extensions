@@ -162,7 +162,7 @@ A second fixture models pi's width-sensitive native render, which silently drops
 
 A session integration fixture verifies editable recovery of an unprocessed cancelled prompt.
 
-It submits through the wrapped editor, captures the accepted user entry, and presses Esc before assistant processing. The prompt returns immediately, settlement schedules the internal command, a hidden anchor makes a leaf user entry navigable, and tree navigation abandons the cancelled turn. Further phases cover pre-input routing cancellation, processed-turn retention, and delegation of queued streaming prompts to Pi's native restoration. A final phase appends another extension's transcript entry between submission and the user message and proves navigation targets the pre-submission leaf, so that entry leaves the branch with the prompt instead of remaining as its surviving parent.
+It submits through the wrapped editor, captures the accepted user entry, and presses Esc before assistant processing. The prompt returns immediately, settlement schedules the internal command, a hidden anchor makes a leaf user entry navigable, and tree navigation abandons the cancelled turn. Further phases cover pre-input routing cancellation, processed-turn retention, delegation of queued streaming prompts to Pi's native restoration, and the streaming `pending` partial: an assistant start carrying it leaves the turn cancellable, and only a subsequent message update closes the window. A final phase appends another extension's transcript entry between submission and the user message and proves navigation targets the pre-submission leaf, so that entry leaves the branch with the prompt instead of remaining as its surviving parent.
 
 ## Questionnaire cancellation fixture
 

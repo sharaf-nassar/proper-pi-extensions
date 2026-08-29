@@ -424,7 +424,13 @@ export default function (pi: ExtensionAPI) {
 			event.message.role === "assistant" &&
 			event.message.stopReason !== "aborted"
 		) {
-			pendingPrompt.processed = true;
+			// Streaming opens the assistant message with a "pending" partial as
+			// soon as response headers arrive — instantly behind a local proxy,
+			// with zero tokens produced. That is not assistant processing yet;
+			// content arrival marks it through message_update instead.
+			if (event.message.stopReason !== "pending") {
+				pendingPrompt.processed = true;
+			}
 			imagePreview?.clear();
 		}
 	});

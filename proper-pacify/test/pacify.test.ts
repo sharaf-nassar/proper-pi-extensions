@@ -329,10 +329,12 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 		ctx,
 	);
 	assert.equal(transformed.text, "/skill:review could you please fix this now");
-	// The entry holds only the original text and the model it is going to.
+	// The entry holds the original text, the model it is going to, and — for a
+	// command dispatch that will append no user message — the pairing opt-out.
 	assert.deepEqual(entries[0].data, {
 		before: "/skill:review fix this now",
 		model: "openai-codex/gpt-5.6-luna",
+		command: true,
 	});
 	// A successful rewrite reports nothing separately: the entry is the progress
 	// indicator, so no notification duplicates the prompt beside it.
@@ -441,6 +443,13 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 		{ action: "handled" },
 	);
 	assert.match(notifications.at(-1)?.message ?? "", /cancelled/);
+	// The cancellation marker takes over the leaf so the discarded prompt's
+	// entry can never adopt the next unpacified user message as its rewrite.
+	assert.deepEqual(entries.at(-1)?.data, {
+		before: "cancel this",
+		model: "anthropic/claude-haiku-4-5",
+		cancelled: true,
+	});
 
 	ctx.ui.onTerminalInput = undefined;
 	ctx.modelRegistry.complete = async () => {
@@ -885,6 +894,11 @@ test("wrapper survives reload, bare commands, and transcript failures", async ()
 		assert.deepEqual(result, { action: "continue" }, bare);
 	}
 	assert.deepEqual(sentToModel, [buildUserTurn("fix this stupid parser")]);
+	assert.deepEqual(
+		loggedBy,
+		["second"],
+		"bare commands write no transcript entry",
+	);
 
 	// A failing transcript write must never cost the user their prompt.
 	properPacify(
@@ -984,6 +998,41 @@ test("the user message markdown renders the tone diff in place", () => {
 						type: "message",
 						message: { role: "user", content: "fix it" },
 					},
+					// A cancelled rewrite: the pending entry, its cancellation marker,
+					// and a later unpacified prompt that lands beneath the marker.
+					{
+						id: "pacify-3",
+						type: "custom",
+						customType: "proper-pacify",
+						data: { before: "discarded rant", model: "m" },
+					},
+					{
+						id: "pacify-3-cancel",
+						parentId: "pacify-3",
+						type: "custom",
+						customType: "proper-pacify",
+						data: { before: "discarded rant", model: "m", cancelled: true },
+					},
+					{
+						id: "user-3",
+						parentId: "pacify-3-cancel",
+						type: "message",
+						message: { role: "user", content: "sent plain later" },
+					},
+					// A rewritten command: dispatch appends no user message, so its
+					// child is a later unrelated prompt.
+					{
+						id: "pacify-4",
+						type: "custom",
+						customType: "proper-pacify",
+						data: { before: "/jira-file blah", model: "m", command: true },
+					},
+					{
+						id: "user-4",
+						parentId: "pacify-4",
+						type: "message",
+						message: { role: "user", content: "another plain prompt" },
+					},
 				],
 			},
 		},
@@ -1002,6 +1051,10 @@ test("the user message markdown renders the tone diff in place", () => {
 	assert.equal(run("unrelated prompt"), "unrelated prompt");
 	// A rewrite that changed nothing shows no diff markup.
 	assert.equal(run("fix it"), "fix it");
+	// A prompt below a cancelled rewrite or a dispatched command is not that
+	// entry's rewrite; pairing it would strike out text the user never typed.
+	assert.equal(run("sent plain later"), "sent plain later");
+	assert.equal(run("another plain prompt"), "another plain prompt");
 
 	// The configuration flag turns the display off without touching anything
 	// else, and back on again.
@@ -1040,4 +1093,18 @@ test("the transcript entry collapses to its header until expanded", () => {
 	const expanded = render(true);
 	assert.match(expanded, /⌄ pacifying with m/);
 	assert.match(expanded, /fix this stupid parser/);
+
+	// The cancellation marker names its outcome and keeps the discarded text
+	// available on expand.
+	const cancelled = (expanded_: boolean) =>
+		renderer(
+			{ data: { before: "dropped rant", model: "m", cancelled: true } },
+			{ expanded: expanded_ },
+			theme,
+		)
+			.render(60)
+			.join("\n");
+	assert.match(cancelled(false), /› pacify cancelled/);
+	assert.doesNotMatch(cancelled(false), /dropped rant/);
+	assert.match(cancelled(true), /dropped rant/);
 });
