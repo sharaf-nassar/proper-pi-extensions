@@ -120,6 +120,12 @@ A session integration fixture applies the real Pi 0.84.4 `KeybindingsManager` to
 
 It verifies Ctrl+V and Ctrl+Shift+V both match Pi's clipboard paste action without removing an existing Alt+V alias. Alt+Enter matches prompt newline and no longer matches follow-up queueing, a user's own newline alias survives beside it, and proper-base adds no Shift+Enter of its own — under a user override that chord stops matching, while Pi's untouched defaults keep both Shift+Enter and Ctrl+J. Fullscreen transcript actions claim Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown instead of unmodified or Shift-only keys; the editor retains its native unmodified bindings; and modern modifier sequences match the intended actions. Navigation fixtures verify a recalled prompt ends at line 0, column 0; Home first reaches a soft-wrapped visible-row start and then the full prompt start, including across a hard newline; and End reaches the logical line end and then the full prompt end. They also prove native reload reapplies current bindings without losing unrelated user values, repeated installation remains idempotent, and the terminal writer stays untouched for Pi's native mouse handling.
 
+## Wheel scroll fixture
+
+Pure resolution and install cases pin the wheel step's default, override grammar, and fail-open renderer guard.
+
+Resolution returns 3 for an absent, empty, non-numeric, zero, or negative `PROPER_WHEEL_SCROLL_LINES` and the parsed value for a positive integer. Installation patches only an object already carrying a numeric `wheelScrollLines`, floors fractional input, and leaves a shape without the field untouched — the regular-mode renderer never gains the property.
+
 ## Smart selection fixture
 
 Smart-selection fixtures verify token-aware ranges extend Pi's native fullscreen word selection without replacing it.

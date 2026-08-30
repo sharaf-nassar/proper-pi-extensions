@@ -198,13 +198,21 @@ Pi re-renders the full component tree every frame and relies on each component's
 
 Pinned scrolling comes from pi's native fullscreen renderer; proper-base keeps that renderer switch available and changes which keys target it.
 
-With `tuiMode` set to `fullscreen`, pi owns transcript scrolling while queued messages, status, widgets, editor, and footer remain fixed at the bottom. proper-base does not implement a second transcript viewport; it releases inactive overlays so renderer changes remain unblocked. Mouse selection, wheel scrolling, scrollbar dragging, and link clicks remain under Pi's native fullscreen renderer.
+With `tuiMode` set to `fullscreen`, pi owns transcript scrolling while queued messages, status, widgets, editor, and footer remain fixed at the bottom. proper-base does not implement a second transcript viewport; it releases inactive overlays so renderer changes remain unblocked. Mouse selection, wheel routing, scrollbar dragging, and link clicks remain under Pi's native fullscreen renderer; only the wheel's per-event line step changes, per the wheel scroll rate below.
 
 A non-empty interactive submission calls the native `scrollToBottom()` before input processing continues, restoring follow mode so the new user message and response are visible. Extension-origin input leaves viewport position unchanged.
 
 Pi normally gives fullscreen transcript actions priority on unmodified Home, End, PageUp, and PageDown. The editor factory rewrites those four `tui.altScreen` action bindings on pi's shared keybinding manager to Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown. The unmodified and Shift-only keys therefore remain available to the terminal and pi's native editor actions.
 
 Pi reloads `keybindings.json` after extension `session_start` handlers, so proper-base wraps the manager's `reload()` method once and reapplies its four overrides after the native file load. The wrapper delegates through a symbol-stored mutable controller: hot reload replaces the controller's apply callback, preventing a closure from an older extension version from restoring obsolete bindings after the new `session_start`. A legacy boolean marker is upgraded by wrapping its stale reload handler so the newest apply pass runs last. Unrelated user bindings are preserved, repeated factory installation cannot stack current wrappers or drift values, and these four transcript bindings intentionally override user values while proper-base is active.
+
+## Wheel scroll rate
+
+A mouse-wheel event moves the fullscreen transcript three lines by default instead of pi's one, matching how terminals scroll their native scrollback.
+
+Pi's fullscreen renderer constructs itself with a one-line wheel step: the `wheelScrollLines` option defaults to 1, and pi neither passes an override nor exposes a setting for it. Terminals typically multiply a wheel notch to about three lines with acceleration, so pi's fullscreen transcript scrolls noticeably slower than every other terminal surface. No escape sequence lets an application query the terminal's own wheel configuration, so the editor factory raises the renderer's numeric `wheelScrollLines` field to the 3-line application convention shared by vim and less.
+
+A `PROPER_WHEEL_SCROLL_LINES` environment variable overrides the step per terminal — each terminal's profile can export the value matching its native behavior — and any non-positive or unparseable value falls back to the default, with fractional input floored. SGR wheel reports cannot distinguish one discrete mouse notch from one line of a high-rate trackpad stream, so a terminal that emits one report per native line scrolls proportionally faster; exporting an override of 1 there restores pi's original pace. Only a renderer already exposing a numeric `wheelScrollLines` is touched: regular mode owns no wheel input, and a renamed upstream field fails open to pi's native behavior.
 
 ## Smart fullscreen selection
 

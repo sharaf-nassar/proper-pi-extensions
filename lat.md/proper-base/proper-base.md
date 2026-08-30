@@ -26,6 +26,7 @@ The runtime is split by responsibility.
 - `src/smart-selection.ts` extends Pi's fullscreen double-click range for common single-line terminal tokens while preserving native fallback and selection mechanics.
 - `src/osc8-link-ids.ts` rewrites fullscreen terminal writes so every anonymous OSC 8 open carries a stable URI-derived id, making wrapped transcript links one hover-and-activation unit in id-aware terminals.
 - `src/selection-dismiss.ts` drops the fullscreen mouse selection when a keystroke or paste reaches the editor, while mouse, viewport, and terminal-report input leave it standing.
+- `src/wheel-scroll.ts` raises the fullscreen renderer's per-wheel-event line step to the 3-line terminal scrolling convention, with a per-terminal environment override and fail-open field detection.
 - `src/transcript-cleanup.ts` keeps the active run live, leaves thoughts and settled updates fully rendered, compacts tools and errors behind per-item summaries, and claims clicks on those summaries ahead of fullscreen selection handling.
 - `src/history-guard.ts` blocks Pi's transformed session replay and admits only recorder-trusted prompts.
 - `src/history.ts` contains pure recall filtering, timestamp ordering, deduplication, and editor-factory unwrapping.
@@ -73,6 +74,7 @@ These rules preserve history and autocomplete details without destabilizing the 
 31. `/fast` affects only the current session and every new session starts with it off, while `/fast-global` persists the provider's `fast` key and reaches every running session's next request; the overlay adds the priority tier only for catalog-capable models of the configured provider, strips exactly that tier when Fast is off, and never touches other providers' requests or `modelRegistry.complete` side calls.
 32. The clipboard guard patches only pi's cached addon object, only on Linux, replaces only `getText` and `hasImage`, installs once per process, and fails open: an unresolvable or unrecognized addon leaves every pi clipboard path unchanged.
 33. Anonymous OSC 8 opens in fullscreen terminal output gain a stable URI-derived `id=` parameter so all wrapped rows of one link share one hyperlink identity; closes, opens with explicit params, split sequences, and terminals without a `write` surface are left exactly as Pi produced them.
+34. The fullscreen wheel step is raised only on a renderer exposing a numeric `wheelScrollLines`, uses three lines unless `PROPER_WHEEL_SCROLL_LINES` supplies a positive integer, and leaves wheel routing, regular mode, and unrecognized renderer shapes native.
 
 ## Clipboard leak guard
 
@@ -88,7 +90,7 @@ macOS and Windows keep the addon untouched: pi implements no subprocess clipboar
 
 Each document owns one runtime concern.
 
-- [lifecycle](./lifecycle.md) — startup, session listing, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, smart selection, selection dismissal, fast tier scopes, the jump-to-bottom button, the prompt jump chips, autocomplete details, footer decoration, the commit message guard, and transient stream retry.
+- [lifecycle](./lifecycle.md) — startup, session listing, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, settled transcript detail, early-cancel recovery, editor composition, fullscreen key routing, wheel scroll rate, smart selection, selection dismissal, fast tier scopes, the jump-to-bottom button, the prompt jump chips, autocomplete details, footer decoration, the commit message guard, and transient stream retry.
 - [storage](./storage.md) — project paths, JSONL format, permissions, bounded reads, limits, and compaction.
 - [operations](./operations.md) — package identity, installation, runtime requirements, and data removal.
 - [tests](./tests.md) — deterministic history, recorder, autocomplete, fullscreen key routing, footer styling, and real-filesystem store coverage.

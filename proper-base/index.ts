@@ -75,6 +75,7 @@ import {
 	type TranscriptCleanupController,
 } from "./src/transcript-cleanup.ts";
 import { normalizeCpaTransientError } from "./src/transient-retry.ts";
+import { installWheelScrollLines } from "./src/wheel-scroll.ts";
 
 /** Prompts seeded into the editor. Older prompts past this point are dropped. */
 const MAX_ENTRIES = 200;
@@ -674,6 +675,8 @@ export default function (pi: ExtensionAPI) {
 				new CustomEditor(tui, theme, keybindings);
 			activeEditor = editor as PromptEditor;
 			activeTui = tui;
+			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Wheel scroll rate]]
+			installWheelScrollLines(tui);
 			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Settled transcript]]
 			transcriptCleanup?.uninstall();
 			transcriptCleanup = installTranscriptCleanup(tui, ctx);
