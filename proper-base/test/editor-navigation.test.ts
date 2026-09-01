@@ -127,6 +127,40 @@ test("active image marker highlights and backspace deletes it", () => {
 	assert.ok(!editor.render(40).join("\n").includes("\x1b[7m[image 0]\x1b[0m"));
 });
 
+test("reverse search keeps pi-tui paste markers in the draft expandable", () => {
+	const tui = { terminal: { rows: 24 } };
+	const editor = new Editor(
+		tui as never,
+		{ borderColor: (value: string) => value, selectList: {} } as never,
+	);
+	installReverseHistorySearch(
+		editor,
+		{ requestRender: () => {} },
+		{ matches: () => false },
+		["git status"],
+		200,
+	);
+
+	const pasted = "pasted line\n".repeat(20).trim();
+	editor.handleInput(`\x1b[200~${pasted}\x1b[201~`);
+	assert.match(editor.getText(), /\[paste #1 /);
+	const draft = editor.getText();
+
+	// Entering reverse search exits history mode through setText(), which
+	// clears pi-tui's paste registry; the restored draft must still expand.
+	editor.handleInput("\x12");
+	editor.handleInput("\x07");
+	assert.equal(editor.getText(), draft);
+
+	let submitted = "";
+	editor.onSubmit = (value: string) => {
+		submitted = value;
+	};
+	editor.handleInput("\r");
+	assert.ok(submitted.includes("pasted line\npasted line"));
+	assert.ok(!submitted.includes("[paste #1"));
+});
+
 function reverseSearchFixture(text = "draft prompt") {
 	const state = { lines: text.split("\n"), cursorLine: 0, cursorCol: 2 };
 	const submitted: string[] = [];

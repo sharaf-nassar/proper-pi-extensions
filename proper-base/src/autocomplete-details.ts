@@ -45,6 +45,7 @@ type InlineSlashEditor = Component & {
 	handleInput?(data: string): void;
 	isShowingAutocomplete?(): boolean;
 	tryTriggerAutocomplete?(): void;
+	updateAutocomplete?(): void;
 	[INLINE_SLASH_INSTALLED]?: boolean;
 };
 
@@ -104,12 +105,49 @@ export function installInlineSlashAutocomplete(editor: Component): void {
 
 	const handleInput = target.handleInput.bind(target);
 	target.handleInput = (data: string) => {
+		const wasShowing = target.isShowingAutocomplete?.() === true;
+		const before = wasShowing ? target.state?.lines.join("\n") : undefined;
 		handleInput(data);
-		if (target.isShowingAutocomplete?.() || !/^[/a-zA-Z0-9._:-]$/.test(data)) {
-			return;
-		}
 		const state = target.state;
 		if (!state) return;
+		if (target.isShowingAutocomplete?.()) {
+			// Word and line deletes (alt+backspace, ctrl+w/u/k) edit the prompt
+			// without the autocomplete refresh pi's insert and backspace paths
+			// run, so an open list lingers under stale text. Re-request with
+			// the current prompt; an emptied context closes the list through
+			// the editor's own no-suggestions path. Single printable keys and
+			// backspace already refreshed inside the editor.
+			if (
+				wasShowing &&
+				state.lines.join("\n") !== before &&
+				!(data.length === 1 && data >= " ")
+			) {
+				target.updateAutocomplete?.();
+			}
+			return;
+		}
+		if (wasShowing) {
+			// Accepting a command completion closes the list and leaves
+			// "/command " behind, but pi re-opens suggestions only from typed
+			// characters, so an accepted command's argument menu — /model's
+			// list — stayed hidden until another keystroke. A text change
+			// during the open-to-closed transition is what separates
+			// acceptance from dismissal: Esc leaves the prompt untouched and
+			// must not reopen the list just closed. The token shape keeps a
+			// completed file path from popping a menu of its own.
+			const beforeCursor = (state.lines[state.cursorLine] ?? "").slice(
+				0,
+				state.cursorCol,
+			);
+			if (
+				state.lines.join("\n") !== before &&
+				/(?:^|\s)\/[a-zA-Z0-9._:-]+ $/.test(beforeCursor)
+			) {
+				target.tryTriggerAutocomplete?.();
+			}
+			return;
+		}
+		if (!/^[/a-zA-Z0-9._:-]$/.test(data)) return;
 		if (inlineSlashContext(state.lines, state.cursorLine, state.cursorCol)) {
 			target.tryTriggerAutocomplete?.();
 		}

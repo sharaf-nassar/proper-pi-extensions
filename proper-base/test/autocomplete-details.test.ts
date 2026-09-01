@@ -216,11 +216,20 @@ test("inline slash autocomplete targets only the active command", async () => {
 		| ((tui: any, theme: any, keybindings: any) => any)
 		| undefined;
 	let triggered = 0;
+	let updated = 0;
 	const editor = {
 		state: { lines: ["please "], cursorLine: 0, cursorCol: 7 },
+		showing: false,
+		accept: undefined as (() => void) | undefined,
 		onSubmit: undefined,
 		addToHistory() {},
 		handleInput(data: string) {
+			const accept = this.accept;
+			if (accept) {
+				this.accept = undefined;
+				accept();
+				return;
+			}
 			const line = this.state.lines[this.state.cursorLine] ?? "";
 			this.state.lines[this.state.cursorLine] =
 				line.slice(0, this.state.cursorCol) +
@@ -228,9 +237,14 @@ test("inline slash autocomplete targets only the active command", async () => {
 				line.slice(this.state.cursorCol);
 			this.state.cursorCol += data.length;
 		},
-		isShowingAutocomplete: () => false,
+		isShowingAutocomplete() {
+			return this.showing;
+		},
 		tryTriggerAutocomplete() {
 			triggered++;
+		},
+		updateAutocomplete() {
+			updated++;
 		},
 		render: () => ["editor"],
 	};
@@ -279,6 +293,73 @@ test("inline slash autocomplete targets only the active command", async () => {
 		editor.state = { lines: ["first", ""], cursorLine: 1, cursorCol: 0 };
 		wrapped.handleInput("/");
 		assert.equal(triggered, 3);
+
+		// Tab-accepting "/mo" -> "/model " closes the command list; the
+		// wrapper must reopen suggestions so the argument menu shows without
+		// another keystroke.
+		editor.state = { lines: ["/mo"], cursorLine: 0, cursorCol: 3 };
+		editor.showing = true;
+		editor.accept = () => {
+			editor.state = { lines: ["/model "], cursorLine: 0, cursorCol: 7 };
+			editor.showing = false;
+		};
+		wrapped.handleInput("\t");
+		assert.equal(triggered, 4);
+
+		// Esc dismisses without a text change; the list just closed must not
+		// reopen.
+		editor.state = { lines: ["/model "], cursorLine: 0, cursorCol: 7 };
+		editor.showing = true;
+		editor.accept = () => {
+			editor.showing = false;
+		};
+		wrapped.handleInput("\x1b");
+		assert.equal(triggered, 4);
+
+		// A completed multi-segment file path is not a command token; no menu
+		// pops behind it.
+		editor.state = { lines: ["see /mo"], cursorLine: 0, cursorCol: 7 };
+		editor.showing = true;
+		editor.accept = () => {
+			editor.state = {
+				lines: ["see /etc/passwd "],
+				cursorLine: 0,
+				cursorCol: 16,
+			};
+			editor.showing = false;
+		};
+		wrapped.handleInput("\t");
+		assert.equal(triggered, 4);
+
+		// Alt+backspace deletes the word but pi never refreshes the open
+		// list; the wrapper re-requests so the stale menu closes.
+		editor.state = { lines: ["/model "], cursorLine: 0, cursorCol: 7 };
+		editor.showing = true;
+		editor.accept = () => {
+			editor.state = { lines: [""], cursorLine: 0, cursorCol: 0 };
+		};
+		wrapped.handleInput("\x1b\x7f");
+		assert.equal(updated, 1);
+		assert.equal(triggered, 4);
+
+		// Plain backspace already refreshes inside the editor; no second
+		// request.
+		editor.state = { lines: ["/model "], cursorLine: 0, cursorCol: 7 };
+		editor.showing = true;
+		editor.accept = () => {
+			editor.state = { lines: ["/model"], cursorLine: 0, cursorCol: 6 };
+		};
+		wrapped.handleInput("\x7f");
+		assert.equal(updated, 1);
+
+		// Keys that change no text while the list is open request nothing.
+		editor.state = { lines: ["/model "], cursorLine: 0, cursorCol: 7 };
+		editor.showing = true;
+		editor.accept = () => {};
+		wrapped.handleInput("\x1b[A");
+		assert.equal(updated, 1);
+		assert.equal(triggered, 4);
+		editor.showing = false;
 	} finally {
 		await rm(cwd, { recursive: true, force: true });
 	}

@@ -104,6 +104,105 @@ test("frames without a visible preview skip measuring rows below the editor", as
 	}
 });
 
+test("image paste keeps pi-tui paste markers expandable", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "proper-base-paste-registry-"));
+	const imagePath = join(
+		dir,
+		"pi-clipboard-aaaaaaaa-bbbb-cccc-dddd-abcdefabcdef.png",
+	);
+	await writeFile(imagePath, PNG_1X1);
+	const tui = {
+		terminal: { rows: 24 },
+		requestRender() {},
+		showOverlay: () => ({ hide() {} }),
+		children: [] as unknown[],
+	};
+	const editor = new Editor(
+		tui as never,
+		{
+			borderColor: (value: string) => value,
+			selectList: {},
+		} as never,
+	);
+	tui.children.push(editor);
+
+	try {
+		installImagePreview(editor, tui as never, {
+			fallbackColor: (value) => value,
+		});
+
+		const pasted = "pasted line\n".repeat(20).trim();
+		editor.handleInput(`\x1b[200~${pasted}\x1b[201~`);
+		assert.match(editor.getText(), /\[paste #1 /);
+
+		// pi-tui's setText() clears the paste registry; the path-to-marker
+		// rewrite for the pasted image must not orphan the paste marker.
+		editor.insertTextAtCursor(` ${imagePath}`);
+		assert.match(editor.getText(), /\[image 1\]$/);
+
+		let submitted = "";
+		editor.onSubmit = (value: string) => {
+			submitted = value;
+		};
+		editor.handleInput("\r");
+		assert.ok(submitted.includes("pasted line\npasted line"));
+		assert.ok(!submitted.includes("[paste #1"));
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("clear keeps previews for markers still in the editor", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "proper-base-image-clear-"));
+	const imagePath = join(
+		dir,
+		"pi-clipboard-aaaaaaaa-bbbb-cccc-dddd-ffffffffffff.png",
+	);
+	await writeFile(imagePath, PNG_1X1);
+	let text = "";
+	const editor = {
+		onChange: undefined as ((value: string) => void) | undefined,
+		getText: () => text,
+		setText(value: string) {
+			text = value;
+			this.onChange?.(text);
+		},
+		insertTextAtCursor(value: string) {
+			text += value;
+			this.onChange?.(text);
+		},
+		render: (_width: number) => [text],
+		invalidate() {},
+	};
+	const tui = {
+		children: [editor],
+		terminal: { rows: 24 },
+		requestRender() {},
+		showOverlay: () => ({ hide() {} }),
+	};
+
+	try {
+		const controller = installImagePreview(editor, tui as never, {
+			fallbackColor: (value) => value,
+		});
+		assert.ok(controller);
+
+		// An image pasted while the agent runs sits in the editor when the turn
+		// settles and proper-base calls clear(); the marker must still expand.
+		editor.insertTextAtCursor(`/unpacify fix this ${imagePath}`);
+		assert.equal(text, "/unpacify fix this [image 1]");
+		controller.clear();
+		assert.equal(controller.prepare(text), `/unpacify fix this ${imagePath}`);
+
+		// Once the marker has left the editor, clear() drops its preview.
+		editor.setText("");
+		controller.clear();
+		assert.equal(controller.prepare("see [image 1]"), "see [image 1]");
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
 test("thumbnail completion promotes path fallback to Kitty preview", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "proper-base-image-thumbnail-"));
 	const imagePath = join(

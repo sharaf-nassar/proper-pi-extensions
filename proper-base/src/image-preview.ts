@@ -18,6 +18,7 @@ import {
 import sharp from "sharp";
 
 import { isMounted, rowsBelow } from "./autocomplete-details.ts";
+import { setTextKeepingPastes } from "./editor-navigation.ts";
 
 const INSTALLED = Symbol.for("pi-proper-base.image-preview");
 const ACTIVE_OVERLAY = Symbol.for("pi-proper-base.image-preview-overlay");
@@ -347,7 +348,9 @@ export function installImagePreview(
 		}
 		changingText = true;
 		try {
-			target.setText?.(text);
+			// Not plain setText: that would wipe pi-tui's large-paste registry and
+			// orphan any [paste #N] marker sharing the editor with this image.
+			setTextKeepingPastes(target, text);
 		} finally {
 			changingText = false;
 		}
@@ -468,17 +471,31 @@ export function installImagePreview(
 		},
 		clear() {
 			stopLoader();
-			for (const preview of previews.values()) preview.cancelThumbnail?.();
-			previews.clear();
-			markersByPath.clear();
+			// A paste during an agent run registers a marker the user has not yet
+			// submitted. Wiping it here orphans the display-only `[image N]` tag
+			// still in the editor, so the next submit would hand that tag to the
+			// model instead of the source path. Only previews whose marker has
+			// left the editor are dropped.
+			const text = target.getText?.() ?? "";
+			for (const preview of previews.values()) {
+				if (text.includes(preview.marker)) continue;
+				preview.cancelThumbnail?.();
+				preview.cancelThumbnail = undefined;
+				previews.delete(preview.marker);
+				markersByPath.delete(preview.path);
+			}
 			visibleMarkers = "";
 			activePreviews = [];
 			activeImages = [];
 			releaseOverlay();
+			if (previews.size) sync(text);
 		},
 		dispose() {
 			if (target[INSTALLED] !== controller) return;
 			removeFocusRefresh();
+			for (const preview of previews.values()) preview.cancelThumbnail?.();
+			previews.clear();
+			markersByPath.clear();
 			controller.clear();
 			target.render = render;
 			delete target.onChange;

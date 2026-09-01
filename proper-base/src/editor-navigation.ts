@@ -80,6 +80,35 @@ export type ReverseHistorySearchController = {
 	reset(prompts: readonly string[]): void;
 };
 
+/** The large-paste registry pi-tui's `setText()` clears alongside the text. */
+type PasteRegistryEditor = {
+	setText?(text: string): void;
+	pastes?: Map<number, string>;
+	pasteCounter?: number;
+};
+
+// pi-tui's `setText()` empties its `[paste #N]` registry even when the new
+// text keeps the markers; submission would then send the literal tag instead
+// of the pasted content. Restore the entries the new text still references,
+// and the id counter with them so the next paste cannot collide with a kept
+// id.
+export function setTextKeepingPastes(editor: unknown, text: string): void {
+	const target = editor as PasteRegistryEditor;
+	const registry =
+		target.pastes instanceof Map ? [...target.pastes] : undefined;
+	const counter = target.pasteCounter;
+	target.setText?.(text);
+	if (!registry?.length || !(target.pastes instanceof Map)) return;
+	let kept = false;
+	for (const [id, content] of registry) {
+		const marker = `[paste #${id}`;
+		if (!text.includes(`${marker}]`) && !text.includes(`${marker} `)) continue;
+		target.pastes.set(id, content);
+		kept = true;
+	}
+	if (kept && typeof counter === "number") target.pasteCounter = counter;
+}
+
 function segmentImageMarkers(
 	text: string,
 	segments: Iterable<TextSegment>,
@@ -459,7 +488,9 @@ export function installReverseHistorySearch(
 		if (target.isShowingAutocomplete?.()) handleInput("\x1b");
 		const cursor = target.getCursor?.();
 		// Exit Pi's native Up/Down history mode without adding an undo entry.
-		target.setText?.(draft);
+		// Its setText also wipes the large-paste registry while the draft keeps
+		// its markers, so the entries the draft references are restored.
+		setTextKeepingPastes(target, draft);
 		search = {
 			draft,
 			cursor,
