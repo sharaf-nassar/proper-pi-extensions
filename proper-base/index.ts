@@ -59,6 +59,10 @@ import {
 	PROMPT_DISPLAY_ENTRY,
 } from "./src/prompt-display.ts";
 import { installPromptJump } from "./src/prompt-jump.ts";
+import {
+	installRailSetting,
+	type RailSettingController,
+} from "./src/rail-setting.ts";
 import { installRecorder } from "./src/recorder.ts";
 import { installSelectionDismiss } from "./src/selection-dismiss.ts";
 import { installFastSessionList } from "./src/session-list.ts";
@@ -290,6 +294,7 @@ export default function (pi: ExtensionAPI) {
 	let removeFooterColors: (() => void) | undefined;
 	let removeJumpToBottom: (() => void) | undefined;
 	let removePromptJump: (() => void) | undefined;
+	let railSetting: RailSettingController | undefined;
 	let removePromptClear: (() => void) | undefined;
 	let removeSmartSelection: (() => void) | undefined;
 	let removeSelectionDismiss: (() => void) | undefined;
@@ -568,6 +573,8 @@ export default function (pi: ExtensionAPI) {
 		removeJumpToBottom = undefined;
 		removePromptJump?.();
 		removePromptJump = undefined;
+		railSetting?.dispose();
+		railSetting = undefined;
 		removePromptClear?.();
 		removePromptClear = undefined;
 		removeSmartSelection?.();
@@ -697,9 +704,16 @@ export default function (pi: ExtensionAPI) {
 			removeJumpToBottom?.();
 			removeJumpToBottom = installJumpToBottom(editor, tui);
 			removePromptJump?.();
+			railSetting?.dispose();
+			railSetting = installRailSetting(tui, editor, getAgentDir());
+			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Session action rail]]
 			removePromptJump = installPromptJump(tui, {
 				color: (value) => ctx.ui.theme.fg("muted", value),
 				subtle: (value) => ctx.ui.theme.fg("dim", value),
+				outline: () =>
+					railSetting?.enabled() !== false
+						? (transcriptCleanup?.outline() ?? [])
+						: [],
 			});
 			imagePreview?.dispose();
 			imagePreview = installImagePreview(editor, tui, {

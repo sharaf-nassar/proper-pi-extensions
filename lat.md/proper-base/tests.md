@@ -36,7 +36,7 @@ A session integration fixture seeds a raw `/skill:unslop` invocation from the st
 
 Reverse-search fixtures verify Ctrl+R follows terminal incremental-search conventions without losing the prompt draft.
 
-They prove the first Ctrl+R selects the newest prompt, typed characters narrow by substring, repeated Ctrl+R moves to older matches, Backspace recovers from a failed query, and the border reports active and failing search states. Ctrl+G restores the exact draft cursor, Esc keeps the match for editing, Enter submits it through the wrapped editor, and newly recorded prompts become searchable immediately.
+They prove the first Ctrl+R selects the newest prompt, typed characters narrow by substring, repeated Ctrl+R moves to older matches, Backspace recovers from a failed query, and the border reports active and failing search states. Ctrl+G restores the exact draft cursor, Esc keeps the match for editing, Enter submits it through the wrapped editor, and newly recorded prompts become searchable immediately. A real-editor fixture pastes a large block, enters and leaves search, and proves the restored draft's `[paste #N]` marker still expands to the pasted content on submit.
 
 ## Prompt clear fixture
 
@@ -55,6 +55,10 @@ A thumbnail fixture gives the dimension parser a 4096-by-2160 PNG header and pro
 A real `sharp` fixture generates oversized PNG, JPEG, GIF, and WebP files, passes each through the default runtime thumbnailer, and requires every marker to promote from the loader to a Kitty sequence. A lockfile fixture verifies `@img/sharp-darwin-arm64` and `@img/sharp-darwin-x64` remain optional Darwin artifacts with matching CPU selectors, preventing Linux lock regeneration from silently dropping macOS installation support.
 
 A measurement fixture proves frames without a visible preview never re-render the components below the editor, while an active marker resumes the overlay measurement.
+
+A clearing fixture registers a marker, calls the controller's clear while that marker still sits in the editor — as when an image is pasted during an agent run and the turn settles — and proves submission preparation still expands it to the source path; after the marker leaves the editor, the same clear drops the preview so a stale tag no longer expands.
+
+A paste-registry fixture pastes a large text block into a real pi-tui editor, then pastes a clipboard image so the path-to-marker rewrite runs `setText()`, and proves the submitted prompt still contains the pasted lines rather than a literal `[paste #1]` tag.
 
 A focus-return fixture models pi-tui's fullscreen upload cache and viewport input handler. With an active Kitty preview, `CSI I` delegates to the original handler, clears the cached upload identities, requests one forced redraw, and disposal restores the original method.
 
@@ -108,6 +112,8 @@ A component-tree fixture installs the wrapper around Pi's document/chat shape an
 
 A custom-entry fixture settles a transcript holding an extension entry component whose renderer switches on its own expansion state, clicks its header row, and proves the click is claimed and the entry opens, so entry disclosure markers are not decoration that only the global binding moves.
 
+An outline fixture settles a user prompt, a text-bearing assistant reply, a successful tool, and a failed tool, and proves the controller reports one entry per action with its kind, the scroll-content row of its first rendered line, and its short type name — `prompt`, `reply`, or the tool's name — in transcript order.
+
 ## Settled render memoization
 
 A memoization fixture proves repeated same-width renders never rebuild completed component content.
@@ -155,6 +161,14 @@ One case proves the extra row appears only while the viewport is scrolled away f
 A fake alternate-screen TUI with scripted transcript content verifies the chips' geometry, prompt filtering, and mouse priority.
 
 One case proves both chips composite into the top-right of row 0, leave every other row untouched, and disappear on a terminal too narrow to hold them. Another paints them over a background-filled banner row and proves that background survives underneath rather than resetting to the terminal default. A third walks the viewport down a scripted transcript and proves the reading moves from zero through each prompt, vanishes once the viewport follows output, stays absent when no prompts exist, centres within half a cell of the arrow pair, and renders in the weaker of the two colors. A cache case repaints an unchanged frame, then appends prompts and scrolls, proving the cached reading refreshes on line-count and viewport changes. A fourth paints over rows whose text ends part-way through an escape sequence and proves both the chips and the reading still appear, so the style scan cannot spin the renderer. A fifth installs a color function that always throws and proves the frame reaches the renderer byte-for-byte unchanged and the click region is released, so a failed decoration cannot end the session. A second case walks a transcript of alternating user and assistant zones: the down chip stops on the next user prompt, then scrolls to the end once no prompt remains below, and the up chip walks back to the first prompt and stays there. A third case registers a renderer-style consuming listener first, then verifies a click one row below the chips stays with the renderer and clicks stop scrolling after disposal. A fourth case replays the reload order — install, reinstall, then the first disposer — and proves the replacement wrapper still renders and still scrolls.
+
+Rail cases supply a scripted typed outline. One proves the symbols anchor to the viewport bottom and grow upward in session order in the one-cell column against the scrollbar gap, each action showing its type's symbol — `›` prompt, `‹` reply, `≡` read, `×` failure; distinct types wear distinct colors while repeated types share one, failures carry the fixed error red, and the newest action carries the inverse current highlight while following output. A symbol click scrolls that action's row to the viewport top and a click above the stack stays with the renderer. An overflow case gives the rail fewer rows than actions and proves the stack fills up to the chips with the newest actions while following output — unmapped tool names falling back to the plain dot — then scrolling the viewport to the start slides the window back to the first action. A stale-viewport case paints a frame, moves the viewport rect afterwards — the reload shape, where the renderer assigns the frame's layout only after compositing — and proves exactly one corrective repaint is requested, while frames whose layout lands where the rail was painted request none. A hover case proves the rail keeps full intensity until pure pointer motion proves hover tracking — the multiplexer fallback — then rests faint and underneath the session text: blank rows show their symbols, a transcript row running through the column keeps its text and hides that symbol, clicks in the column still jump, and hovering the column lifts the stack over the same occupied row at full intensity with each row expanded to its symbol and name; the widened band keeps the stack open while the pointer travels a name, whose click still jumps, before the pointer's leave returns the rail to faint single cells, with one repaint request per intensity transition. Its motion arrives as multi-event chunks, matching the coalesced stdin reads of a moving pointer, and the last position in a chunk decides the hover state. A companion case sends Scribe's zero-base motion encoding and proves it drives the dim and sharpen transitions while nothing is held, stays inert as drag motion during an open press — wheel traffic not counting as a held press — and resumes hover behavior after the release.
+
+## Rail setting fixture
+
+A fake component tree verifies the `/settings` rail toggle without instantiating Pi's selector.
+
+It installs onto a container already holding the editor, mounts a fake `SettingsSelectorComponent`, and proves the toggle item appears once with the persisted value while other mounted components and Pi's native items stay untouched. Toggling through the list's change callback flips the live state, writes `sessionRail` to `proper-base.json` while preserving unrelated keys, and never reaches Pi's own handler, which native ids still do. A replacement install reads the persisted choice and takes over the wrapper instead of stacking a second item, disposal restores the container's native `addChild`, and a missing or damaged config file reads as enabled.
 
 ## Footer fixture
 

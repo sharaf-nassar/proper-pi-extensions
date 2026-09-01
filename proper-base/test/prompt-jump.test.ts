@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { stripTerminalSequences } from "@earendil-works/pi-tui";
-import { installPromptJump } from "../src/prompt-jump.ts";
+import {
+	installPromptJump,
+	type PromptJumpOptions,
+} from "../src/prompt-jump.ts";
+import type { OutlineEntry } from "../src/transcript-cleanup.ts";
 
 const ZONE = "\x1b]133;A\x07";
 const USER = `${ZONE}\x1b[48;5;236m          \x1b[0m`;
@@ -14,20 +18,29 @@ function reading(screen: string[]): string {
 
 function harness(
 	content: string[],
-	options?: { color(value: string): string; subtle(value: string): string },
+	options?: PromptJumpOptions,
+	viewportRows = 20,
 ) {
 	const scrollView = {};
 	let scrollTop = 0;
 	let following = false;
+	let renderRequests = 0;
+	const box = {
+		scrollView,
+		scrollContentLines: content,
+		rect: { y: 0, height: viewportRows },
+		children: [],
+	};
 	const listeners = new Set<(data: string) => unknown>();
 	const tui = {
 		children: [],
 		terminal: { rows: 24, columns: 40 },
 		currentLayout: {
 			primaryScrollView: scrollView,
-			root: {
-				children: [{ scrollView, scrollContentLines: content, children: [] }],
-			},
+			root: { children: [box] },
+		},
+		requestRender() {
+			renderRequests += 1;
 		},
 		get viewportTop() {
 			return scrollTop;
@@ -79,18 +92,41 @@ function harness(
 		}
 		return false;
 	};
+	// Several points join into one chunk, matching how a moving pointer's
+	// events coalesce in a single stdin read. Code 35 is xterm's no-button
+	// motion; Scribe encodes the same motion with base 0 as code 32.
+	const move = (points: Array<[number, number]>, code = 35) => {
+		const chunk = points
+			.map(([column, row]) => `\x1b[<${code};${column + 1};${row + 1}M`)
+			.join("");
+		for (const listener of listeners) {
+			if ((listener(chunk) as { consume?: boolean })?.consume) return;
+		}
+	};
+	const release = (column: number, row: number) => {
+		const event = `\x1b[<0;${column + 1};${row + 1}m`;
+		for (const listener of listeners) {
+			if ((listener(event) as { consume?: boolean })?.consume) return;
+		}
+	};
 	return {
 		click,
 		consumed,
 		dispose,
 		install,
+		move,
 		paint,
+		release,
 		setFollowing: (value: boolean) => {
 			following = value;
 		},
 		setTop: (value: number) => {
 			scrollTop = value;
 		},
+		setViewportRows: (rows: number) => {
+			box.rect = { y: 0, height: rows };
+		},
+		renders: () => renderRequests,
 		top: () => scrollTop,
 	};
 }
@@ -244,6 +280,225 @@ test("clicks outside the chips and after disposal stay with the renderer", () =>
 	assert.equal(app.click(down), true);
 	assert.equal(app.top(), 0);
 	assert.equal(app.consumed.length, 2);
+});
+
+// @lat: [[lat.md/proper-base/tests#Verification#Prompt jump fixture]]
+test("the rail stacks typed symbols up from the bottom and jumps on click", () => {
+	const outline: OutlineEntry[] = [
+		{ row: 0, kind: "user", label: "prompt" },
+		{ row: 1, kind: "assistant", label: "reply" },
+		{ row: 3, kind: "tool", label: "read" },
+		{ row: 5, kind: "error", label: "bash" },
+		{ row: 6, kind: "user", label: "prompt" },
+	];
+	const app = harness(["a", "b", "c", "d", "e", "f", "g", "h"], {
+		color: (value) => value,
+		subtle: (value) => value,
+		outline: () => outline,
+	});
+	app.setFollowing(true);
+	const screen = app.paint(80);
+	// A single symbol column against the scrollbar gap.
+	const column = 80 - 1 - 1;
+	const symbol = (row: number) =>
+		stripTerminalSequences(screen[row] ?? "")[column];
+	const color = (row: number) => {
+		const line = screen[row] ?? "";
+		const at = line.indexOf("[38;2;");
+		return at < 0 ? "" : line.slice(at, line.indexOf("m", at) + 1);
+	};
+
+	// Anchored to the viewport bottom (20 rows), growing upward in session
+	// order, so five actions occupy rows 15-19 and leave row 14 untouched.
+	// Each action type paints its relevant symbol: › prompt, ‹ reply,
+	// ≡ read, × failure.
+	assert.deepEqual([15, 16, 17, 18, 19].map(symbol), ["›", "‹", "≡", "×", "›"]);
+	assert.equal(stripTerminalSequences(screen[14] ?? "").trim(), "");
+
+	// Every action type wears its own color; repeated types share one, and
+	// failures carry the fixed error red.
+	const distinct = new Set([15, 16, 17, 18].map(color));
+	assert.equal(distinct.size, 4);
+	assert.equal(color(15), color(19));
+	assert.ok(color(18).includes("235;110;110"));
+	// The newest action carries the current highlight while following output.
+	assert.ok((screen[19] ?? "").includes("\x1b[7m"));
+
+	// Clicking the third symbol scrolls that action's row to the viewport top.
+	assert.equal(app.click(column, 17), true);
+	assert.equal(app.top(), 3);
+	// Above the stack the click stays with the renderer.
+	assert.equal(app.click(column, 14), true);
+	assert.equal(app.consumed.length, 1);
+});
+
+test("an overflowing rail shows the tail and slides with the viewport", () => {
+	const outline: OutlineEntry[] = [
+		{ row: 0, kind: "user", label: "prompt" },
+		{ row: 1, kind: "tool", label: "one" },
+		{ row: 2, kind: "tool", label: "two" },
+		{ row: 3, kind: "tool", label: "three" },
+		{ row: 4, kind: "tool", label: "four" },
+		{ row: 5, kind: "assistant", label: "reply" },
+	];
+	const app = harness(
+		["a", "b", "c", "d", "e", "f"],
+		{
+			color: (value) => value,
+			subtle: (value) => value,
+			outline: () => outline,
+		},
+		5,
+	);
+	const column = 80 - 1 - 1;
+	const symbols = (screen: string[]) =>
+		screen.slice(2, 5).map((line) => stripTerminalSequences(line)[column]);
+
+	// Three rail rows fit between the chips and the viewport bottom; the
+	// overflowing stack fills them with the newest actions while following.
+	// Unmapped tool names fall back to the plain dot.
+	app.setFollowing(true);
+	assert.deepEqual(symbols(app.paint(80)), ["·", "·", "‹"]);
+
+	// Scrolling up to the start slides the window to the current action.
+	app.setFollowing(false);
+	app.setTop(0);
+	assert.deepEqual(symbols(app.paint(80)), ["›", "·", "·"]);
+});
+
+test("the rail rests faint under hover tracking and sharpens on hover", () => {
+	const outline: OutlineEntry[] = [
+		{ row: 0, kind: "user", label: "prompt" },
+		{ row: 2, kind: "tool", label: "read" },
+	];
+	const app = harness(["a", "b", "c"], {
+		color: (value) => value,
+		subtle: (value) => value,
+		outline: () => outline,
+	});
+	app.setFollowing(true);
+
+	const column = 80 - 1 - 1;
+	const symbolAt = (screen: string[], row: number) =>
+		stripTerminalSequences(screen[row] ?? "")[column];
+
+	// Without proof of hover tracking — a multiplexer forwards no pointer
+	// motion — the rail keeps full intensity rather than resting dim.
+	let screen = app.paint(80);
+	assert.equal(symbolAt(screen, 19), "≡");
+	assert.ok(!(screen[19] ?? "").includes("\x1b[2m"));
+
+	// Pure no-button motion away from the column proves tracking and dims
+	// the rail to its faint resting state — still readable, receded. The
+	// pointer stream arrives batched, several events per chunk; last wins.
+	app.move([
+		[74, 19],
+		[10, 5],
+	]);
+	assert.equal(app.renders(), 1);
+	screen = app.paint(80);
+	assert.equal(symbolAt(screen, 19), "≡");
+	assert.ok((screen[19] ?? "").includes("\x1b[2m"));
+
+	// The faint rail remains a control: clicks in the column still jump.
+	// One consumed entry so far: the renderer saw the motion chunk.
+	assert.equal(app.click(column, 19), true);
+	assert.equal(app.top(), 2);
+	assert.equal(app.consumed.length, 1);
+
+	// Resting, the rail sits under the session text: a transcript row
+	// running through the column keeps its text and hides that symbol, while
+	// blank rows still show theirs.
+	const busy = Array.from({ length: 24 }, () => "");
+	busy[19] = "x".repeat(80);
+	screen = app.paint(80, [...busy]);
+	assert.equal(symbolAt(screen, 19), "x");
+	assert.equal(symbolAt(screen, 18), "›");
+
+	// Hovering the column lifts the stack to the top at full intensity and
+	// expands each row to its symbol and name, painting over the occupied
+	// row and still flush against the gap.
+	app.move([
+		[10, 5],
+		[column, 19],
+	]);
+	assert.equal(app.renders(), 2);
+	screen = app.paint(80, [...busy]);
+	assert.ok(stripTerminalSequences(screen[19] ?? "").includes("≡ read"));
+	assert.ok(stripTerminalSequences(screen[18] ?? "").includes("› prompt"));
+	assert.ok(!(screen[19] ?? "").includes("\x1b[2m"));
+
+	// The hit band widens with the expanded rows: pointing at a name keeps
+	// the stack open, and clicking it jumps.
+	app.move([[column - 4, 18]]);
+	assert.equal(app.renders(), 2);
+	assert.equal(app.click(column - 4, 18), true);
+	assert.equal(app.top(), 0);
+
+	// Leaving the expanded band returns it to faint and one cell.
+	app.move([[5, 5]]);
+	assert.equal(app.renders(), 3);
+});
+
+test("Scribe's zero-base motion reads as hover only while nothing is held", () => {
+	const outline: OutlineEntry[] = [
+		{ row: 0, kind: "user", label: "prompt" },
+		{ row: 2, kind: "tool", label: "read" },
+	];
+	const app = harness(["a", "b", "c"], {
+		color: (value) => value,
+		subtle: (value) => value,
+		outline: () => outline,
+	});
+	app.setFollowing(true);
+	app.paint(80);
+
+	// Scribe encodes no-button motion with the left button's zero base
+	// rather than xterm's 3. With no press open it still proves tracking
+	// and dims the rail, then sharpens it over the column.
+	app.move([[10, 5]], 32);
+	assert.equal(app.renders(), 1);
+	app.move([[78, 19]], 32);
+	assert.equal(app.renders(), 2);
+
+	// During a genuine left drag the same code is drag motion: dragging out
+	// of the column must not flicker the sharpened rail back to faint.
+	app.click(10, 5);
+	app.move([[5, 5]], 32);
+	assert.equal(app.renders(), 2);
+
+	// Once the press releases, the same motion shape dims the rail again.
+	app.release(5, 5);
+	app.move([[5, 5]], 32);
+	assert.equal(app.renders(), 3);
+});
+
+test("a viewport that moves after the frame requests a corrective repaint", async () => {
+	const outline: OutlineEntry[] = [{ row: 0, kind: "user", label: "prompt" }];
+	const app = harness(["a"], {
+		color: (value) => value,
+		subtle: (value) => value,
+		outline: () => outline,
+	});
+
+	// The frame's own layout matches the one the rail was painted with.
+	app.paint(80);
+	await Promise.resolve();
+	assert.equal(app.renders(), 0);
+
+	// A reload's first frame paints against the outgoing layout — the
+	// renderer assigns its own only after compositing — and can stay on
+	// screen with the stack floating. When the frame's layout lands
+	// elsewhere, one corrective repaint is requested.
+	app.paint(80);
+	app.setViewportRows(24);
+	await Promise.resolve();
+	assert.equal(app.renders(), 1);
+
+	// The repaint sees the fresh viewport and requests nothing further.
+	app.paint(80);
+	await Promise.resolve();
+	assert.equal(app.renders(), 1);
 });
 
 test("a reload's stale disposer leaves the replacement wrapper alone", () => {

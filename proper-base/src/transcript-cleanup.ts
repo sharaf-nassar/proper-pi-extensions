@@ -41,6 +41,7 @@ type State = {
 	expanded: Map<object, boolean>;
 	hits: Map<number, DetailHit>;
 	pendingHits: DetailHit[];
+	outline: OutlineEntry[];
 	globalExpanded: boolean;
 	assistantCache: WeakMap<AssistantComponent, AssistantRenderCache>;
 };
@@ -50,6 +51,17 @@ type AssistantRenderCache = {
 	lines: Map<string, string[]>;
 };
 type DetailKind = "tool" | "error";
+/**
+ * One transcript action, in scroll-content coordinates.
+ *
+ * @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Session action rail]]
+ */
+export type OutlineEntry = {
+	row: number;
+	kind: "user" | "assistant" | "tool" | "error";
+	/** Short action-type name: `prompt`, `reply`, or the tool's name. */
+	label: string;
+};
 type Detail = {
 	owner: object;
 	kind: DetailKind;
@@ -84,6 +96,7 @@ export type TranscriptCleanupController = {
 	completeAssistant(message: object): void;
 	completeTool(toolCallId: string): void;
 	settle(): void;
+	outline(): OutlineEntry[];
 	update(ctx: ExtensionContext, tui: TUI): void;
 	uninstall(): void;
 };
@@ -109,6 +122,7 @@ export function installTranscriptCleanup(
 		expanded: new Map(),
 		hits: new Map(),
 		pendingHits: [],
+		outline: [],
 		globalExpanded: ctx.ui.getToolsExpanded(),
 		assistantCache: new WeakMap(),
 	};
@@ -170,6 +184,9 @@ export function installTranscriptCleanup(
 			};
 			state.tui.requestRender();
 		},
+		outline() {
+			return state.outline;
+		},
 		update(nextCtx, nextTui) {
 			state = {
 				...state,
@@ -197,17 +214,34 @@ export function installTranscriptCleanup(
 			state = { ...state, globalExpanded, expanded: new Map() };
 		}
 		state.pendingHits.length = 0;
+		const sink: OutlineEntry[] = [];
 		let lines: string[];
 		if (state.activeStart === undefined && state.ctx.isIdle()) {
-			lines = renderCollapsed(chat.children, width, state);
+			lines = renderCollapsed(chat.children, width, state, sink);
 		} else {
 			const start = state.activeStart ?? chat.children.length;
+			const collapsed = renderCollapsed(
+				chat.children.slice(0, start),
+				width,
+				state,
+				sink,
+			);
 			lines = [
-				...renderCollapsed(chat.children.slice(0, start), width, state),
-				...renderActive(chat.children.slice(start), width, state),
+				...collapsed,
+				...renderActive(
+					chat.children.slice(start),
+					width,
+					state,
+					sink,
+					collapsed.length,
+				),
 			];
 		}
-		indexDetailHits(lines, documentRowOffset(document, chat, width), state);
+		const offset = documentRowOffset(document, chat, width);
+		state.outline = sink
+			.map((entry) => ({ ...entry, row: offset + entry.row }))
+			.sort((a, b) => a.row - b.row);
+		indexDetailHits(lines, offset, state);
 		return lines;
 	};
 	chat[INSTALLED] = controller;
@@ -218,6 +252,8 @@ function renderActive(
 	children: Component[],
 	width: number,
 	state: State,
+	sink: OutlineEntry[],
+	base: number,
 ): string[] {
 	const output: string[][] = Array.from({ length: children.length });
 	let hasTextBelow = false;
@@ -227,23 +263,54 @@ function renderActive(
 		const native = child.render(width);
 		output[index] =
 			state.completed.has(child) && hasTextBelow
-				? renderGroup([child], width, state)
+				? renderGroup([child], width, state, [], 0)
 				: native;
 		if (hasSectionText(native)) hasTextBelow = true;
 	}
+	// Outline rows are recorded on a forward pass because the render loop above
+	// walks backwards; the discarded renderGroup sink avoids double records.
+	let row = base;
+	for (let index = 0; index < children.length; index++) {
+		const rendered = output[index];
+		const child = children[index];
+		if (child && rendered?.length) {
+			const entry = actionEntry(child);
+			if (entry) sink.push({ ...entry, row });
+		}
+		row += rendered?.length ?? 0;
+	}
 	return output.flat();
+}
+
+function actionEntry(child: Component): Omit<OutlineEntry, "row"> | undefined {
+	if (isUserBoundary(child)) {
+		return { kind: "user", label: "prompt" };
+	}
+	const name = componentName(child);
+	if (name === "AssistantMessageComponent") {
+		return { kind: "assistant", label: "reply" };
+	}
+	if (name === "ToolExecutionComponent") {
+		const tool = child as ToolComponent;
+		return {
+			kind: tool.result?.isError === true ? "error" : "tool",
+			label: tool.toolName ?? "tool",
+		};
+	}
+	return undefined;
 }
 
 function renderCollapsed(
 	children: Component[],
 	width: number,
 	state: State,
+	sink: OutlineEntry[],
 ): string[] {
 	const lines: string[] = [];
 	let group: Component[] = [];
 	const flush = () => {
 		if (!group.length) return;
-		lines.push(...renderGroup(group, width, state));
+		lines.push(...renderGroup(group, width, state, sink, lines.length));
 		group = [];
 	};
 
@@ -278,12 +345,19 @@ function renderGroup(
 	group: Component[],
 	width: number,
 	state: State,
+	sink: OutlineEntry[],
+	base: number,
 ): string[] {
 	const lines: string[] = [];
 
 	for (const child of group) {
 		const name = componentName(child);
 		if (isUserBoundary(child)) {
+			sink.push({
+				kind: "user",
+				row: base + lines.length,
+				label: "prompt",
+			});
 			lines.push(...child.render(width));
 			continue;
 		}
@@ -292,10 +366,18 @@ function renderGroup(
 			continue;
 		}
 		if (name === "AssistantMessageComponent") {
+			const startRow = lines.length;
 			const assistant = child as AssistantComponent;
 			const message = assistant.lastMessage;
 			if (!message || !assistant.updateContent) {
 				lines.push(...child.render(width));
+				if (lines.length > startRow) {
+					sink.push({
+						kind: "assistant",
+						row: base + startRow,
+						label: "reply",
+					});
+				}
 				continue;
 			}
 			const hasToolCall = message.content.some(
@@ -344,11 +426,25 @@ function renderGroup(
 					);
 				}
 			}
+			// A turn whose reply was only tool calls emits nothing of its own; its
+			// visible actions are the tool rows, so no assistant entry is recorded.
+			if (lines.length > startRow) {
+				sink.push({
+					kind: "assistant",
+					row: base + startRow,
+					label: "reply",
+				});
+			}
 			continue;
 		}
 		if (name === "ToolExecutionComponent") {
 			const tool = child as ToolComponent;
 			const error = tool.result?.isError === true;
+			sink.push({
+				kind: error ? "error" : "tool",
+				row: base + lines.length,
+				label: tool.toolName ?? "tool",
+			});
 			lines.push(
 				...renderDetail(
 					{
@@ -488,6 +584,10 @@ function detailColor(
 }
 
 function describeTool(tool: ToolComponent, error: boolean): string {
+	return `${error ? "error" : "tool"} · ${toolLabel(tool)}`;
+}
+
+function toolLabel(tool: ToolComponent): string {
 	const name = tool.toolName ?? "tool";
 	const args = asRecord(tool.args);
 	const value = [
@@ -502,8 +602,7 @@ function describeTool(tool: ToolComponent, error: boolean): string {
 	]
 		.map((key) => args?.[key])
 		.find((candidate): candidate is string => typeof candidate === "string");
-	const target = value ? ` · ${oneLine(value)}` : "";
-	return `${error ? "error" : "tool"} · ${name}${target}`;
+	return value ? `${name} · ${oneLine(value)}` : name;
 }
 
 function oneLine(text: string): string {

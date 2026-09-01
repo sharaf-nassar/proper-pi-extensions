@@ -600,3 +600,59 @@ test("settled transcript keeps thoughts and updates visible", () => {
 	const restored = chat.render(100).map(stripTerminalSequences).join("\n");
 	assert.match(restored, /thinking: inspect files/);
 });
+
+// @lat: [[lat.md/proper-base/tests#Verification#Settled transcript fixture]]
+test("the settled outline records one row per action in order", () => {
+	const chat = new Container();
+	const document = new Container();
+	document.addChild(new Container());
+	document.addChild(new Container());
+	document.addChild(chat);
+	const listeners = new Set<(data: string) => unknown>();
+	const tui = {
+		children: [document],
+		inputListeners: listeners,
+		requestRender() {},
+		addInputListener(listener: (data: string) => unknown) {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+		terminal: { rows: 24 },
+	};
+	const ctx = {
+		isIdle: () => true,
+		ui: {
+			getToolsExpanded: () => false,
+			theme: {
+				fg: (_color: string, text: string) => text,
+				bold: (text: string) => text,
+				italic: (text: string) => text,
+			},
+		},
+	};
+	const controller = installTranscriptCleanup(tui as never, ctx as never);
+	assert.ok(controller);
+	chat.addChild(new UserMessageComponent("fix it"));
+	chat.addChild(
+		new AssistantMessageComponent({
+			content: [{ type: "text", text: "done" }],
+			stopReason: "stop",
+		}),
+	);
+	chat.addChild(new ToolExecutionComponent("tool-1"));
+	chat.addChild(new ToolExecutionComponent("tool-2", true));
+	controller.settle();
+
+	const rendered = chat.render(80);
+	assert.deepEqual(controller.outline(), [
+		{ kind: "user", row: 0, label: "prompt" },
+		{ kind: "assistant", row: 1, label: "reply" },
+		{ kind: "tool", row: 2, label: "read" },
+		{ kind: "error", row: 3, label: "read" },
+	]);
+	// Rows point at each action's first rendered line.
+	assert.equal(stripTerminalSequences(rendered[0] ?? ""), "user: fix it");
+	assert.ok(stripTerminalSequences(rendered[2] ?? "").includes("tool · read"));
+
+	controller.uninstall();
+});
