@@ -23,11 +23,11 @@ The router's own `/llm-router` and `/llm-router-config` commands bypass routing 
 Direct and judged paths run in a fixed order.
 
 1. A configured slash-command pin runs first.
-2. An unpinned bare slash command with no arguments uses the fallback model because it has no task text to judge.
-3. A `[[llm-router: <model>]]` sentinel forces a resolved arm.
+2. A `[[llm-router: <model>]]` sentinel forces a resolved arm.
+3. Trivial input, including an unpinned bare slash command, uses the fallback model because it has no task text to judge.
 4. Every other eligible input runs the judge.
 
-A pin wins over a sentinel when both appear in one command. Because the pin path returns before sentinel parsing, the marker is not stripped in this mixed form. An unknown sentinel emits a warning, removes the marker, and sends the remaining task to the judge.
+A pin wins over a sentinel when both appear in one command. Because the pin path returns before sentinel parsing, the marker is not stripped in this mixed form. An unknown sentinel emits a warning, removes the marker, and sends the remaining task through the trivial-input check and then the judge.
 
 ## Judged route
 
@@ -61,15 +61,17 @@ Sentinel parsing consumes only the first marker, wherever it appears in the text
 
 Pins and sentinels share `directFinal()`, so their failure policy is identical. If no swap is usable, the direct path keeps the requested target when it exists and shows a warning instead of blocking the prompt.
 
-If a resolved pinned model is absent from the registry or cannot be selected, routing resumes at the remaining precedence rules. A bare command then uses `fallbackModel`; a command with arguments proceeds to sentinel handling or the judge.
+If a resolved pinned model is absent from the registry or cannot be selected, routing resumes at the remaining precedence rules. A bare command then uses `fallbackModel`; a command with arguments proceeds to sentinel handling, the trivial-input check, or the judge.
 
-## Bare commands
+## Trivial input
 
-An unpinned command with no arguments uses `fallbackModel` without a judge call or availability check.
+Input a judge cannot usefully rank uses `fallbackModel` without a judge call or availability check.
 
-Slash commands with arguments are ordinary task text unless a pin matches them. This keeps commands such as `/review <scope>` eligible for routing while avoiding a judge call for a command name alone.
+[[proper-llm-router/llm-router.ts#isTrivialInput]] treats text as trivial when it has at most two whitespace-separated tokens or every token is at most three characters. That covers a bare command name, a single-letter or numbered choice, a yes/no answer, a shortcut alias, a URL, an option set such as `1A 2B 3C`, and a two-word acknowledgement. The judge's verdict on such text is noise, and the same input later in the session would run on whichever model the session already has.
 
-This is the one path that fails silently. If the fallback model is missing from the registry the command continues unrouted and without a notice, which is the placeholder exposure described under `Placeholder safety` in `operations.md`.
+The check runs on the task text after sentinel stripping, so a trivial reply carrying an unknown marker still has the marker removed. Slash commands with arguments are ordinary task text unless a pin matches them, so `/review <scope>` stays eligible for routing while a command name alone never spends a judge call.
+
+This is the one path that fails silently. If the fallback model is missing from the registry the input continues unrouted and without a notice, which is the placeholder exposure described under `Placeholder safety` in `operations.md`.
 
 ## Registry lookup
 

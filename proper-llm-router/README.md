@@ -18,9 +18,10 @@ the next prompt.
 The first eligible input follows this order:
 
 1. A configured slash-command pin switches directly and skips the judge.
-2. An unpinned bare slash command uses `fallbackModel` because it has no task
-   text to judge.
-3. `[[llm-router: <model>]]` forces one arm and removes the marker.
+2. `[[llm-router: <model>]]` forces one arm and removes the marker.
+3. Trivial input uses `fallbackModel` because it has no task text to judge:
+   a bare slash command, a choice such as `A` or `1B 2C`, `yes`, `no`, an
+   alias, a URL, or any prompt of at most two words.
 4. Every other prompt goes to the judge.
 
 A command pin takes precedence over a sentinel. Slash commands with arguments
@@ -240,7 +241,7 @@ after the corpus has loaded, and quota data may remain cached for 60 seconds.
 | `judge.model` | `gpt-5.6-terra` | Authenticated Pi model ID or `provider/model-id` used for the judge. |
 | `judge.effort` | `medium` | Judge `reasoning_effort`; `null` omits it. |
 | `judge.fast` | `false` | Sends `service_tier: "priority"` when enabled. |
-| `fallbackModel` | `gpt-5.6-terra` | Model ID or `provider/model-id` used after judged failure and for bare commands. |
+| `fallbackModel` | `gpt-5.6-terra` | Model ID or `provider/model-id` used after judged failure and for trivial input such as bare commands. |
 | `cpaBase` | `http://127.0.0.1:8317` | CPA base for optional quota-management requests. |
 | `exemplarsPath` | package `exemplars.jsonl` | Optional measured-outcome corpus. |
 | `quotaMaxPct` | `null` | Average lane usage threshold; `null` disables it. |

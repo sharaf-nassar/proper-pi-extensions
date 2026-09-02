@@ -71,6 +71,7 @@ import { fileURLToPath } from "node:url";
 import type {
 	ExtensionAPI,
 	ExtensionContext,
+	InputEventResult,
 } from "@earendil-works/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import {
@@ -508,6 +509,14 @@ export function parseSentinel(
 	// collapse the seam so "Task: [[…]] fix X" strips to "Task: fix X"
 	if (/\s$/.test(before)) after = after.replace(/^[ \t]+/, "");
 	return { name, stripped: (before + after).trim() };
+}
+
+/** Input a judge could not usefully rank: a bare command, an ack or
+ * choice ("y", "A", "1B 2C", "go ahead"), an alias, or a URL. At most two
+ * whitespace-separated tokens, or every token at most three characters. */
+export function isTrivialInput(text: string): boolean {
+	const tokens = text.trim().split(/\s+/);
+	return tokens.length <= 2 || tokens.every((token) => token.length <= 3);
 }
 
 // ------------------------------------------------------- command pins
@@ -1365,25 +1374,22 @@ export default function (pi: ExtensionAPI) {
 			);
 		}
 
-		// bare slash command: no task text to judge — switch to the fallback
-		// so nothing ever reaches the llm-router/auto placeholder endpoint
-		if (/^\/\S+\s*$/.test(event.text)) {
-			const fb = findConfiguredModel(ctx, cfg.fallbackModel, models);
-			if (fb && (await pi.setModel(fb))) {
-				ctx.ui.notify(
-					`llm-router: bare command, no task to judge — using ${cfg.fallbackModel}`,
-					"info",
-				);
-			}
-			return { action: "continue" };
-		}
-
 		// [[llm-router: <model>]] — forced pick from the spawning session
 		// (or the user): honor it instead of consulting the judge, but keep
 		// the post-verdict availability swap so a dead arm uses its partner
 		// instead of failing a retry the same way. Unknown names fall
 		// through to the judge; the marker is stripped either way.
 		const sentinel = parseSentinel(event.text);
+		// the marker must never reach the model, so every exit after parsing
+		// hands back the stripped text
+		const done = (): InputEventResult =>
+			sentinel
+				? {
+						action: "transform",
+						text: sentinel.stripped,
+						...(event.images ? { images: event.images } : {}),
+					}
+				: { action: "continue" };
 		if (sentinel) {
 			const arm = resolveArm(sentinel.name);
 			if (!arm) {
@@ -1403,11 +1409,7 @@ export default function (pi: ExtensionAPI) {
 						`llm-router: ${cyan(final)} ${dim("(forced)")}${extra}`,
 						"info",
 					);
-					return {
-						action: "transform",
-						text: sentinel.stripped,
-						...(event.images ? { images: event.images } : {}),
-					};
+					return done();
 				}
 				ctx.ui.notify(
 					`llm-router: forced arm ${final} has no switchable model — asking the judge instead`,
@@ -1416,6 +1418,18 @@ export default function (pi: ExtensionAPI) {
 			}
 		}
 		const taskText = sentinel ? sentinel.stripped : event.text;
+		// bare command or trivial reply: no task text to judge — switch to the
+		// fallback so nothing ever reaches the llm-router/auto placeholder
+		if (isTrivialInput(taskText)) {
+			const fb = findConfiguredModel(ctx, cfg.fallbackModel, models);
+			if (fb && (await pi.setModel(fb))) {
+				ctx.ui.notify(
+					`llm-router: no task to judge — using ${cfg.fallbackModel}`,
+					"info",
+				);
+			}
+			return done();
+		}
 		ctx.ui.notify(
 			green(
 				`llm-router: asking ${cfg.judge.model} which model fits this task…`,
@@ -1493,13 +1507,7 @@ export default function (pi: ExtensionAPI) {
 		} else {
 			ctx.ui.notify(`${note} (no switchable configured model found!)`, "error");
 		}
-		return sentinel
-			? {
-					action: "transform",
-					text: sentinel.stripped,
-					...(event.images ? { images: event.images } : {}),
-				}
-			: { action: "continue" };
+		return done();
 	});
 
 	// green ✓ for the currently-configured entry; \x1b[39m resets only the

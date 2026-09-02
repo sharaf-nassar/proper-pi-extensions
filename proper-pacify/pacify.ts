@@ -511,6 +511,14 @@ export function splitCommandPrefix(text: string): {
 		: { prefix: "", body: text };
 }
 
+/** Text a rewrite can never change: a bare command, an ack or choice ("y",
+ * "A", "1B 2C", "go ahead"), an alias, or a URL. At most two
+ * whitespace-separated tokens, or every token at most three characters. */
+export function isTrivialInput(text: string): boolean {
+	const tokens = text.trim().split(/\s+/);
+	return tokens.length <= 2 || tokens.every((token) => token.length <= 3);
+}
+
 async function pacifyInput(
 	ctx: ExtensionContext,
 	config: Config,
@@ -518,12 +526,12 @@ async function pacifyInput(
 	signal: AbortSignal,
 ): Promise<PacifiedPrompt> {
 	// A command with no argument is entirely dispatch syntax, so there is no
-	// prose to rewrite and any edit would break the command.
-	if (/^\s*\/\S+\s*$/.test(text)) {
+	// prose to rewrite and any edit would break the command; a trivial
+	// argument has no tone to fix either.
+	const { prefix, body } = splitCommandPrefix(text);
+	if (isTrivialInput(body)) {
 		return { text, model: config.model, effort: config.effort };
 	}
-	const { prefix, body } = splitCommandPrefix(text);
-	if (!body.trim()) return { text, model: config.model, effort: config.effort };
 	const result = await pacifyText(ctx, config, body, signal);
 	return {
 		text: `${prefix}${result.text}`,
@@ -764,10 +772,13 @@ export async function pacifyIncoming(
 	// command dispatch exactly as typed.
 	if (/^\s*\/unpacify\b/.test(event.text)) return { action: "continue" };
 	// A command with no argument is entirely dispatch syntax with no prose to
-	// rewrite. Returning before the transcript entry keeps phantom "pacifying"
-	// rows out of the session — proper-base's internal cancelled-prompt repair
-	// command would otherwise log one at the very leaf it is about to abandon.
-	if (/^\s*\/\S+\s*$/.test(event.text)) return { action: "continue" };
+	// rewrite, and a trivial reply has no tone to fix. Returning before the
+	// transcript entry keeps phantom "pacifying" rows out of the session —
+	// proper-base's internal cancelled-prompt repair command would otherwise
+	// log one at the very leaf it is about to abandon.
+	if (isTrivialInput(splitCommandPrefix(event.text).body)) {
+		return { action: "continue" };
+	}
 	const config = loadConfig();
 	if (!automaticModeEnabled(config)) return { action: "continue" };
 	appendLog(pi, config.model, event.text, commandFlags(event.text));

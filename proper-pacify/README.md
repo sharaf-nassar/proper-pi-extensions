@@ -162,7 +162,10 @@ When enabled, automatic mode runs on every interactive, RPC, or
 extension-injected user input. A one-shot guard skips only the message already produced by
 `/pacify`, preventing recursion without exempting other extensions.
 Slash-command tokens are kept exact while their arguments are pacified, so
-skill and prompt-template expansion still works after the transform.
+skill and prompt-template expansion still works after the transform. Input a
+rewrite could never change skips the model call and writes no entry: a bare
+command, a choice such as `A` or `1B 2C`, `yes`, `no`, an alias, a URL, or
+any prompt of at most two words.
 
 Pacification happens above Pi's extension handler chain, in the single input
 dispatch funnel, so no other extension can see an unpacified prompt no matter

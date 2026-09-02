@@ -82,7 +82,7 @@ These assertions exercise `ExemplarIndex` and `exemplarNote()`. Malformed corpus
 
 The extension-origin fixture invokes the registered input handler with the same `/skill:ponytail-audit` message produced by an extension command alias.
 
-It verifies that an extension-origin first input switches away from `llm-router/auto` instead of continuing to the placeholder, and that a second input does not route again after the provider changes. The fixture uses the real input handler with a minimal model registry and pi API; it does not call the judge because the alias is a bare slash command.
+It verifies that an extension-origin first input switches away from `llm-router/auto` instead of continuing to the placeholder, and that a second input does not route again after the provider changes. The fixture uses the real input handler with a minimal model registry and pi API; it does not call the judge because the alias is a bare slash command, which is trivial input.
 
 ## Config menu fixture
 
@@ -97,6 +97,12 @@ The non-CPA fixture verifies provider-aware model resolution and one complete fi
 It checks that unqualified duplicate IDs prefer CPA when available, provider-qualified values resolve exactly, and direct Anthropic/OpenAI Codex models handle judge selection, availability, pinned commands, and `pi.setModel()` while the judged fixture rejects every raw network request.
 
 It also verifies that the factory self-registers exactly one `llm-router` provider whose model list contains `auto` and whose base URL stays on the dead port-1 placeholder.
+
+## Trivial input fixture
+
+The trivial-input fixture verifies that input a judge cannot usefully rank switches to `fallbackModel` without a judge call.
+
+It drives `isTrivialInput()` with single-letter and numbered choices, yes/no answers, aliases, option sets, two-word acknowledgements, a URL, and a bare command, and requires ordinary task text and commands with arguments to stay judged. It then runs the real input handler against a registry whose `complete()` throws, requiring the fallback switch for an option set and the marker removed from a trivial reply carrying an unknown sentinel.
 
 ## Non-CPA config fixture
 

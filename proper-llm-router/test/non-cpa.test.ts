@@ -7,9 +7,11 @@ import { after, test } from "node:test";
 const originalHome = process.env.HOME;
 const testHome = mkdtempSync(join(tmpdir(), "proper-llm-router-test-"));
 process.env.HOME = testHome;
-const { default: llmRouter, resolveModelTarget } = await import(
-	"../llm-router.ts"
-);
+const {
+	default: llmRouter,
+	isTrivialInput,
+	resolveModelTarget,
+} = await import("../llm-router.ts");
 after(() => {
 	if (originalHome === undefined) delete process.env.HOME;
 	else process.env.HOME = originalHome;
@@ -163,6 +165,74 @@ test("first input routes through Pi providers without CPA", async () => {
 	} finally {
 		globalThis.fetch = originalFetch;
 	}
+});
+
+// @lat: [[lat.md/proper-llm-router/tests#Verification#Trivial input fixture]]
+test("trivial first input uses the fallback without a judge call", async () => {
+	for (const text of [
+		"y",
+		"A",
+		"1B",
+		"yes.",
+		"lg",
+		"continue",
+		"1A 2B 3C",
+		"A and B",
+		"go ahead",
+		"https://example.com/a/b",
+		"/skill:review",
+	]) {
+		assert.equal(isTrivialInput(text), true, text);
+	}
+	for (const text of [
+		"fix the parser",
+		"fix typo in README.md",
+		"/skill:review the parser",
+	]) {
+		assert.equal(isTrivialInput(text), false, text);
+	}
+
+	let inputHandler:
+		| ((event: any, ctx: any) => Promise<{ action: string; text?: string }>)
+		| undefined;
+	let switched: any;
+	llmRouter({
+		on(name: string, handler: typeof inputHandler) {
+			if (name === "input") inputHandler = handler;
+		},
+		registerCommand() {},
+		async setModel(model: unknown) {
+			switched = model;
+			return true;
+		},
+	} as unknown as Parameters<typeof llmRouter>[0]);
+	assert.ok(inputHandler);
+
+	const models = directModels.map((model) => ({ ...model }));
+	const ctx = {
+		model: { provider: "llm-router", id: "auto" },
+		modelRegistry: {
+			getAvailable: () => models,
+			find: (provider: string, id: string) =>
+				models.find((model) => model.provider === provider && model.id === id),
+			async complete() {
+				throw new Error("trivial input must never reach the judge");
+			},
+		},
+		ui: { notify() {}, onTerminalInput: undefined },
+	};
+	assert.deepEqual(await inputHandler({ text: "1A 2B", images: [] }, ctx), {
+		action: "continue",
+	});
+	assert.equal(switched?.id, "gpt-5.6-terra");
+
+	// an unknown sentinel on a trivial reply is still stripped
+	switched = undefined;
+	assert.deepEqual(
+		await inputHandler({ text: "[[llm-router: nope]] y", images: [] }, ctx),
+		{ action: "transform", text: "y", images: [] },
+	);
+	assert.equal(switched?.id, "gpt-5.6-terra");
 });
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]

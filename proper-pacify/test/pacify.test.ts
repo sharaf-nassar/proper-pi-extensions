@@ -345,10 +345,37 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 	);
 
 	const extensionPrompt = await inputHandler(
-		{ text: "check this", source: "extension" },
+		{ text: "check this parser", source: "extension" },
 		ctx,
 	);
 	assert.equal(extensionPrompt.text, "could you please check this");
+
+	// Replies a rewrite can never change skip the model and the transcript:
+	// single-letter picks, option sets, acks, aliases, URLs, and two-word
+	// prompts, with or without a leading command token.
+	const trivialEntries = entries.length;
+	for (const text of [
+		"y",
+		"A",
+		"1B",
+		"yes.",
+		"no",
+		"lg",
+		"continue",
+		"1A 2B 3C",
+		"A and B",
+		"go ahead",
+		"sounds good",
+		"https://example.com/a/b",
+		"/skill:review y",
+	]) {
+		assert.deepEqual(
+			await inputHandler({ text, source: "interactive" }, ctx),
+			{ action: "continue" },
+			text,
+		);
+	}
+	assert.equal(entries.length, trivialEntries, "trivial input writes no entry");
 
 	// A headless child — `pi -p`, a subagent run — receives machine-authored task
 	// text under Pi's default "interactive" source, so only the run mode rules it
@@ -425,7 +452,10 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 		diff: false,
 	});
 	assert.deepEqual(
-		await inputHandler({ text: "auto is off", source: "interactive" }, ctx),
+		await inputHandler(
+			{ text: "automatic mode is off", source: "interactive" },
+			ctx,
+		),
 		{ action: "continue" },
 	);
 
@@ -439,14 +469,17 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 	};
 	ctx.modelRegistry.complete = async () => reply("ignored");
 	assert.deepEqual(
-		await inputHandler({ text: "cancel this", source: "interactive" }, ctx),
+		await inputHandler(
+			{ text: "cancel this rewrite", source: "interactive" },
+			ctx,
+		),
 		{ action: "handled" },
 	);
 	assert.match(notifications.at(-1)?.message ?? "", /cancelled/);
 	// The cancellation marker takes over the leaf so the discarded prompt's
 	// entry can never adopt the next unpacified user message as its rewrite.
 	assert.deepEqual(entries.at(-1)?.data, {
-		before: "cancel this",
+		before: "cancel this rewrite",
 		model: "anthropic/claude-haiku-4-5",
 		cancelled: true,
 	});
@@ -456,12 +489,15 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 		throw new Error("provider down");
 	};
 	assert.deepEqual(
-		await inputHandler({ text: "keep original", source: "interactive" }, ctx),
+		await inputHandler(
+			{ text: "keep the original prompt", source: "interactive" },
+			ctx,
+		),
 		{ action: "continue" },
 	);
 	// The entry was already written when the call started, so a failure adds no
 	// second entry; the error is reported beside it instead.
-	assert.equal(entries.at(-1).data.before, "keep original");
+	assert.equal(entries.at(-1).data.before, "keep the original prompt");
 	assert.match(notifications.at(-1)?.message ?? "", /sending original/);
 	assert.match(notifications.at(-1)?.message ?? "", /provider down/);
 });
@@ -907,7 +943,7 @@ test("wrapper survives reload, bare commands, and transcript failures", async ()
 		}),
 	);
 	const survived = await new FakeRunner().emitInput(
-		"fix it now",
+		"fix the parser now",
 		undefined,
 		"x",
 	);

@@ -11,7 +11,7 @@ Missing files and missing keys use built-in defaults.
 | `judge.model` | `gpt-5.6-terra` | authenticated Pi judge model ID or `provider/model-id` |
 | `judge.effort` | `medium` | optional `reasoning_effort`; `null` omits it |
 | `judge.fast` | `false` | `true` sends `service_tier: "priority"` on judge requests |
-| `fallbackModel` | `gpt-5.6-terra` | model ID or `provider/model-id` used after judged-path failure or for bare commands |
+| `fallbackModel` | `gpt-5.6-terra` | model ID or `provider/model-id` used after judged-path failure or for trivial input such as bare commands |
 | `cpaBase` | `http://127.0.0.1:8317` | CPA base for optional management requests |
 | `exemplarsPath` | `<extension>/exemplars.jsonl` | measured-outcome corpus path |
 | `quotaMaxPct` | `null` | threshold gate; `null` disables it |

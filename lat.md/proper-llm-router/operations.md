@@ -74,7 +74,7 @@ Routing state stays an infrastructure concern: when the variable is set and a pi
 
 The extension switches before the agent loop on a pinned, forced, judged, or fallback path. Extension-origin messages from `sendUserMessage()` follow the same routing path, so command aliases cannot reach the placeholder. Missing authenticated targets can still break this guarantee.
 
-The judged path reports an error when neither the verdict's effective target nor the fallback resolves. An unpinned bare command returns silently instead, so a missing fallback entry leaves that prompt on the placeholder. The registry-lookup section in `routing.md` covers the dated-ID tolerance applied before declaring a model absent.
+The judged path reports an error when neither the verdict's effective target nor the fallback resolves. Trivial input, including an unpinned bare command, returns silently instead, so a missing fallback entry leaves that prompt on the placeholder. The registry-lookup section in `routing.md` covers the dated-ID tolerance applied before declaring a model absent.
 
 Automatic startup activation also fails silently when `llm-router/auto` is absent: the session stays on its current model and no routing occurs. Self-registration makes this state reachable only on hosts without `pi.registerProvider()` and no manual entry. The `/llm-router` command performs the same lookup interactively and reports the missing placeholder.
 
