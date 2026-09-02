@@ -58,15 +58,16 @@ Environment variables provide credentials and test controls.
 | Variable | Effect |
 | --- | --- |
 | variable named by `cpaManagementKeyEnv` | management-key fallback when the config value is empty |
-| `LLM_ROUTER_OFF=1` | stops startup from forcing `llm-router/auto` and omits sentinel help; explicit selection of `auto` can still route; pinned workflow commands gate through a confirm dialog in dialog-capable sessions |
+| `LLM_ROUTER_OFF=1` | same effect as `"enabled": false` in the config file: stops startup from forcing `llm-router/auto` and omits sentinel help; explicit selection of `auto` can still route; pinned workflow commands gate through a confirm dialog in dialog-capable sessions |
+| `LLM_ROUTER_ON=1` | overrides both `LLM_ROUTER_OFF` and a disabled config file for one process tree; set by the config menu's session switch and inherited by spawned children |
 | `JUDGE_EXEMPLARS=0` | disables exemplar retrieval |
 | `CPA_SIMULATE_UNAVAILABLE` | comma-separated exact arm keys treated as down |
 | `PI_SUBAGENT_CHILD` | identifies child sessions for sentinel-help suppression |
 | `PI_SUBAGENT_FANOUT_CHILD` | keeps sentinel help in children allowed to spawn |
 
-`LLM_ROUTER_OFF` is not a global input-handler kill switch. It prevents automatic activation; a session already on `llm-router/auto` still meets the routing condition.
+Neither `LLM_ROUTER_OFF` nor the config flag is an input-handler kill switch. They prevent automatic activation; a session already on `llm-router/auto` still meets the routing condition. The combined rule is defined in [[configuration#Routing switch]].
 
-Routing state stays an infrastructure concern: when the variable is set and a pinned workflow command arrives in an interactive session, the extension shows a confirmation dialog — continuing runs the command unrouted, declining stops the input before the agent starts. Sessions without a dialog surface proceed unrouted. Prompts and models never probe the environment or the system prompt for routing state.
+Routing state stays an infrastructure concern: when routing is inactive and a pinned workflow command arrives in an interactive session, the extension shows a confirmation dialog — continuing runs the command unrouted, declining stops the input before the agent starts. Sessions without a dialog surface proceed unrouted. Prompts and models never probe the environment or the system prompt for routing state.
 
 ## Placeholder safety
 

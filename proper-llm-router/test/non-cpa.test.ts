@@ -10,7 +10,9 @@ process.env.HOME = testHome;
 const {
 	default: llmRouter,
 	isTrivialInput,
+	loadConfig,
 	resolveModelTarget,
+	saveConfig,
 } = await import("../llm-router.ts");
 after(() => {
 	if (originalHome === undefined) delete process.env.HOME;
@@ -316,14 +318,15 @@ test("config UI preselects values and wraps backward", async () => {
 	mkdirSync(join(testHome, ".pi", "agent"), { recursive: true });
 	const picks: string[] = [];
 	let menu = 0;
+	// main menu opens on the routing switch; Judge is the second entry
 	const inputs = [
+		["\x1b[B", "\r"],
 		["\r"],
 		["\r"],
-		["\r"],
-		["\r"],
+		["\x1b[B", "\r"],
 		["\x1b[B", "\x1b[B", "\r"],
 		["\r"],
-		["\x1b[B", "\x1b[B", "\x1b[B", "\x1b[B", "\x1b[B", "\r"],
+		["\x1b[B", "\x1b[B", "\x1b[B", "\x1b[B", "\x1b[B", "\x1b[B", "\r"],
 	];
 	await configHandler("", {
 		hasUI: true,
@@ -403,5 +406,115 @@ test("config UI hides CPA-only controls and JSON fields without CPA", async () =
 		"cpaManagementKeyEnv",
 	]) {
 		assert.equal(key in visible, false, key);
+	}
+});
+
+// @lat: [[lat.md/proper-llm-router/tests#Verification#Routing switch fixture]]
+test("routing switch disables globally and re-enables per session", async () => {
+	let configHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
+	let sessionStart:
+		| ((event: { reason: string }, ctx: any) => Promise<void>)
+		| undefined;
+	let agentStart: ((event: { systemPrompt: string }) => unknown) | undefined;
+	const switches: string[] = [];
+	llmRouter({
+		on(name: string, handler: any) {
+			if (name === "session_start") sessionStart = handler;
+			if (name === "before_agent_start") agentStart = handler;
+		},
+		registerCommand(name: string, command: { handler: typeof configHandler }) {
+			if (name === "llm-router-config") configHandler = command.handler;
+		},
+		async setModel(model: { provider: string; id: string }) {
+			switches.push(`${model.provider}/${model.id}`);
+			return true;
+		},
+	} as unknown as Parameters<typeof llmRouter>[0]);
+	assert.ok(configHandler);
+	assert.ok(sessionStart);
+	assert.ok(agentStart);
+
+	mkdirSync(join(testHome, ".pi", "agent"), { recursive: true });
+	const configPath = join(testHome, ".pi", "agent", "llm-router.json");
+	const auto = { provider: "llm-router", id: "auto" };
+	const terra = { provider: "openai-codex", id: "gpt-5.6-terra" };
+	const models = [auto, ...directModels];
+	const menus: string[][] = [];
+	const ctxFor = (
+		current: { provider: string; id: string },
+		replies: string[],
+	) => ({
+		hasUI: true,
+		model: current,
+		modelRegistry: {
+			getAvailable: () => models,
+			find: (provider: string, id: string) =>
+				models.find((model) => model.provider === provider && model.id === id),
+		},
+		ui: {
+			notify() {},
+			select: async (_title: string, items: string[]) => {
+				menus.push(items);
+				return replies.shift();
+			},
+		},
+	});
+	delete process.env.LLM_ROUTER_ON;
+	delete process.env.LLM_ROUTER_OFF;
+	try {
+		// off globally: armed session moves to the fallback, startup no longer
+		// forces auto, sentinel help disappears
+		await configHandler(
+			"",
+			ctxFor(auto, ["Disable routing (all sessions)", "Done"]),
+		);
+		assert.equal(menus[0]?.[0], "Disable routing (all sessions)");
+		assert.equal(menus[0]?.includes("Enable routing for this session"), false);
+		assert.equal(loadConfig(configPath).enabled, false);
+		assert.deepEqual(switches, ["openai-codex/gpt-5.6-terra"]);
+		assert.deepEqual(menus[1]?.slice(0, 2), [
+			"Enable routing (all sessions)",
+			"Enable routing for this session",
+		]);
+		await sessionStart({ reason: "startup" }, ctxFor(terra, []));
+		assert.equal(switches.length, 1);
+		assert.equal(agentStart({ systemPrompt: "base" }), undefined);
+
+		// on for this session only: env override, session re-armed, file
+		// still off, children spawned from this process inherit the override
+		await configHandler(
+			"",
+			ctxFor(terra, ["Enable routing for this session", "Done"]),
+		);
+		assert.equal(process.env.LLM_ROUTER_ON, "1");
+		assert.equal(loadConfig(configPath).enabled, false);
+		assert.equal(switches.at(-1), "llm-router/auto");
+		assert.equal(menus.at(-1)?.[1], "Disable routing for this session");
+		await sessionStart({ reason: "startup" }, ctxFor(terra, []));
+		assert.equal(switches.length, 3);
+		assert.notEqual(agentStart({ systemPrompt: "base" }), undefined);
+
+		// session override off again, then back on globally
+		await configHandler(
+			"",
+			ctxFor(auto, [
+				"Disable routing for this session",
+				"Enable routing (all sessions)",
+				"Done",
+			]),
+		);
+		assert.equal(process.env.LLM_ROUTER_ON, undefined);
+		assert.equal(loadConfig(configPath).enabled, true);
+		assert.deepEqual(switches.slice(3), [
+			"openai-codex/gpt-5.6-terra",
+			"llm-router/auto",
+		]);
+		assert.equal(
+			menus.at(-1)?.includes("Enable routing for this session"),
+			false,
+		);
+	} finally {
+		delete process.env.LLM_ROUTER_ON;
+		saveConfig({ ...loadConfig(configPath), enabled: true });
 	}
 });

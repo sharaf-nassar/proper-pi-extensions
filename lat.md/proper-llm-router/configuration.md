@@ -8,6 +8,7 @@ Missing files and missing keys use built-in defaults.
 
 | Field | Default | Contract |
 | --- | --- | --- |
+| `enabled` | `true` | global routing switch; `false` stops automatic activation in every session |
 | `judge.model` | `gpt-5.6-terra` | authenticated Pi judge model ID or `provider/model-id` |
 | `judge.effort` | `medium` | optional `reasoning_effort`; `null` omits it |
 | `judge.fast` | `false` | `true` sends `service_tier: "priority"` on judge requests |
@@ -21,6 +22,16 @@ Missing files and missing keys use built-in defaults.
 | `commandPins` | five built-in pins | slash commands that skip judging |
 
 The default exemplar path resolves beside the loaded `llm-router.ts`, so a package move does not break default configuration. An explicit user `exemplarsPath` still overrides it. `fallbackModel` resolves against authenticated Pi models; provider qualification removes duplicate-ID ambiguity.
+
+## Routing switch
+
+Routing is active when the file's `enabled` flag is true and `LLM_ROUTER_OFF` is not `1`, or whenever `LLM_ROUTER_ON=1` is set in the process environment.
+
+`routingEnabled()` gates startup activation, sentinel help, and the pinned-command confirm dialog. It never gates the input handler: a session already on `llm-router/auto` still routes, so the switch prevents activation rather than killing armed sessions.
+
+The file flag is global. Every pi process reads it on `session_start` and `before_agent_start`, so turning it off in one session stops new sessions and spawned children from arming without a restart.
+
+`LLM_ROUTER_ON=1` is a process-scoped override, written into the running process environment by the menu's session switch. pi-subagents children inherit the parent environment, so a session re-enabled this way routes its workers too. The override wins over both the file flag and `LLM_ROUTER_OFF`.
 
 ## Merge and error behavior
 
@@ -80,7 +91,9 @@ Pin edits affect the next armed routing decision. They do not repin a session th
 
 `/llm-router-config` opens a UI-only configuration loop when the current pi context has a UI.
 
-The menu has one `Judge` entry for model, effort, and fast settings, plus `Overrides`, pinned commands, JSON editing, and a live route test. Judge and override pickers always use authenticated Pi models. The fast setting requests priority service where supported.
+The first menu entry toggles the global `enabled` flag. When routing is inactive, or a session override is set, a second entry toggles `LLM_ROUTER_ON` for the current process. Either toggle re-arms the session on `llm-router/auto` when routing becomes active, and moves a still-armed session to `fallbackModel` when it becomes inactive; sessions already on a concrete model are left as they are. The summary line reports `on`, `on (this session)`, `off`, or `off (LLM_ROUTER_OFF=1)`.
+
+The menu then has one `Judge` entry for model, effort, and fast settings, plus `Overrides`, pinned commands, JSON editing, and a live route test. Judge and override pickers always use authenticated Pi models. The fast setting requests priority service where supported.
 
 When an authenticated `cliproxyapi` model exists, the menu also shows quota thresholds and masked management-key entry. Without CPA, those actions, summary fields, and CPA-only fields in the JSON editor are omitted. Hidden stored CPA values are preserved.
 
@@ -90,7 +103,9 @@ The judge model picker reads Pi's authenticated model snapshot and displays `pro
 
 ### Picker focus and navigation
 
-Every TUI picker opens on its checked current value; menus without one open on their first entry. Up from the first entry wraps to the last, and Down from the last wraps to the first. Non-TUI modes keep Pi's standard selector fallback.
+Every TUI picker opens on its checked current value; menus without one, including the main menu, open on their first entry.
+
+Up from the first entry wraps to the last, and Down from the last wraps to the first. Non-TUI modes keep Pi's standard selector fallback.
 
 There is no dedicated fallback-model picker. Change `fallbackModel`, optional CPA management settings, or `exemplarsPath` through the full JSON editor.
 

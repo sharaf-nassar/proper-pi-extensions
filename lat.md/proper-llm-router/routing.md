@@ -6,7 +6,7 @@ Routing is a one-shot session state machine around pi's startup, model-selection
 
 The selected provider is the routing state: input is armed only while the current model belongs to `llm-router`.
 
-On `startup` and `new`, `session_start` switches to `llm-router/auto` only when the current model belongs to another provider. A successful route selects any authenticated non-router provider, which naturally disarms later input. `/llm-router` or manual placeholder selection re-arms it.
+On `startup` and `new`, `session_start` switches to `llm-router/auto` only when routing is active per [[configuration#Routing switch]] and the current model belongs to another provider. A successful route selects any authenticated non-router provider, which naturally disarms later input. `/llm-router` or manual placeholder selection re-arms it.
 
 Resumed sessions are never forcibly moved to `llm-router/auto`, so they stay on the model they were left with.
 

@@ -138,6 +138,11 @@ the current session effort unchanged.
 
 The configuration menu can:
 
+- Turn routing off or on for all sessions (`enabled` in the config file), and
+  while it is off, turn it back on for the current session only
+  (`LLM_ROUTER_ON=1` in the process environment, inherited by spawned
+  workers). Turning routing off moves an armed session to `fallbackModel`;
+  turning it on re-arms the session on `llm-router/auto`.
 - Choose judge model, reasoning effort, and priority service tier.
 - Replace judged model slots with any authenticated Pi model.
 - Add, repoint, remove, and set effort for command pins.
@@ -238,6 +243,7 @@ after the corpus has loaded, and quota data may remain cached for 60 seconds.
 
 | Field | Default | Behavior |
 | --- | --- | --- |
+| `enabled` | `true` | `false` stops automatic startup activation and sentinel help in every session. A session already on `llm-router/auto` can still route. |
 | `judge.model` | `gpt-5.6-terra` | Authenticated Pi model ID or `provider/model-id` used for the judge. |
 | `judge.effort` | `medium` | Judge `reasoning_effort`; `null` omits it. |
 | `judge.fast` | `false` | Sends `service_tier: "priority"` when enabled. |
@@ -260,7 +266,8 @@ The full JSON editor writes a complete merged config.
 
 | Variable | Effect |
 | --- | --- |
-| `LLM_ROUTER_OFF=1` | Stops automatic startup activation and sentinel help. A session already on `llm-router/auto` can still route. A pinned workflow command in an interactive session opens a confirm dialog: continue unrouted, or stop the run before the agent starts. |
+| `LLM_ROUTER_OFF=1` | Same as `"enabled": false`: stops automatic startup activation and sentinel help. A session already on `llm-router/auto` can still route. A pinned workflow command in an interactive session opens a confirm dialog: continue unrouted, or stop the run before the agent starts. |
+| `LLM_ROUTER_ON=1` | Overrides `LLM_ROUTER_OFF` and a disabled config file for one process tree. The config menu's session switch sets it. |
 | `JUDGE_EXEMPLARS=0` | Skips measured exemplar retrieval. |
 | `CPA_SIMULATE_UNAVAILABLE="arm1,arm2"` | Treats exact arm keys as down for swap testing. |
 | `CPA_MANAGEMENT_KEY` | Default management-key fallback. |

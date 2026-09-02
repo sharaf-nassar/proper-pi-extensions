@@ -110,6 +110,12 @@ The non-CPA config fixture verifies that CPA-only controls disappear when Pi has
 
 It records the real `/llm-router-config` menu, requires quota and management-key actions to be absent, opens the JSON editor, and requires `cpaBase`, quota, and management-key fields to be omitted. Its TUI picker case proves Up wraps from the first menu entry to `Done`, and Enter accepts the stored direct judge model and `off` fast setting rather than the first displayed choice.
 
+## Routing switch fixture
+
+The routing switch fixture verifies the global config flag and the per-session environment override through the real menu handler and event hooks.
+
+It disables routing from an armed session and requires the first menu entry to be the global switch, the file to store `enabled: false`, the session to move to the fallback, startup to stop forcing `llm-router/auto`, and sentinel help to disappear. It then enables routing for the session and requires `LLM_ROUTER_ON=1`, the file still disabled, the session re-armed, and startup and sentinel help active again. Finally it clears the session override and re-enables globally, requiring the session entry to disappear.
+
 ## Ultra compatibility fixtures
 
 `test/ultra-thinking.test.ts` exercises the reload-safe prototype helpers against fake classes without editing pi internals. Its payload check imports the Pi 0.84.4 runtime pinned by the package lock.

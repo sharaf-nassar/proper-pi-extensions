@@ -23,6 +23,7 @@
  * needed. /llm-router switches the session back to llm-router/auto so
  * the next prompt gets routed.
  * {
+ *   "enabled": true,                          // false: off in every session
  *   "judge": { "model": "...",               // authenticated Pi model
  *              "effort": "medium" | null,
  *              "fast": false },              // priority service tier
@@ -54,7 +55,9 @@
  * threshold gate. The judge always uses one strict Pi model-registry tool call.
  *
  * session_start forces fresh sessions back to llm-router/auto because pi
- * persists the last-set model as the default (LLM_ROUTER_OFF=1 disables).
+ * persists the last-set model as the default ("enabled": false or
+ * LLM_ROUTER_OFF=1 disables; LLM_ROUTER_ON=1 re-enables one process tree —
+ * the menu's "this session" switch sets it, spawned children inherit it).
  * The factory self-registers llm-router/auto via pi.registerProvider();
  * a manual ~/.pi/agent/models.json entry is optional and composes above
  * it. No request should ever reach the placeholder endpoint — routing
@@ -230,6 +233,9 @@ export interface CommandPin {
 	effort: ThinkingLevel | null; // null = leave the session's thinking level
 }
 export interface Config {
+	// global switch: false stops startup activation and sentinel help in
+	// every session that reads this file (LLM_ROUTER_ON=1 overrides it)
+	enabled: boolean;
 	judge: JudgeConfig;
 	fallbackModel: string;
 	cpaBase: string;
@@ -249,6 +255,7 @@ export interface Config {
 }
 
 const DEFAULTS: Config = {
+	enabled: true,
 	judge: {
 		model: "gpt-5.6-terra",
 		effort: "medium",
@@ -272,6 +279,12 @@ const DEFAULTS: Config = {
 
 function managementKey(cfg: Config): string {
 	return cfg.cpaManagementKey || process.env[cfg.cpaManagementKeyEnv] || "";
+}
+
+// @lat: [[configuration#Routing switch]]
+function routingEnabled(cfg: Config): boolean {
+	if (process.env.LLM_ROUTER_ON === "1") return true;
+	return cfg.enabled && process.env.LLM_ROUTER_OFF !== "1";
 }
 
 function mergeConfig(user: Record<string, unknown>): Config {
@@ -1270,8 +1283,26 @@ export default function (pi: ExtensionAPI) {
 		};
 	}
 
+	// Apply a routing switch to the current session: on arms llm-router/auto
+	// for the next prompt; off moves a still-armed session onto the fallback
+	// so no request reaches the placeholder. Sessions on a concrete model
+	// are left alone.
+	async function armSession(
+		ctx: ExtensionContext,
+		cfg: Config,
+		models: readonly RegistryModel[],
+		on: boolean,
+	): Promise<void> {
+		const model = on
+			? ctx.modelRegistry.find(PROVIDER, "auto")
+			: ctx.model?.provider === PROVIDER
+				? findConfiguredModel(ctx, cfg.fallbackModel, models)
+				: undefined;
+		if (model) await pi.setModel(model);
+	}
+
 	pi.on("session_start", async (event, ctx) => {
-		if (process.env.LLM_ROUTER_OFF === "1") return;
+		if (!routingEnabled(loadConfig())) return;
 		if (event.reason === "startup" || event.reason === "new") {
 			if (ctx.model?.provider !== PROVIDER) {
 				const auto = ctx.modelRegistry.find(PROVIDER, "auto");
@@ -1297,7 +1328,7 @@ export default function (pi: ExtensionAPI) {
 		"claude-haiku-4-5, claude-sonnet-5, claude-opus-5, claude-fable-5; self-contained/" +
 		"algorithmic work — gpt-5.6-luna, gpt-5.6-terra, gpt-5.6-sol.";
 	pi.on("before_agent_start", (event) => {
-		if (process.env.LLM_ROUTER_OFF === "1") return;
+		if (!routingEnabled(loadConfig())) return;
 		if (
 			process.env.PI_SUBAGENT_CHILD === "1" &&
 			process.env.PI_SUBAGENT_FANOUT_CHILD !== "1"
@@ -1311,21 +1342,19 @@ export default function (pi: ExtensionAPI) {
 	// natively from the routed model, the footer shows it, and workflow
 	// children inherit it. llm-router/auto must never serve a request.
 	pi.on("input", async (event, ctx) => {
-		// Routing state is infrastructure's problem, never the model's: when
-		// LLM_ROUTER_OFF=1 a pinned workflow command would run unpinned and
-		// its spawned workers would inherit the variable and never route, so
-		// gate the run with a real dialog here. Declining stops the input
-		// before the agent sees it. hasUI guard: with no dialog surface,
-		// confirm() auto-returns false and would silently block headless
-		// runs, so those proceed unrouted instead — OFF was set on purpose.
-		// (Dialogs are safe in input handlers; session_start would hang.)
-		if (
-			process.env.LLM_ROUTER_OFF === "1" &&
-			ctx.hasUI &&
-			commandPin(loadConfig(), event.text)
-		) {
+		// Routing state is infrastructure's problem, never the model's: with
+		// routing off a pinned workflow command would run unpinned and its
+		// spawned workers would read the same config (or inherit the env
+		// variable) and never route, so gate the run with a real dialog
+		// here. Declining stops the input before the agent sees it. hasUI
+		// guard: with no dialog surface, confirm() auto-returns false and
+		// would silently block headless runs, so those proceed unrouted
+		// instead — routing was turned off on purpose. (Dialogs are safe in
+		// input handlers; session_start would hang.)
+		const cfg = loadConfig();
+		if (!routingEnabled(cfg) && ctx.hasUI && commandPin(cfg, event.text)) {
 			const proceed = await ctx.ui.confirm(
-				"llm-router is disabled (LLM_ROUTER_OFF=1)",
+				"llm-router is disabled",
 				"This command normally pins its model and routes every spawned " +
 					"worker per task. With the router off it runs on the current " +
 					"session model and workers are not routed. Continue without " +
@@ -1333,7 +1362,7 @@ export default function (pi: ExtensionAPI) {
 			);
 			if (!proceed) {
 				ctx.ui.notify(
-					"llm-router: run stopped — unset LLM_ROUTER_OFF and restart pi to route",
+					"llm-router: run stopped — enable routing in /llm-router-config or unset LLM_ROUTER_OFF",
 					"info",
 				);
 				return { action: "handled" };
@@ -1346,7 +1375,6 @@ export default function (pi: ExtensionAPI) {
 		// never route or switch on them
 		if (/^\/llm-router\b/.test(event.text)) return { action: "continue" };
 
-		const cfg = loadConfig();
 		const models = availableModels(ctx);
 		// Pinned slash command (/file, /implement-ready, …): skip the judge,
 		// then use the requested arm or its available partner.
@@ -1684,12 +1712,29 @@ export default function (pi: ExtensionAPI) {
 					? ` | quota gate: ${cfg.quotaMaxPct == null ? "off" : `${cfg.quotaMaxPct}%`}` +
 						` | key: ${keySource}`
 					: "";
+				const sessionOn = process.env.LLM_ROUTER_ON === "1";
+				const GLOBAL_SWITCH = cfg.enabled
+					? "Disable routing (all sessions)"
+					: "Enable routing (all sessions)";
+				const SESSION_SWITCH = sessionOn
+					? "Disable routing for this session"
+					: "Enable routing for this session";
+				const routingState = sessionOn
+					? "on (this session)"
+					: routingEnabled(cfg)
+						? "on"
+						: cfg.enabled
+							? "off (LLM_ROUTER_OFF=1)"
+							: "off";
 				const summary =
-					`judge: ${cfg.judge.model}@${cfg.judge.effort ?? "no-effort"}${cfg.judge.fast ? "+fast" : ""} via Pi model registry\n` +
+					`routing: ${routingState}` +
+					` | judge: ${cfg.judge.model}@${cfg.judge.effort ?? "no-effort"}${cfg.judge.fast ? "+fast" : ""} via Pi model registry\n` +
 					`fallback: ${cfg.fallbackModel}${cpaSummary}` +
 					` | overrides: ${judgeOverrides(cfg).size}` +
 					` | pinned commands: ${Object.keys(cfg.commandPins ?? {}).length}`;
 				let action = await select(`llm-router config\n${summary}`, [
+					GLOBAL_SWITCH,
+					...(sessionOn || !routingEnabled(cfg) ? [SESSION_SWITCH] : []),
 					"Judge",
 					"Overrides",
 					"Pinned commands",
@@ -1699,6 +1744,19 @@ export default function (pi: ExtensionAPI) {
 					"Done",
 				]);
 				if (!action || action === "Done") return;
+				if (action === GLOBAL_SWITCH) {
+					const next = { ...cfg, enabled: !cfg.enabled };
+					saveConfig(next);
+					await armSession(ctx, next, models, routingEnabled(next));
+					continue;
+				}
+				if (action === SESSION_SWITCH) {
+					// process env so pi-subagents children inherit the override
+					if (sessionOn) delete process.env.LLM_ROUTER_ON;
+					else process.env.LLM_ROUTER_ON = "1";
+					await armSession(ctx, cfg, models, routingEnabled(cfg));
+					continue;
+				}
 				if (action === "Judge") {
 					const judgeAction = await select("Judge settings", [
 						"Model",
