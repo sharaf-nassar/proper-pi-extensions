@@ -329,12 +329,12 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 		ctx,
 	);
 	assert.equal(transformed.text, "/skill:review could you please fix this now");
-	// The entry holds the original text, the model it is going to, and — for a
-	// command dispatch that will append no user message — the pairing opt-out.
+	// The entry holds only the original text and the model it is going to. A
+	// skill command carries no pairing opt-out: Pi expands it into a skill block
+	// plus the rewritten argument, which renders as its own user message.
 	assert.deepEqual(entries[0].data, {
 		before: "/skill:review fix this now",
 		model: "openai-codex/gpt-5.6-luna",
-		command: true,
 	});
 	// A successful rewrite reports nothing separately: the entry is the progress
 	// indicator, so no notification duplicates the prompt beside it.
@@ -402,7 +402,13 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 			options: { expandPromptTemplates: true },
 		},
 	]);
-	assert.equal(entries[2].data.before, "/file fix this now");
+	// A prompt template's dispatch appends the substituted body, never the
+	// rewrite itself, so its entry carries the pairing opt-out.
+	assert.deepEqual(entries[2].data, {
+		before: "/file fix this now",
+		model: "openai-codex/gpt-5.6-luna",
+		command: true,
+	});
 	assert.deepEqual(
 		await inputHandler({ text: sent[0]?.text ?? "", source: "extension" }, ctx),
 		{ action: "continue" },
@@ -1069,6 +1075,29 @@ test("the user message markdown renders the tone diff in place", () => {
 						type: "message",
 						message: { role: "user", content: "another plain prompt" },
 					},
+					// A skill command: Pi stores the expanded skill block followed by the
+					// rewritten argument, and renders only that argument as the user
+					// message the transformer sees.
+					{
+						id: "pacify-5",
+						type: "custom",
+						customType: "proper-pacify",
+						data: { before: "/skill:review WHAT? review this", model: "m" },
+					},
+					{
+						id: "user-5",
+						parentId: "pacify-5",
+						type: "message",
+						message: {
+							role: "user",
+							content: [
+								{
+									type: "text",
+									text: '<skill name="review" location="/s/review/SKILL.md">\nReferences are relative to /s/review.\n\n# Review\n</skill>\n\nreview this',
+								},
+							],
+						},
+					},
 				],
 			},
 		},
@@ -1091,6 +1120,9 @@ test("the user message markdown renders the tone diff in place", () => {
 	// entry's rewrite; pairing it would strike out text the user never typed.
 	assert.equal(run("sent plain later"), "sent plain later");
 	assert.equal(run("another plain prompt"), "another plain prompt");
+	// A skill command's rendered user message is the rewritten argument alone,
+	// so it diffs against the typed argument, not the whole invocation.
+	assert.equal(run("review this"), "~[-[WHAT? ]]review this");
 
 	// The configuration flag turns the display off without touching anything
 	// else, and back on again.

@@ -6,7 +6,11 @@ import type {
 	InputEvent,
 	InputEventResult,
 } from "@earendil-works/pi-coding-agent";
-import { ExtensionRunner, getAgentDir } from "@earendil-works/pi-coding-agent";
+import {
+	ExtensionRunner,
+	getAgentDir,
+	parseSkillBlock,
+} from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
 
 const CONFIG_PATH = join(getAgentDir(), "pacify.json");
@@ -396,7 +400,15 @@ export function pacifiedOriginalFor(text: string): string | undefined {
 							.filter((part) => part.type === "text")
 							.map((part) => part.text)
 							.join("");
-			if (rendered === text) return before;
+			// A skill command expands into a skill block Pi renders on its own,
+			// followed by the rewritten argument as the user message. Only that
+			// argument reaches the transformer, so it pairs with the command's body.
+			const skill = parseSkillBlock(rendered);
+			if (skill) {
+				if (skill.userMessage === text) return splitCommandPrefix(before).body;
+			} else if (rendered === text) {
+				return before;
+			}
 		}
 	} catch {
 		// A display nicety must never break rendering.
@@ -556,11 +568,15 @@ function appendLog(
 	}
 }
 
-/** Flags a logged input whose dispatch will never append a user message. */
+/** Flags a logged input whose dispatch will never append its rewrite as a
+ * user message. A skill command is the exception: Pi expands it into a skill
+ * block followed by the rewritten argument, which renders as its own user
+ * message. A prompt template appends a message too, but its body is the
+ * substituted template rather than the rewrite, so it stays unpaired. */
 function commandFlags(
 	text: string,
 ): Partial<Pick<PacifyLog, "command">> | undefined {
-	return /^\s*\//.test(text) ? { command: true } : undefined;
+	return /^\s*\/(?!skill:)/.test(text) ? { command: true } : undefined;
 }
 
 async function withCancellation<T>(
