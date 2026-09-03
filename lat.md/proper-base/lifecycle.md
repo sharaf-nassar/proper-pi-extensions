@@ -40,6 +40,18 @@ Pi invalidates the outgoing extension API during replacement. The old handler th
 
 The post-bind restore intentionally runs after every new-session hook. In particular, proper-llm-router may switch a new session to `llm-router/auto`; `/clear` then restores the outgoing model so the next prompt does not route again. A session with no selected model keeps Pi's normal `/new` result, while an unavailable model leaves that result in place and shows an error.
 
+## Sticky startup model
+
+Selecting a model makes it Pi's startup default, so the next session opens on the model last used rather than the one last explicitly saved.
+
+Pi persists `defaultProvider` and `defaultModel` only when Ctrl+S is pressed in the `/model` picker. A plain selection appends a session model change instead, which is replayed for `--continue` and `--resume` and is invisible to a new session; startup then falls back to the saved pair, and past it to Pi's built-in per-provider defaults and the first available model. proper-base closes that gap with a load-time `model_select` handler that writes the selected provider and model ID into the agent directory's `settings.json`.
+
+Pi exposes no settings API to extensions, so the file is rewritten directly, preserving every other key and Pi's two-space format. This does not fight Pi's own saves: its settings writer re-reads the file under a lock and merges back only the fields it marked modified, so keys written from outside survive. An absent or damaged settings file is left alone rather than replaced by a two-key one, and a selection matching the stored pair writes nothing, so repeated cycling causes no churn.
+
+The handler ignores `restore`, the source Pi uses when a resumed session reapplies its recorded model: reopening old work must not redefine the startup default. `set` and `cycle` both persist, including the `/clear` restore, whose whole purpose is to keep the outgoing model. Any model reaching the event has already passed Pi's API-key check for this process, which is the same condition startup applies, so no separate availability filter is needed.
+
+The one excluded model is proper-llm-router's `llm-router/auto` placeholder, which the router selects through `pi.setModel()` at every startup and new session and after every `/llm-router`. Storing it would be worse than storing nothing: its provider is registered by an extension and holds no credentials, so Pi's resolver skips the saved pair and falls back to its built-in provider defaults and then the first available model. Judged models the router selects per prompt are stored like any other selection, and the router forces `llm-router/auto` over them at the next session start regardless. Persistence can be turned off with `"stickyModel": false` in the agent directory's `proper-base.json`, the same file the session action rail's choice lives in; a missing or damaged config reads as enabled.
+
 ## Prompt sources
 
 History has one trusted source: the private recorder store for the current working directory.

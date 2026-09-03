@@ -27,6 +27,7 @@ import {
 } from "./src/autocomplete-details.ts";
 import { installClipboardLeakGuard } from "./src/clipboard-guard.ts";
 import { commitGuardReason } from "./src/commit-guard.ts";
+import { persistDefaultModel } from "./src/default-model.ts";
 import {
 	installEditorNavigation,
 	installPromptClear,
@@ -392,6 +393,12 @@ export default function (pi: ExtensionAPI) {
 				);
 			}
 		},
+	});
+
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Sticky startup model]]
+	pi.on("model_select", (event) => {
+		if (event.source === "restore") return;
+		persistDefaultModel(getAgentDir(), event.model);
 	});
 
 	pi.on("input", (event) => {
