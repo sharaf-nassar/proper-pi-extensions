@@ -83,9 +83,16 @@ directory to forget all proper-base history.
   and URLs.
 - `/model ` results sort by displayed model ID in descending numeric-aware
   order. Typed terms must all match when strict matches exist.
-- Enter or Tab switches immediately only when the complete prompt is a
-  single-line `/model ...` command. Inline and multiline slash segments only
-  receive the completion. Tab keeps its normal behavior elsewhere.
+- `/model` takes an optional thinking level after the model name, as in
+  `/model anthropic/claude-opus-4 high`. Once the model name carries a
+  provider slash, the next word completes against Pi's thinking levels; a
+  word naming no level keeps searching models.
+- Tab-completing a model name submits nothing. It leaves the name, a
+  trailing space, and an open level menu led by the level already in
+  effect, so you can type a level straight away or press Enter to keep the
+  current one.
+- Enter accepts a model or level completion and switches immediately, only
+  when the complete prompt is a single-line `/model ...` command.
 
 ### Fullscreen navigation and selection
 

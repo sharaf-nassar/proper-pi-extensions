@@ -1,5 +1,7 @@
 import {
+	type AutocompleteItem,
 	type AutocompleteProvider,
+	type AutocompleteSuggestions,
 	type Component,
 	type OverlayHandle,
 	type OverlayMargin,
@@ -29,6 +31,67 @@ const MODEL_ORDER = new Intl.Collator("en", {
 	sensitivity: "base",
 });
 
+/**
+ * Pi's thinking levels, weakest first. The extension API exports neither the
+ * list nor the per-model subset, and Pi clamps an unsupported level when it
+ * applies one, so restating the full list here costs nothing.
+ */
+const THINKING_LEVELS = [
+	"off",
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+] as const;
+
+export type ThinkingArgument = (typeof THINKING_LEVELS)[number];
+
+/**
+ * `/model <provider>/<id> <level>` before the cursor.
+ *
+ * The first argument must carry a provider slash, the exact shape a model
+ * completion produces, so a multi-term model search such as `/model opus 4`
+ * keeps filtering models instead of being read as a level.
+ */
+const MODEL_THINKING_ARGUMENT = /^\/model\s+(\S*\/\S*)\s+(\S*)$/;
+
+/** Level suggestions for a second `/model` argument, or nothing for any other shape. */
+function thinkingSuggestions(
+	activeLine: string,
+	current: string | undefined,
+): AutocompleteSuggestions | undefined {
+	const prefix = MODEL_THINKING_ARGUMENT.exec(activeLine)?.[2];
+	if (prefix === undefined) return undefined;
+	const query = prefix.toLowerCase();
+	const matches = THINKING_LEVELS.filter((level) => level.startsWith(query));
+	// The level already in effect leads the list, so accepting the menu's
+	// default selection keeps the current level instead of the weakest one.
+	const items: AutocompleteItem[] = [
+		...matches.filter((level) => level === current),
+		...matches.filter((level) => level !== current),
+	].map((level) => ({ value: level, label: level }));
+	return items.length > 0 ? { items, prefix } : undefined;
+}
+
+/**
+ * A submitted `/model <reference> <level>`, if that is the shape.
+ *
+ * Pi's own `/model` treats everything after the command as one model search
+ * term, so the extra argument has to be split off before Pi ever sees it.
+ */
+export function modelThinkingCommand(
+	text: string,
+): { reference: string; level: ThinkingArgument } | undefined {
+	const match = /^\/model\s+(\S+)\s+(\S+)$/.exec(text.trim());
+	const reference = match?.[1];
+	const level = THINKING_LEVELS.find(
+		(candidate) => candidate === match?.[2]?.toLowerCase(),
+	);
+	return reference && level ? { reference, level } : undefined;
+}
+
 type AutocompleteEditor = Component & {
 	autocompleteList?: {
 		getSelectedItem(): { description?: string } | null;
@@ -55,7 +118,7 @@ type ModelAutocompleteEditor = Component & {
 	};
 	getText?(): string;
 	handleInput?(data: string): void;
-	submitValue?(): void;
+	tryTriggerAutocomplete?(): void;
 	[MODEL_SUBMIT_INSTALLED]?: boolean;
 };
 
@@ -201,6 +264,7 @@ function createAutocompleteDetailBox(theme: DetailTheme) {
 
 export function sortModelAutocompleteDescending(
 	current: AutocompleteProvider,
+	thinkingLevel?: () => string | undefined,
 ): AutocompleteProvider {
 	return {
 		...(current.triggerCharacters
@@ -208,6 +272,13 @@ export function sortModelAutocompleteDescending(
 			: {}),
 		async getSuggestions(lines, cursorLine, cursorCol, options) {
 			const inline = inlineSlashContext(lines, cursorLine, cursorCol);
+			const activeLine =
+				inline?.prefix ?? (lines[cursorLine] ?? "").slice(0, cursorCol);
+			// Checked before delegating so an explicit Tab, which asks Pi for
+			// forced file completion once the argument holds a space, still lists
+			// levels rather than paths.
+			const thinking = thinkingSuggestions(activeLine, thinkingLevel?.());
+			if (thinking) return thinking;
 			const requestLines = inline ? [...lines] : lines;
 			if (inline) requestLines[cursorLine] = inline.prefix;
 			const suggestions = await current.getSuggestions(
@@ -216,8 +287,6 @@ export function sortModelAutocompleteDescending(
 				inline ? inline.prefix.length : cursorCol,
 				inline ? { ...options, force: false } : options,
 			);
-			const line = lines[cursorLine] ?? "";
-			const activeLine = inline?.prefix ?? line.slice(0, cursorCol);
 			if (!suggestions || !activeLine.startsWith("/model ")) {
 				return suggestions;
 			}
@@ -285,6 +354,13 @@ export function sortModelAutocompleteDescending(
 	};
 }
 
+/** Whether an accepted completion left a runnable `/model` command behind. */
+function completedModelCommand(text: string, value: string): boolean {
+	if (!/^\/model [^\n]*$/.test(text)) return false;
+	const argument = text.slice("/model ".length);
+	return argument === value || argument.endsWith(` ${value}`);
+}
+
 export function installModelAutocompleteSubmit(
 	editor: Component,
 	keybindings: EditorKeybindings,
@@ -299,28 +375,45 @@ export function installModelAutocompleteSubmit(
 	}
 
 	const handleInput = target.handleInput.bind(target);
+	const openThinkingMenu = () => {
+		if (
+			target.autocompleteList === undefined &&
+			MODEL_THINKING_ARGUMENT.test(target.getText?.() ?? "")
+		) {
+			target.tryTriggerAutocomplete?.();
+		}
+	};
 	target.handleInput = (data: string) => {
-		const selected = target.autocompleteList?.getSelectedItem();
-		const selectedValue = selected?.value;
+		const selectedValue = target.autocompleteList?.getSelectedItem()?.value;
+		const accepted =
+			typeof selectedValue === "string" &&
+			/^\/model [^\n]*$/.test(target.getText?.() ?? "")
+				? selectedValue
+				: undefined;
 		const confirm = keybindings.matches(data, "tui.select.confirm");
 		const tab = keybindings.matches(data, "tui.input.tab");
-		const shouldSubmit =
-			(confirm || tab) &&
-			typeof selectedValue === "string" &&
-			/^\/model [^\n]*$/.test(target.getText?.() ?? "");
 
 		handleInput(data);
+		// Pi reopens suggestions only from typed characters, and the separator
+		// before a thinking level is a space, which is not one of them.
+		if (data === " ") {
+			openThinkingMenu();
+			return;
+		}
 		if (
-			shouldSubmit &&
-			target.autocompleteList === undefined &&
-			target.getText?.() === `/model ${selectedValue}`
+			accepted === undefined ||
+			target.autocompleteList !== undefined ||
+			!completedModelCommand(target.getText?.() ?? "", accepted)
 		) {
-			if (tab) {
-				if (target.submitValue) target.submitValue();
-				else handleInput("\r");
-			} else {
-				handleInput(data);
-			}
+			return;
+		}
+		if (confirm) handleInput(data);
+		// Tab stops at the model name so a level can follow, and Pi's argument
+		// completion appends no separator, so the space and the menu it cannot
+		// trigger on its own are supplied here.
+		else if (tab && accepted.includes("/")) {
+			handleInput(" ");
+			openThinkingMenu();
 		}
 	};
 	target[MODEL_SUBMIT_INSTALLED] = true;

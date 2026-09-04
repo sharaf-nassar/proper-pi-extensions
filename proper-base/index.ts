@@ -23,6 +23,7 @@ import {
 	installAutocompleteDetails,
 	installInlineSlashAutocomplete,
 	installModelAutocompleteSubmit,
+	modelThinkingCommand,
 	sortModelAutocompleteDescending,
 } from "./src/autocomplete-details.ts";
 import { installClipboardLeakGuard } from "./src/clipboard-guard.ts";
@@ -333,6 +334,43 @@ export default function (pi: ExtensionAPI) {
 					entry.message.role === "user" &&
 					entry.message.timestamp === pendingPrompt?.messageTimestamp,
 			);
+	};
+
+	/**
+	 * Run a `/model <reference> <level>` submission, if that is the shape.
+	 *
+	 * Pi reads a `/model` argument as one model search term, so a thinking level
+	 * appended to it only widens that search and opens the picker. The command is
+	 * taken over at the editor instead, and the level is applied after the model:
+	 * every `setModel` recomputes the level from settings, so setting it first
+	 * would be discarded. A reference matching no model is left to Pi, whose
+	 * picker still opens on the raw text.
+	 */
+	const applyModelThinking = (ctx: ExtensionContext, text: string): boolean => {
+		const request = modelThinkingCommand(text);
+		if (!request) return false;
+		const available =
+			ctx.scopedModels.length > 0
+				? ctx.scopedModels.map((scoped) => scoped.model)
+				: ctx.modelRegistry.getAvailable();
+		const model = available.find(
+			(candidate) =>
+				`${candidate.provider}/${candidate.id}` === request.reference ||
+				candidate.id === request.reference,
+		);
+		if (!model) return false;
+		void (async () => {
+			if (!(await pi.setModel(model))) {
+				ctx.ui.notify(
+					`Could not switch to ${model.provider}/${model.id}`,
+					"error",
+				);
+				return;
+			}
+			pi.setThinkingLevel(request.level);
+			ctx.ui.notify(`Model: ${model.id} (thinking: ${request.level})`, "info");
+		})();
+		return true;
 	};
 
 	pi.registerCommand?.(RESTORE_MODEL_COMMAND, {
@@ -660,7 +698,9 @@ export default function (pi: ExtensionAPI) {
 			ctx.ui.setEditorText(promptText);
 			return undefined;
 		});
-		ctx.ui.addAutocompleteProvider?.(sortModelAutocompleteDescending);
+		ctx.ui.addAutocompleteProvider?.((current) =>
+			sortModelAutocompleteDescending(current, () => pi.getThinkingLevel?.()),
+		);
 
 		const store = storePath(getAgentDir(), ctx.cwd);
 		compactIfNeeded(store);
@@ -748,15 +788,18 @@ export default function (pi: ExtensionAPI) {
 				// provider's global `/fast` can only be repurposed as a session
 				// toggle by consuming it at the editor before pi ever parses it.
 				(text) => {
-					if (!isFastToggle(text)) return false;
-					const notice = fastToggleNotice({
-						scope: "session",
-						enabled: fastOverlay.toggleSession(),
-						otherEnabled: fastOverlay.isGlobalEnabled(),
-						modelSupported: fastOverlay.supportsModel(ctx.model ?? undefined),
-					});
-					ctx.ui.notify(notice.message, notice.level);
-					return true;
+					if (isFastToggle(text)) {
+						const notice = fastToggleNotice({
+							scope: "session",
+							enabled: fastOverlay.toggleSession(),
+							otherEnabled: fastOverlay.isGlobalEnabled(),
+							modelSupported: fastOverlay.supportsModel(ctx.model ?? undefined),
+						});
+						ctx.ui.notify(notice.message, notice.level);
+						return true;
+					}
+					// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Model thinking argument]]
+					return applyModelThinking(ctx, text);
 				},
 			);
 			installModelAutocompleteSubmit(editor, keybindings);

@@ -373,8 +373,10 @@ test("model autocomplete sorts names descending and submits immediately", async 
 		| undefined;
 	let autocompleteWrapper: ((current: any) => any) | undefined;
 	const selected = { value: "cliproxyapi/gpt-5.6-sol" };
+	type SelectedList = { getSelectedItem: () => { value: string } } | undefined;
 	const editor = {
 		text: "/model gpt",
+		completed: "/model cliproxyapi/gpt-5.6-sol",
 		onSubmit: undefined as ((text: string) => void) | undefined,
 		addToHistory() {},
 		getPaddingX: () => 0,
@@ -383,27 +385,44 @@ test("model autocomplete sorts names descending and submits immediately", async 
 		},
 		autocompleteList: {
 			getSelectedItem: () => selected,
+		} as SelectedList,
+		triggered: 0,
+		tryTriggerAutocomplete() {
+			this.triggered++;
 		},
 		handleInput(data: string) {
-			if (data !== "\r" && data !== "\t") return;
-			if (this.autocompleteList) {
-				this.text = `/model ${selected.value}`;
-				this.autocompleteList = undefined as any;
+			if (this.autocompleteList && (data === "\r" || data === "\t")) {
+				this.text = this.completed;
+				this.autocompleteList = undefined;
 				return;
 			}
 			if (data === "\t") return;
+			if (data !== "\r") {
+				this.text += data;
+				return;
+			}
 			const submitted = this.text;
 			this.text = "";
 			this.onSubmit?.(submitted);
 		},
 		render: () => ["editor"],
 	};
+	const model = { provider: "cliproxyapi", id: "gpt-5.6-sol" };
+	const applied: Array<string> = [];
 
 	properBase({
 		on(event: string, handler: typeof onSessionStart) {
 			if (event === "session_start") onSessionStart = handler;
 		},
 		getCommands: () => [],
+		getThinkingLevel: () => "high",
+		async setModel(next: typeof model) {
+			applied.push(`${next.provider}/${next.id}`);
+			return true;
+		},
+		setThinkingLevel(level: string) {
+			applied.push(level);
+		},
 	} as any);
 
 	try {
@@ -411,11 +430,14 @@ test("model autocomplete sorts names descending and submits immediately", async 
 			{},
 			{
 				cwd,
+				scopedModels: [],
+				modelRegistry: { getAvailable: () => [model] },
 				sessionManager: {
 					getBranch: () => [],
 					getSessionFile: () => undefined,
 				},
 				ui: {
+					notify() {},
 					getEditorComponent: () => () => editor,
 					setEditorComponent: (factory: typeof installedFactory) => {
 						installedFactory = factory;
@@ -445,14 +467,53 @@ test("model autocomplete sorts names descending and submits immediately", async 
 		assert.equal(submitted, "/model cliproxyapi/gpt-5.6-sol");
 		assert.equal(wrapped.getText(), "");
 
+		// Tab accepts the model name and stops there, leaving the separator and
+		// an open level menu behind: add a level, or press Enter on the level
+		// already in effect.
 		editor.text = "/model gpt";
 		editor.autocompleteList = {
 			getSelectedItem: () => selected,
 		};
 		submitted = undefined;
 		wrapped.handleInput("\t");
-		assert.equal(submitted, "/model cliproxyapi/gpt-5.6-sol");
+		assert.equal(submitted, undefined);
+		assert.equal(wrapped.getText(), "/model cliproxyapi/gpt-5.6-sol ");
+		assert.equal(editor.triggered, 1);
+
+		// A separator typed by hand reaches the same menu; Pi never reopens
+		// suggestions from a space on its own.
+		editor.text = "/model cliproxyapi/gpt-5.6-sol";
+		wrapped.handleInput(" ");
+		assert.equal(wrapped.getText(), "/model cliproxyapi/gpt-5.6-sol ");
+		assert.equal(editor.triggered, 2);
+
+		// A space anywhere else asks for nothing.
+		editor.text = "tell me";
+		wrapped.handleInput(" ");
+		assert.equal(editor.triggered, 2);
+
+		// Enter on a thinking-level completion submits both arguments, which the
+		// editor takes over instead of handing Pi a two-word model search.
+		editor.text = "/model cliproxyapi/gpt-5.6-sol hi";
+		editor.completed = "/model cliproxyapi/gpt-5.6-sol high";
+		editor.autocompleteList = {
+			getSelectedItem: () => ({ value: "high" }),
+		};
+		submitted = undefined;
+		wrapped.handleInput("\r");
+		assert.equal(submitted, undefined);
 		assert.equal(wrapped.getText(), "");
+		// The level is applied after the model resolves, so let that settle.
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		assert.deepEqual(applied, ["cliproxyapi/gpt-5.6-sol", "high"]);
+
+		// An unknown model reference stays Pi's problem; its picker still opens.
+		applied.length = 0;
+		editor.text = "/model nope/absent high";
+		editor.autocompleteList = undefined;
+		wrapped.handleInput("\r");
+		assert.equal(submitted, "/model nope/absent high");
+		assert.deepEqual(applied, []);
 
 		assert.ok(autocompleteWrapper);
 		const originalItems = [
@@ -501,6 +562,46 @@ test("model autocomplete sorts names descending and submits immediately", async 
 		assert.deepEqual(
 			multiTerm.items.map((item: { label: string }) => item.label),
 			["claude-opus-4-7", "claude-opus-4"],
+		);
+
+		// A completed model reference opens the thinking argument, and an
+		// explicit Tab there must still list levels rather than file paths. The
+		// level in effect leads, so Enter on the default selection keeps it.
+		const levels = await provider.getSuggestions(
+			["/model cliproxyapi/gpt-5.6-sol "],
+			0,
+			31,
+			{ ...options, force: true },
+		);
+		assert.equal(levels.prefix, "");
+		assert.deepEqual(
+			levels.items.map((item: { value: string }) => item.value),
+			["high", "off", "minimal", "low", "medium", "xhigh", "max"],
+		);
+
+		const level = await provider.getSuggestions(
+			["/model cliproxyapi/gpt-5.6-sol hi"],
+			0,
+			33,
+			options,
+		);
+		assert.equal(level.prefix, "hi");
+		assert.deepEqual(
+			level.items.map((item: { value: string }) => item.value),
+			["high"],
+		);
+
+		// A second term naming no level keeps searching models, so a reference
+		// typed one word at a time still narrows the way it used to.
+		const stillModels = await provider.getSuggestions(
+			["/model gpt/x 4"],
+			0,
+			14,
+			options,
+		);
+		assert.deepEqual(
+			stillModels.items.map((item: { label: string }) => item.label),
+			["gpt-5.6", "gpt-5.4", "claude-sonnet-5"],
 		);
 
 		const untouched = await provider.getSuggestions(["/login "], 0, 7, options);
