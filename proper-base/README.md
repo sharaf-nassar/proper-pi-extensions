@@ -20,10 +20,14 @@ and footer layout.
   keep their names.
 - `/clear` starts an empty session but restores the exact provider and model
   selected in the previous one. No messages, name, or branch state carry over.
-- The model you pick in `/model` becomes Pi's startup default, so the next
-  session opens on it. Pi otherwise saves that default only when you press
-  Ctrl+S in the picker. Resuming a session does not redefine the default. Set
-  `"stickyModel": false` in `~/.pi/agent/proper-base.json` to turn this off.
+- The model you pick in `/model` and the level you pick in `/thinking` become
+  Pi's startup defaults, so the next session opens on them. Pi otherwise saves
+  those only when you press Ctrl+S in the picker, and because Pi re-derives the
+  thinking level from the saved default on every model switch, an unsaved level
+  is otherwise lost mid-session at the next `/model`, Ctrl+P, or `/clear`.
+  Switching to a model that cannot reach the current level records the level
+  you actually get. Resuming a session does not redefine the model. Set
+  `"stickyDefaults": false` in `~/.pi/agent/proper-base.json` to turn this off.
 - Prompt-template expansions remain model-facing, while the transcript shows
   the slash command you typed, such as `/implement-ready epic-1 4`.
 - CLIProxyAPI `empty_stream` failures become normal retryable network errors, so

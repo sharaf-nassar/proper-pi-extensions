@@ -6,11 +6,12 @@ import { test } from "node:test";
 
 import {
 	persistDefaultModel,
-	stickyModelEnabled,
-} from "../src/default-model.ts";
+	persistDefaultThinkingLevel,
+	stickyDefaultsEnabled,
+} from "../src/startup-defaults.ts";
 
 function harness(options: { settings?: unknown; config?: unknown } = {}) {
-	const dir = mkdtempSync(join(tmpdir(), "default-model-"));
+	const dir = mkdtempSync(join(tmpdir(), "startup-defaults-"));
 	const settingsPath = join(dir, "settings.json");
 	const configPath = join(dir, "proper-base.json");
 	if (options.settings !== undefined) {
@@ -27,7 +28,7 @@ function harness(options: { settings?: unknown; config?: unknown } = {}) {
 	return { dir, settingsPath, configPath };
 }
 
-// @lat: [[lat.md/proper-base/tests#Verification#Sticky model fixture]]
+// @lat: [[lat.md/proper-base/tests#Verification#Sticky defaults fixture]]
 test("a model selection becomes Pi's startup default", () => {
 	const { dir, settingsPath } = harness({
 		settings: {
@@ -74,12 +75,20 @@ test("an unchanged selection rewrites nothing", () => {
 		settings: {
 			defaultProvider: "cliproxyapi",
 			defaultModel: "claude-opus-5",
+			defaultThinkingLevel: "max",
 		},
 	});
 	const before = readFileSync(settingsPath, "utf8");
 
 	assert.equal(
 		persistDefaultModel(dir, { provider: "cliproxyapi", id: "claude-opus-5" }),
+		false,
+	);
+	assert.equal(
+		persistDefaultThinkingLevel(dir, "max", {
+			provider: "cliproxyapi",
+			id: "claude-opus-5",
+		}),
 		false,
 	);
 	assert.equal(readFileSync(settingsPath, "utf8"), before);
@@ -101,28 +110,109 @@ test("the routing placeholder never becomes the startup default", () => {
 	assert.equal(readFileSync(settingsPath, "utf8"), before);
 });
 
-test("the sticky default can be turned off", () => {
+test("a thinking level becomes Pi's startup default", () => {
 	const { dir, settingsPath } = harness({
-		settings: { defaultModel: "gpt-5.6-sol" },
-		config: { sessionRail: false, stickyModel: false },
+		settings: { theme: "dark", defaultThinkingLevel: "xhigh" },
+	});
+
+	assert.equal(
+		persistDefaultThinkingLevel(dir, "max", {
+			provider: "cliproxyapi",
+			id: "claude-opus-5",
+		}),
+		true,
+	);
+	assert.deepEqual(JSON.parse(readFileSync(settingsPath, "utf8")), {
+		theme: "dark",
+		defaultThinkingLevel: "max",
+	});
+});
+
+test("a level clamped to a weaker model is recorded as it stands", () => {
+	const { dir, settingsPath } = harness({
+		settings: { defaultThinkingLevel: "max" },
+	});
+
+	assert.equal(
+		persistDefaultThinkingLevel(dir, "high", {
+			provider: "cliproxyapi",
+			id: "claude-3-5-haiku-20241022",
+		}),
+		true,
+	);
+	assert.equal(
+		JSON.parse(readFileSync(settingsPath, "utf8")).defaultThinkingLevel,
+		"high",
+	);
+});
+
+test("a per-model level is not promoted to the global default", () => {
+	const { dir, settingsPath } = harness({
+		settings: {
+			defaultThinkingLevel: "max",
+			modelThinkingLevels: { "cliproxyapi/claude-3-5-haiku-20241022": "low" },
+		},
 	});
 	const before = readFileSync(settingsPath, "utf8");
 
-	assert.equal(stickyModelEnabled(dir), false);
+	assert.equal(
+		persistDefaultThinkingLevel(dir, "low", {
+			provider: "cliproxyapi",
+			id: "claude-3-5-haiku-20241022",
+		}),
+		false,
+	);
+	assert.equal(readFileSync(settingsPath, "utf8"), before);
+
+	// The same level chosen on a model without a rule is an ordinary choice.
+	assert.equal(
+		persistDefaultThinkingLevel(dir, "low", {
+			provider: "cliproxyapi",
+			id: "claude-opus-5",
+		}),
+		true,
+	);
+	assert.equal(
+		JSON.parse(readFileSync(settingsPath, "utf8")).defaultThinkingLevel,
+		"low",
+	);
+});
+
+test("a level selected with no active model is still recorded", () => {
+	const { dir, settingsPath } = harness({
+		settings: { defaultThinkingLevel: "xhigh" },
+	});
+
+	assert.equal(persistDefaultThinkingLevel(dir, "max", undefined), true);
+	assert.equal(
+		JSON.parse(readFileSync(settingsPath, "utf8")).defaultThinkingLevel,
+		"max",
+	);
+});
+
+test("sticky defaults can be turned off", () => {
+	const { dir, settingsPath } = harness({
+		settings: { defaultModel: "gpt-5.6-sol", defaultThinkingLevel: "xhigh" },
+		config: { sessionRail: false, stickyDefaults: false },
+	});
+	const before = readFileSync(settingsPath, "utf8");
+
+	assert.equal(stickyDefaultsEnabled(dir), false);
 	assert.equal(
 		persistDefaultModel(dir, { provider: "cliproxyapi", id: "claude-opus-5" }),
 		false,
 	);
+	assert.equal(persistDefaultThinkingLevel(dir, "max", undefined), false);
 	assert.equal(readFileSync(settingsPath, "utf8"), before);
 });
 
 test("a missing or damaged config reads as enabled", () => {
 	const { dir: missing } = harness();
-	assert.equal(stickyModelEnabled(missing), true);
+	assert.equal(stickyDefaultsEnabled(missing), true);
 
-	const { dir: damaged } = harness({ config: undefined });
+	const { dir: damaged } = harness();
 	writeFileSync(join(damaged, "proper-base.json"), "{ not json");
-	assert.equal(stickyModelEnabled(damaged), true);
+	assert.equal(stickyDefaultsEnabled(damaged), true);
 });
 
 test("a missing or damaged settings file is never replaced", () => {
@@ -134,6 +224,7 @@ test("a missing or damaged settings file is never replaced", () => {
 		}),
 		false,
 	);
+	assert.equal(persistDefaultThinkingLevel(missing, "max", undefined), false);
 	assert.equal(existsSync(missingPath), false);
 
 	const { dir: damaged, settingsPath: damagedPath } = harness({
@@ -146,5 +237,6 @@ test("a missing or damaged settings file is never replaced", () => {
 		}),
 		false,
 	);
+	assert.equal(persistDefaultThinkingLevel(damaged, "max", undefined), false);
 	assert.equal(readFileSync(damagedPath, "utf8"), "{ not json");
 });

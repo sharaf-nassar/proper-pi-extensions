@@ -24,11 +24,11 @@ A command fixture verifies `/clear` replaces the session before restoring the ou
 
 It proves the command passes no copied session state into `ctx.newSession()`, uses the replacement context to dispatch only the encoded internal restore command, resolves the exact provider/model pair in the new registry, and selects it through the replacement extension instance. Malformed restore data reports an error, and an absent outgoing model keeps native `/new` behavior.
 
-## Sticky model fixture
+## Sticky defaults fixture
 
-Temporary agent directories verify that a selected model reaches Pi's startup defaults without disturbing the rest of `settings.json`.
+Temporary agent directories verify that a selected model and thinking level reach Pi's startup defaults without disturbing the rest of `settings.json`.
 
-Cases prove a selection replaces both keys while unrelated settings and Pi's two-space format survive, a model with no saved default gains both keys, a selection matching the stored pair leaves the file byte-identical, and `llm-router/auto` is rejected so the router's own startup selection cannot displace a usable default. `"stickyModel": false` in `proper-base.json` disables persistence while leaving the sibling rail key alone, a missing or damaged config reads as enabled, and a missing or damaged settings file is neither replaced nor created.
+Model cases prove a selection replaces both keys while unrelated settings and Pi's two-space format survive, a model with no saved default gains both keys, and `llm-router/auto` is rejected so the router's own startup selection cannot displace a usable default. Thinking cases prove a chosen level replaces `defaultThinkingLevel`, a level clamped to a weaker model is recorded as it stands, a level selected with no active model is still recorded, and a level matching that model's `modelThinkingLevels` entry is left out of the global default while the same level on a model without a rule is stored. Selections matching the stored value leave the file byte-identical, `"stickyDefaults": false` in `proper-base.json` disables both handlers while leaving the sibling rail key alone, a missing or damaged config reads as enabled, and a missing or damaged settings file is neither replaced nor created.
 
 ## History fixtures
 

@@ -27,7 +27,6 @@ import {
 } from "./src/autocomplete-details.ts";
 import { installClipboardLeakGuard } from "./src/clipboard-guard.ts";
 import { commitGuardReason } from "./src/commit-guard.ts";
-import { persistDefaultModel } from "./src/default-model.ts";
 import {
 	installEditorNavigation,
 	installPromptClear,
@@ -69,6 +68,10 @@ import { installSelectionDismiss } from "./src/selection-dismiss.ts";
 import { installFastSessionList } from "./src/session-list.ts";
 import { pinSkillContext } from "./src/skill-context.ts";
 import { installSmartSelection } from "./src/smart-selection.ts";
+import {
+	persistDefaultModel,
+	persistDefaultThinkingLevel,
+} from "./src/startup-defaults.ts";
 import {
 	appendPrompt,
 	compactIfNeeded,
@@ -395,10 +398,18 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Sticky startup model]]
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Sticky startup defaults]]
 	pi.on("model_select", (event) => {
 		if (event.source === "restore") return;
 		persistDefaultModel(getAgentDir(), event.model);
+	});
+
+	pi.on("thinking_level_select", (event, ctx) => {
+		persistDefaultThinkingLevel(
+			getAgentDir(),
+			event.level,
+			ctx.model ?? undefined,
+		);
 	});
 
 	pi.on("input", (event) => {
