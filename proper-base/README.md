@@ -55,7 +55,9 @@ proper-base records eligible editor submissions on a best-effort basis, not
 transformed Pi session messages. History uses an encoded key derived from the
 current working directory.
 
-- Up and Down recall prompts from previous sessions in the same project.
+- Up and Down recall prompts from previous sessions in the same project. Up
+  recalls only from an empty prompt; with a draft it only moves the cursor,
+  so Home then Up can no longer replace what you typed.
 - Ctrl+R starts case-sensitive reverse substring search. Press Ctrl+R again for
   an older match, Backspace or Shift+Backspace to broaden the query, Enter to
   submit, Esc to keep the match for editing, or Ctrl+G to restore the original
@@ -124,6 +126,13 @@ to the bottom. While you are scrolled up, a dimmer `position/total` reading sits
 centred under the arrows and counts the prompts in the session; it disappears
 once the viewport is following output again.
 
+Pi 0.85.0 moves the prompt cursor to wherever you click in the prompt. If you
+click the prompt area to focus the terminal or to select text, turn off
+`Prompt mouse clicks` in `/settings`: clicks on the prompt text then leave the
+cursor alone while drag-to-select keeps working. The same menu holds the
+`Session action rail` toggle. Both persist in `~/.pi/agent/proper-base.json`
+as `editorMouse` and `sessionRail`.
+
 ### Clipboard and model image context
 
 Ctrl+V and Ctrl+Shift+V both use Pi's image-or-text clipboard action. Readable
@@ -173,7 +182,7 @@ highlight. Custom replacement footers are not changed.
 
 ## Install
 
-Node 22.19 or newer is required. The package is tested against Pi 0.84.4.
+Node 22.19 or newer is required. The package is tested against Pi 0.85.0.
 
 From npm:
 

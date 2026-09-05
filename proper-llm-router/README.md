@@ -155,7 +155,7 @@ hidden.
 
 ## Ultra thinking support
 
-Pi 0.84.4 stops its native thinking controls at `max`. When the running Pi
+Pi 0.85.0 stops its native thinking controls at `max`. When the running Pi
 host exposes the expected compatibility points, this extension adds `ultra` to
 Shift+Tab and Pi's thinking selector only for models whose
 `thinkingLevelMap.ultra` contains a value. Switching to an unsupported model
@@ -166,7 +166,7 @@ modified.
 ## Install
 
 Use Node 22.19 or newer. The extension and `ultra` compatibility layer are
-tested against Pi 0.84.4.
+tested against Pi 0.85.0.
 
 Install the published package:
 

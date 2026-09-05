@@ -4,9 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { installRailSetting, readRailEnabled } from "../src/rail-setting.ts";
+import {
+	installSettings,
+	readEditorMouseEnabled,
+	readRailEnabled,
+} from "../src/settings.ts";
 
-const ITEM_ID = "proper-base-session-rail";
+const RAIL_ID = "proper-base-session-rail";
+const MOUSE_ID = "proper-base-editor-mouse";
 
 type Item = {
 	id: string;
@@ -40,7 +45,7 @@ class SettingsSelectorComponent {
 }
 
 function harness() {
-	const dir = mkdtempSync(join(tmpdir(), "rail-setting-"));
+	const dir = mkdtempSync(join(tmpdir(), "proper-base-settings-"));
 	const editor = new FakeEditor();
 	const container = {
 		children: [editor] as unknown[],
@@ -55,78 +60,102 @@ function harness() {
 const tick = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
 // @lat: [[lat.md/proper-base/tests#Verification#Settings fixture]]
-test("the settings selector gains a persisted rail toggle", async () => {
+test("the settings selector gains persisted rail and mouse toggles", async () => {
 	const { dir, editor, container, tui } = harness();
-	const controller = installRailSetting(tui as never, editor as never, dir);
+	const controller = installSettings(tui as never, editor as never, dir);
 	await tick();
 	assert.equal(controller.enabled(), true);
+	assert.equal(controller.editorMouse(), true);
 
-	// A mounted settings selector receives the toggle; other components and
+	// A mounted settings selector receives both toggles; other components and
 	// Pi's own items are untouched.
 	const selector = new SettingsSelectorComponent();
 	container.addChild(selector);
 	container.addChild(new FakeEditor());
-	const item = selector.settingsList.items.find((i) => i.id === ITEM_ID);
-	assert.ok(item);
-	assert.equal(item.currentValue, "true");
-	assert.deepEqual(item.values, ["true", "false"]);
+	const rail = selector.settingsList.items.find((i) => i.id === RAIL_ID);
+	const mouse = selector.settingsList.items.find((i) => i.id === MOUSE_ID);
+	assert.ok(rail);
+	assert.ok(mouse);
+	assert.equal(rail.currentValue, "true");
+	assert.equal(mouse.currentValue, "true");
+	assert.deepEqual(rail.values, ["true", "false"]);
+	assert.deepEqual(mouse.values, ["true", "false"]);
 
-	// Toggling through the list changes the live rail state, persists it,
-	// and stays out of Pi's own change handler; native ids still reach it.
-	selector.settingsList.onChange(ITEM_ID, "false");
+	// Toggling through the list changes the live state, persists it under
+	// its own key, and stays out of Pi's own change handler; native ids
+	// still reach it.
+	selector.settingsList.onChange(RAIL_ID, "false");
 	assert.equal(controller.enabled(), false);
+	assert.equal(controller.editorMouse(), true);
 	assert.equal(readRailEnabled(dir), false);
+	assert.equal(readEditorMouseEnabled(dir), true);
+	selector.settingsList.onChange(MOUSE_ID, "false");
+	assert.equal(controller.editorMouse(), false);
+	assert.equal(readEditorMouseEnabled(dir), false);
 	selector.settingsList.onChange("autocompact", "false");
 	assert.deepEqual(selector.seen, [["autocompact", "false"]]);
 
-	// The next session reads the persisted choice; a fresh selector shows it.
-	const replacement = installRailSetting(tui as never, editor as never, dir);
+	// The next session reads the persisted choices; a fresh selector shows
+	// them.
+	const replacement = installSettings(tui as never, editor as never, dir);
 	await tick();
 	assert.equal(replacement.enabled(), false);
+	assert.equal(replacement.editorMouse(), false);
 	const second = new SettingsSelectorComponent();
 	container.addChild(second);
 	assert.equal(
-		second.settingsList.items.find((i) => i.id === ITEM_ID)?.currentValue,
+		second.settingsList.items.find((i) => i.id === RAIL_ID)?.currentValue,
+		"false",
+	);
+	assert.equal(
+		second.settingsList.items.find((i) => i.id === MOUSE_ID)?.currentValue,
 		"false",
 	);
 
-	// Unrelated config keys survive the toggle write.
+	// Unrelated config keys and the sibling toggle survive a write.
 	writeFileSync(
 		join(dir, "proper-base.json"),
-		'{\n\t"other": 1,\n\t"sessionRail": false\n}\n',
+		'{\n\t"other": 1,\n\t"sessionRail": false,\n\t"editorMouse": false\n}\n',
 	);
-	second.settingsList.onChange(ITEM_ID, "true");
+	second.settingsList.onChange(RAIL_ID, "true");
 	const stored = JSON.parse(
 		readFileSync(join(dir, "proper-base.json"), "utf8"),
 	) as Record<string, unknown>;
 	assert.equal(stored.other, 1);
 	assert.equal(stored.sessionRail, true);
+	assert.equal(stored.editorMouse, false);
 
 	// Disposal restores the container's own addChild.
 	replacement.dispose();
 	const after = new SettingsSelectorComponent();
 	container.addChild(after);
 	assert.equal(
-		after.settingsList.items.some((i) => i.id === ITEM_ID),
+		after.settingsList.items.some((i) => i.id === RAIL_ID),
 		false,
 	);
 });
 
-test("a missing or damaged config enables the rail and installs nothing twice", async () => {
+test("a missing or damaged config enables both and installs nothing twice", async () => {
 	const { dir, editor, container, tui } = harness();
 	assert.equal(readRailEnabled(dir), true);
+	assert.equal(readEditorMouseEnabled(dir), true);
 	writeFileSync(join(dir, "proper-base.json"), "not json");
 	assert.equal(readRailEnabled(dir), true);
+	assert.equal(readEditorMouseEnabled(dir), true);
 
 	// A reload's replacement wrapper takes over instead of stacking.
-	const first = installRailSetting(tui as never, editor as never, dir);
+	const first = installSettings(tui as never, editor as never, dir);
 	await tick();
-	const second = installRailSetting(tui as never, editor as never, dir);
+	const second = installSettings(tui as never, editor as never, dir);
 	await tick();
 	const selector = new SettingsSelectorComponent();
 	container.addChild(selector);
 	assert.equal(
-		selector.settingsList.items.filter((i) => i.id === ITEM_ID).length,
+		selector.settingsList.items.filter((i) => i.id === RAIL_ID).length,
+		1,
+	);
+	assert.equal(
+		selector.settingsList.items.filter((i) => i.id === MOUSE_ID).length,
 		1,
 	);
 	first.dispose();

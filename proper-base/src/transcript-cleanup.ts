@@ -533,7 +533,8 @@ function hasSectionText(lines: string[]): boolean {
 		const text = stripTerminalSequences(line).trim();
 		return (
 			text.length > 0 &&
-			!/(?:^|\s)Working(?:\.\.\.|…)(?:\s+\([^)]*\))?$/.test(text)
+			// Pi 0.85.0 dropped the ellipsis from its default working label.
+			!/(?:^|\s)Working(?:\.\.\.|…)?(?:\s+\([^)]*\))?$/.test(text)
 		);
 	});
 }

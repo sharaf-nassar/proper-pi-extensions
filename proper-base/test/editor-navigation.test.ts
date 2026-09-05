@@ -39,6 +39,70 @@ test("history recall with Up leaves the cursor at the prompt start", () => {
 	assert.deepEqual(editor.getCursor(), { line: 0, col: 0 });
 });
 
+// @lat: [[lat.md/proper-base/tests#Verification#History recall fixture]]
+test("Up recalls history only from an empty prompt", () => {
+	const tui = {
+		terminal: { rows: 24 },
+		requestRender() {},
+		children: [] as unknown[],
+	};
+	const editor = new Editor(
+		tui as never,
+		{ borderColor: (value: string) => value, selectList: {} } as never,
+	);
+	tui.children.push(editor);
+	editor.addToHistory("older prompt");
+	installEditorNavigation(editor, new KeybindingsManager());
+	const up = "\x1b[A";
+	const home = "\x1b[H";
+
+	// Pi's own rule: Home then Up swaps the draft for history.
+	editor.setText("draft");
+	editor.render(40);
+	editor.handleInput(home);
+	assert.deepEqual(editor.getCursor(), { line: 0, col: 0 });
+	editor.handleInput(up);
+	assert.equal(editor.getText(), "draft");
+	assert.deepEqual(editor.getCursor(), { line: 0, col: 0 });
+
+	// A multi-line draft: Up walks rows, and at the top row jumps to the
+	// line start, never into history.
+	editor.setText("first\nsecond");
+	editor.render(40);
+	editor.handleInput(up);
+	assert.deepEqual(editor.getCursor(), { line: 0, col: 5 });
+	editor.handleInput(up);
+	assert.deepEqual(editor.getCursor(), { line: 0, col: 0 });
+	editor.handleInput(up);
+	assert.equal(editor.getText(), "first\nsecond");
+
+	// Whitespace is still a draft.
+	editor.setText(" ");
+	editor.render(40);
+	editor.handleInput(home);
+	editor.handleInput(up);
+	assert.equal(editor.getText(), " ");
+
+	// An empty prompt recalls, and Up while browsing keeps walking history.
+	editor.setText("");
+	editor.render(40);
+	editor.handleInput(up);
+	assert.equal(editor.getText(), "older prompt");
+	assert.deepEqual(editor.getCursor(), { line: 0, col: 0 });
+	editor.addToHistory("newest prompt");
+	editor.setText("");
+	editor.render(40);
+	editor.handleInput(up);
+	assert.equal(editor.getText(), "newest prompt");
+	editor.handleInput(up);
+	assert.equal(editor.getText(), "older prompt");
+
+	// Down returns to the empty draft as before.
+	editor.handleInput("\x1b[B");
+	editor.handleInput("\x1b[B");
+	assert.equal(editor.getText(), "");
+});
+
 test("image markers move as one cursor token", () => {
 	const state = {
 		lines: ["a [image 12] b"],

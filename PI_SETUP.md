@@ -52,7 +52,7 @@ command -v bd || true
 command -v lat || true
 ```
 
-Baseline compatibility is Pi 0.84.4 and Node 22.19 or newer. Preserve newer
+Baseline compatibility is Pi 0.85.0 and Node 22.19 or newer. Preserve newer
 compatible versions.
 
 Before changing Pi state:

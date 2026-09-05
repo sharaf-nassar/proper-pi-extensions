@@ -50,6 +50,7 @@ type NavigableEditor = Component & {
 	isShowingAutocomplete?(): boolean;
 	onChange?(text: string): void;
 	setText?(text: string): void;
+	historyIndex?: number;
 	state?: {
 		lines: string[];
 		cursorLine: number;
@@ -226,6 +227,25 @@ export function installEditorNavigation(
 			}
 		}
 		if (previous) {
+			// Pi recalls history on Up from the first visual row whenever the
+			// cursor sits at column 0, so Home followed by Up, or Up pressed
+			// twice from a short first line, replaces a draft with an older
+			// prompt. Recall is only for an empty prompt: with a draft and no
+			// recall in progress, Up at that position is already at the line
+			// start Pi would otherwise jump to, so it does nothing. The dedicated
+			// history binding is left alone; it is opt-in and explicit.
+			if (
+				keybindings.matches(data, "tui.editor.cursorUp") &&
+				(target.historyIndex ?? -1) < 0 &&
+				target.getCursor?.().col === 0 &&
+				target.getLines?.().some((line) => line !== "")
+			) {
+				const visualLines = target.buildVisualLineMap?.(target.lastWidth ?? 80);
+				const visualIndex = visualLines
+					? target.findCurrentVisualLine?.(visualLines)
+					: undefined;
+				if (visualIndex === 0) return;
+			}
 			const before = target.getLines?.().join("\n");
 			handleInput(data);
 			const state = target.state;

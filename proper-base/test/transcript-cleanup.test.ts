@@ -562,7 +562,8 @@ test("settled transcript keeps thoughts and updates visible", () => {
 	assert.match(activeAssistantDone, /thinking: active thinking/);
 	assert.doesNotMatch(activeAssistantDone, /thought · active thinking/);
 	controller.completeTool("tool-active");
-	const working = new StatusComponent("Working...");
+	// Pi 0.85.0's default label has no ellipsis; the hint suffix is Pi's own.
+	const working = new StatusComponent("Working (esc to interrupt)");
 	const nextAssistant = new AssistantMessageComponent({
 		content: [],
 		stopReason: "stop",

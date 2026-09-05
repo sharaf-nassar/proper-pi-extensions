@@ -253,7 +253,7 @@ below. Remove any stale direct-file registration so Pi loads one copy.
 
 ## Development
 
-Use Node 22.19 or newer. Pi 0.84.4 is the compatibility target.
+Use Node 22.19 or newer. Pi 0.85.0 is the compatibility target.
 
 ```bash
 npm install

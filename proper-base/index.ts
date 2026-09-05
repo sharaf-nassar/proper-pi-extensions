@@ -28,6 +28,7 @@ import {
 } from "./src/autocomplete-details.ts";
 import { installClipboardLeakGuard } from "./src/clipboard-guard.ts";
 import { commitGuardReason } from "./src/commit-guard.ts";
+import { installEditorMouseGuard } from "./src/editor-mouse.ts";
 import {
 	installEditorNavigation,
 	installPromptClear,
@@ -60,13 +61,10 @@ import {
 	PROMPT_DISPLAY_ENTRY,
 } from "./src/prompt-display.ts";
 import { installPromptJump } from "./src/prompt-jump.ts";
-import {
-	installRailSetting,
-	type RailSettingController,
-} from "./src/rail-setting.ts";
 import { installRecorder } from "./src/recorder.ts";
 import { installSelectionDismiss } from "./src/selection-dismiss.ts";
 import { installFastSessionList } from "./src/session-list.ts";
+import { installSettings, type SettingsController } from "./src/settings.ts";
 import { pinSkillContext } from "./src/skill-context.ts";
 import { installSmartSelection } from "./src/smart-selection.ts";
 import {
@@ -299,7 +297,8 @@ export default function (pi: ExtensionAPI) {
 	let removeFooterColors: (() => void) | undefined;
 	let removeJumpToBottom: (() => void) | undefined;
 	let removePromptJump: (() => void) | undefined;
-	let railSetting: RailSettingController | undefined;
+	let settings: SettingsController | undefined;
+	let removeEditorMouseGuard: (() => void) | undefined;
 	let removePromptClear: (() => void) | undefined;
 	let removeSmartSelection: (() => void) | undefined;
 	let removeSelectionDismiss: (() => void) | undefined;
@@ -629,8 +628,10 @@ export default function (pi: ExtensionAPI) {
 		removeJumpToBottom = undefined;
 		removePromptJump?.();
 		removePromptJump = undefined;
-		railSetting?.dispose();
-		railSetting = undefined;
+		settings?.dispose();
+		settings = undefined;
+		removeEditorMouseGuard?.();
+		removeEditorMouseGuard = undefined;
 		removePromptClear?.();
 		removePromptClear = undefined;
 		removeSmartSelection?.();
@@ -762,14 +763,20 @@ export default function (pi: ExtensionAPI) {
 			removeJumpToBottom?.();
 			removeJumpToBottom = installJumpToBottom(editor, tui);
 			removePromptJump?.();
-			railSetting?.dispose();
-			railSetting = installRailSetting(tui, editor, getAgentDir());
+			settings?.dispose();
+			settings = installSettings(tui, editor, getAgentDir());
+			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Prompt mouse clicks]]
+			removeEditorMouseGuard?.();
+			removeEditorMouseGuard = installEditorMouseGuard(
+				editor,
+				() => settings?.editorMouse() !== false,
+			);
 			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Session action rail]]
 			removePromptJump = installPromptJump(tui, {
 				color: (value) => ctx.ui.theme.fg("muted", value),
 				subtle: (value) => ctx.ui.theme.fg("dim", value),
 				outline: () =>
-					railSetting?.enabled() !== false
+					settings?.enabled() !== false
 						? (transcriptCleanup?.outline() ?? [])
 						: [],
 			});
