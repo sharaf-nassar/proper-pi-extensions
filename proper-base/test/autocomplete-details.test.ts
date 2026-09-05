@@ -507,6 +507,21 @@ test("model autocomplete sorts names descending and submits immediately", async 
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		assert.deepEqual(applied, ["cliproxyapi/gpt-5.6-sol", "high"]);
 
+		// Tab on a level completion has nothing left to complete, so it submits
+		// the finished command exactly as Enter does.
+		applied.length = 0;
+		editor.text = "/model cliproxyapi/gpt-5.6-sol lo";
+		editor.completed = "/model cliproxyapi/gpt-5.6-sol low";
+		editor.autocompleteList = {
+			getSelectedItem: () => ({ value: "low" }),
+		};
+		submitted = undefined;
+		wrapped.handleInput("\t");
+		assert.equal(submitted, undefined);
+		assert.equal(wrapped.getText(), "");
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		assert.deepEqual(applied, ["cliproxyapi/gpt-5.6-sol", "low"]);
+
 		// An unknown model reference stays Pi's problem; its picker still opens.
 		applied.length = 0;
 		editor.text = "/model nope/absent high";

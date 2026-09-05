@@ -93,8 +93,10 @@ directory to forget all proper-base history.
   trailing space, and an open level menu led by the level already in
   effect, so you can type a level straight away or press Enter to keep the
   current one.
-- Enter accepts a model or level completion and switches immediately, only
-  when the complete prompt is a single-line `/model ...` command.
+- Tab or Enter on a level completion switches immediately: the level is
+  the last argument, so `/model gp<Tab>lo<Tab>` picks the model and `low`
+  without a further Enter. Either key switches only when the complete
+  prompt is a single-line `/model ...` command.
 
 ### Fullscreen navigation and selection
 

@@ -407,13 +407,15 @@ export function installModelAutocompleteSubmit(
 		) {
 			return;
 		}
-		if (confirm) handleInput(data);
 		// Tab stops at the model name so a level can follow, and Pi's argument
 		// completion appends no separator, so the space and the menu it cannot
-		// trigger on its own are supplied here.
-		else if (tab && accepted.includes("/")) {
+		// trigger on its own are supplied here. Tab on the level itself has
+		// nothing left to complete, so it submits like Enter.
+		if (tab && accepted.includes("/")) {
 			handleInput(" ");
 			openThinkingMenu();
+		} else if (confirm || tab) {
+			handleInput("\r");
 		}
 	};
 	target[MODEL_SUBMIT_INSTALLED] = true;
