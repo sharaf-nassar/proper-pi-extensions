@@ -26,6 +26,7 @@ import {
 	installModelAutocompleteSubmit,
 	modelThinkingCommand,
 	sortModelAutocompleteDescending,
+	THINKING_LEVELS,
 } from "./src/autocomplete-details.ts";
 import { installBaseKeybindings } from "./src/base-keybindings.ts";
 import { installClipboardLeakGuard } from "./src/clipboard-guard.ts";
@@ -169,30 +170,39 @@ function extractSessionTitle(text: string): string | undefined {
 	);
 }
 
-type ModelReference = { provider: string; id: string };
+type ClearSettings = {
+	provider: string;
+	id: string;
+	thinkingLevel: ReturnType<ExtensionAPI["getThinkingLevel"]>;
+	sessionFast: boolean;
+};
 
-function encodeModelReference(model: ModelReference): string {
-	return encodeURIComponent(
-		JSON.stringify({ provider: model.provider, id: model.id }),
-	);
-}
-
-function decodeModelReference(value: string): ModelReference | undefined {
+function decodeClearSettings(value: string): ClearSettings | undefined {
 	try {
 		const parsed = JSON.parse(
 			decodeURIComponent(value.trim()),
-		) as Partial<ModelReference> | null;
+		) as Partial<ClearSettings> | null;
 		if (
 			!parsed ||
 			typeof parsed.provider !== "string" ||
 			!parsed.provider ||
 			typeof parsed.id !== "string" ||
-			!parsed.id
+			!parsed.id ||
+			!parsed.thinkingLevel ||
+			!THINKING_LEVELS.includes(parsed.thinkingLevel) ||
+			typeof parsed.sessionFast !== "boolean"
 		)
 			return undefined;
-		return { provider: parsed.provider, id: parsed.id };
-	} catch {
-		return undefined;
+		return {
+			provider: parsed.provider,
+			id: parsed.id,
+			thinkingLevel: parsed.thinkingLevel,
+			sessionFast: parsed.sessionFast,
+		};
+	} catch (error) {
+		if (error instanceof URIError || error instanceof SyntaxError)
+			return undefined;
+		throw error;
 	}
 }
 
@@ -338,9 +348,9 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerCommand?.(RESTORE_MODEL_COMMAND, {
-		description: "Internal: restore the model after /clear",
+		description: "Internal: restore model, thinking, and Fast after /clear",
 		handler: async (args, ctx) => {
-			const reference = decodeModelReference(args);
+			const reference = decodeClearSettings(args);
 			if (!reference) {
 				ctx.ui.notify("Could not restore model after /clear", "error");
 				return;
@@ -351,16 +361,30 @@ export default function (pi: ExtensionAPI) {
 					`Could not restore model ${reference.provider}/${reference.id}`,
 					"error",
 				);
+				return;
 			}
+			// Model selection reapplies defaults, so restore thinking afterwards.
+			pi.setThinkingLevel(reference.thinkingLevel);
+			if (fastOverlay.isSessionEnabled() !== reference.sessionFast)
+				fastOverlay.toggleSession();
+			activeTui?.requestRender();
 		},
 	});
 
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Model-preserving clear]]
 	pi.registerCommand?.("clear", {
-		description: "Start a new session with the current model",
+		description:
+			"Start a new session with the current model, thinking, and Fast",
 		handler: async (_args, ctx) => {
 			const restoreCommand = ctx.model
-				? `/${RESTORE_MODEL_COMMAND} ${encodeModelReference(ctx.model)}`
+				? `/${RESTORE_MODEL_COMMAND} ${encodeURIComponent(
+						JSON.stringify({
+							provider: ctx.model.provider,
+							id: ctx.model.id,
+							thinkingLevel: pi.getThinkingLevel(),
+							sessionFast: fastOverlay.isSessionEnabled(),
+						} satisfies ClearSettings),
+					)}`
 				: undefined;
 			await ctx.newSession(
 				restoreCommand
@@ -633,7 +657,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		stickyDefaults.activate(ctx.sessionManager);
-		// Session Fast never survives into a new or restored session.
+		// /clear restores its captured session Fast after startup completes.
 		fastOverlay.resetSession();
 		promptDisplayHost.activate(ctx.sessionManager);
 		sessionTitlePending =

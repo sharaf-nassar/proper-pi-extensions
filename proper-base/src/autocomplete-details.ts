@@ -36,7 +36,7 @@ const MODEL_ORDER = new Intl.Collator("en", {
  * list nor the per-model subset, and Pi clamps an unsupported level when it
  * applies one, so restating the full list here costs nothing.
  */
-const THINKING_LEVELS = [
+export const THINKING_LEVELS = [
 	"off",
 	"minimal",
 	"low",

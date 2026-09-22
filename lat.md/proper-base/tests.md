@@ -20,9 +20,9 @@ Lister cases prove newest-first ordering, that non-JSONL files are ignored, that
 
 ## Model-preserving clear fixture
 
-A command fixture verifies `/clear` replaces the session before restoring the outgoing provider and model.
+A command fixture verifies `/clear` replaces the session before restoring the outgoing model, all seven thinking levels, and both session Fast states.
 
-It proves the command passes no copied session state into `ctx.newSession()`, uses the replacement context to dispatch only the encoded internal restore command, resolves the exact provider/model pair in the new registry, and selects it through the replacement extension instance. Malformed restore data reports an error, and an absent outgoing model keeps native `/new` behavior.
+Separate outgoing and replacement extension instances prove that no stale API is used and no messages or session metadata are copied into `ctx.newSession()`. The replacement command selects the exact provider/model pair before restoring thinking, even when model selection resets it to a different default. A second capture verifies the real in-memory Fast flag, and repeated restoration cannot flip it. Malformed references, invalid thinking or Fast values, missing models, and failed model activation leave settings alone and report errors. Cancelled switches leave the outgoing session intact, and an absent outgoing model keeps native `/new` behavior.
 
 ## Sticky defaults fixture
 

@@ -81,7 +81,7 @@ export class FastOverlay {
 		return join(this.agentDir, CONFIG_FILE_NAME);
 	}
 
-	/** Session Fast is never persisted; a new session always starts off. */
+	/** Session Fast starts off; /clear restores its captured flag after startup. */
 	resetSession(): void {
 		this.sessionEnabled = false;
 	}

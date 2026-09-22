@@ -18,13 +18,14 @@ footer layout, and deferred automatic updates.
 - A fresh unnamed session gets a hidden 3 to 7 word title from the first
   successful assistant response. Existing, resumed, and already-named sessions
   keep their names.
-- `/clear` starts an empty session but restores the exact provider and model
-  selected in the previous one. No messages, name, or branch state carry over.
+- `/clear` starts an empty session but preserves the current provider, model,
+  thinking level, and session Fast setting. Global Fast stays unchanged.
+  No messages, name, or branch state carry over.
 - The model you pick in `/model` and the level you pick in `/thinking` become
   Pi's startup defaults, so the next session opens on them. Pi otherwise saves
   those only when you press Ctrl+S in the picker, and because Pi re-derives the
   thinking level from the saved default on every model switch, an unsaved level
-  is otherwise lost mid-session at the next `/model`, Ctrl+P, or `/clear`.
+  is otherwise lost mid-session at the next `/model` or Ctrl+P.
   Automatic model-switch clamps do not redefine that choice, and the router's
   `llm-router/auto` placeholder persists neither itself nor its forced `off`.
   Resuming a session does not redefine the model. Set `"stickyDefaults": false`
