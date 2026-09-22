@@ -14,7 +14,7 @@ Interactive `/resume` emits `resume`, while CLI `-c` and `--session` load an exi
 
 The input handler routes the first non-empty input received while the current model belongs to provider `llm-router`. `auto` is the configured model, but the eligibility check is provider-wide rather than ID-specific.
 
-Extension-origin inputs are eligible because `sendUserMessage()` aliases can start an agent turn and must leave the placeholder before inference. Inputs with no text continue unchanged. Image attachments do not affect the verdict; transformed input preserves them.
+Extension-origin inputs are eligible because `sendUserMessage()` aliases can start an agent turn and must leave the placeholder before inference. Inputs with neither text nor images continue unchanged. Image-only inputs use the trivial-input fallback without a judge call. Image attachments do not affect the verdict; transformed input preserves them.
 
 The router's own `/llm-router` and `/llm-router-config` commands bypass routing so their UI work never changes the selected arm. The matcher reserves any command token beginning with `/llm-router` at a word boundary, so similarly prefixed unknown commands also bypass routing.
 
@@ -24,7 +24,7 @@ Direct and judged paths run in a fixed order.
 
 1. A configured slash-command pin runs first.
 2. A `[[llm-router: <model>]]` sentinel forces a resolved arm.
-3. Trivial input, including an unpinned bare slash command, uses the fallback model because it has no task text to judge.
+3. Trivial input, including an image-only prompt or unpinned bare slash command, uses the fallback model because it has no task text to judge.
 4. Every other eligible input runs the judge.
 
 A pin wins over a sentinel when both appear in one command. Because the pin path returns before sentinel parsing, the marker is not stripped in this mixed form. An unknown sentinel emits a warning, removes the marker, and sends the remaining task through the trivial-input check and then the judge.

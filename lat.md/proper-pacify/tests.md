@@ -48,7 +48,7 @@ It asserts that input beginning with either bypass command reaches dispatch untr
 
 ## Dispatch priority fixture
 
-The fixture invokes Pi 0.87.0's actual AgentSession prompt dispatch and ExtensionRunner, with a foreign extension registered first.
+The fixture invokes Pi 0.87.1's actual AgentSession prompt dispatch and ExtensionRunner, with a foreign extension registered first.
 
 Its partial host supplies image settings with auto-resizing disabled, keeping opaque-image identity assertions independent of Pi's image preprocessing.
 

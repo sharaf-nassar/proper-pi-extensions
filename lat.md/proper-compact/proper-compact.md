@@ -12,13 +12,15 @@ The package uses public Pi 0.87.0 hooks and authenticated registry streaming, wi
 
 `compact.ts` owns configuration, prompt contracts, request planning, output validation, usage, and lifecycle hooks. `context.ts` owns public-text serialization and branch-scoped recall. Pi alone appends successful compaction and branch-summary entries. Ordinary `context` events are untouched.
 
-Stock Pi 0.87.0 limits serialized tool results to their first 2,000 characters. Supplying complete selected public text avoids that pre-summary clipping, while recall lets an agent check original evidence after a lossy summary. These mechanisms do not establish improved task success or lower cost.
+Stock Pi 0.87.1 limits serialized tool results to their first 2,000 characters. Supplying complete selected public text avoids that pre-summary clipping, while recall lets an agent check original evidence after a lossy summary. These mechanisms do not establish improved task success or lower cost.
 
 ## Evidence input
 
 Summarizer input preserves complete public text, tool arguments, result status, and available source IDs. Thinking, signatures, and image bytes are excluded explicitly.
 
 Ordinary compaction maps prepared messages to Pi's canonical projected source entries. Context-edit omissions stay omitted; replacement content retains its original source ID. Original message objects map directly, while fresh native projections are matched structurally within role/timestamp groups; ambiguous matches expose candidate IDs instead of inventing provenance. Normal history and split-turn prefixes carry separate phase labels. Previous checkpoints are untrusted prior state. Branch summaries intentionally receive raw abandoned-path entries, including existing summaries and context-edited originals, without native newest-only truncation. This matches stock Pi's raw-history branch-summary policy, not ordinary compaction's edited-context policy. Repeated tool arguments never justify discarding results. Failed tools may still have side effects; artifact descriptions must distinguish attempts from confirmed outcomes.
+
+Prior state, conversation data, and instructions occupy separate labeled sections. Continuation-oriented instructions preserve the current request and observed progress without reconstructing later messages or declaring unfinished work complete. This follows Pi 0.87.1's split-turn prompt fix, while retaining our public-text-only source policy and checkpoint format. Offline prompt checks do not establish live-model refusal rates.
 
 JSON serialization makes source structure explicit, not immune to prompt injection. The summarizer has no tools, is instructed not to follow source instructions, and cannot return executable tool output.
 

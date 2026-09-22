@@ -175,7 +175,7 @@ modified.
 ## Install
 
 Use Node 22.19 or newer. The extension and `ultra` compatibility layer are
-tested against Pi 0.87.0 and requires Pi 0.86.0 or newer.
+tested against Pi 0.87.1 and require Pi 0.86.0 or newer.
 
 Install the published package:
 

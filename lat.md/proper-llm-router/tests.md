@@ -116,6 +116,8 @@ The trivial-input fixture verifies that input a judge cannot usefully rank switc
 
 It drives `isTrivialInput()` with single-letter and numbered choices, yes/no answers, aliases, option sets, two-word acknowledgements, a URL, and a bare command, and requires ordinary task text and commands with arguments to stay judged. It then runs the real input handler against a registry whose `complete()` throws, requiring the fallback switch for an option set and the marker removed from a trivial reply carrying an unknown sentinel.
 
+Image-only inputs with empty or whitespace-only text also switch to the fallback for interactive, RPC, and extension sources, preserving the original attachments. Blank input without images remains unrouted.
+
 ## Non-CPA config fixture
 
 The non-CPA config fixture verifies that CPA-only controls disappear when Pi has no authenticated `cliproxyapi` model.
@@ -136,7 +138,7 @@ It disables routing from an armed session and requires the first menu entry to b
 
 ## Ultra compatibility fixtures
 
-`test/ultra-thinking.test.ts` exercises the reload-safe prototype helpers against fake classes without editing pi internals. Its payload check imports the Pi 0.87.0 runtime resolved in the package lock.
+`test/ultra-thinking.test.ts` exercises the reload-safe prototype helpers against fake classes without editing pi internals. Its payload check imports the Pi 0.87.1 runtime resolved in the package lock.
 
 It verifies the shared thinking-level list ends in `ultra`, model capability filtering requires a non-empty `thinkingLevelMap.ultra`, native available-level discovery appends `ultra` only for supported models, unsupported transitions clamp to the highest available level, repeated installation does not stack patches, and the editor border reuses pi's maximum-effort theme color. A resolution fixture asserts the module-load shim reached the pinned runtime's real `AgentSession` and `Theme` classes through the public package export — the global patch markers are present and reinstallation takes the idempotent no-op path. A second fixture captures Pi's bundled OpenAI Responses payload before network I/O and verifies the model mapping sends `reasoning.effort: "ultra"`.
 

@@ -24,13 +24,15 @@ Native custom-message, branch-summary, and compaction projections retain provena
 
 ## Native compaction lifecycle
 
-Pi 0.87.0 AgentSession compaction methods persist hook summaries, native cut boundaries, and usage while preserving original entries.
+Pi 0.87.1 AgentSession compaction methods persist hook summaries, native cut boundaries, and usage while preserving original entries.
 
-The offline prototype fixture supplies the host's message-provenance map. Split focus and previous state survive three cycles; chunk usage is summed across calls.
+The offline prototype fixture supplies the host's message-provenance map. Split focus and previous state survive three cycles; outgoing prompts separate conversation data from continuation instructions, include public progress, and exclude private thinking, signatures, and retained later messages. Chunk usage is summed across calls.
 
 ## Failure and cancellation
 
 Rejected output delegates visibly to stock or cancels according to configuration. Preflight spends nothing on impossible plans.
+
+Plain-text refusals never become custom checkpoints: stock policy persists only the fallback, while cancel policy retains the prior context. Both preserve returned failed-attempt usage.
 
 Shutdown, repeated session start, uncooperative completions, and deadlines cannot persist partial state or silently start fallback inference. A deterministic queued-abort race verifies that delivered usage is retained without checkpoint persistence.
 

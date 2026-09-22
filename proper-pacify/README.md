@@ -260,7 +260,7 @@ below. Remove any stale direct-file registration so Pi loads one copy.
 
 ## Development
 
-Use Node 22.19 or newer and Pi 0.86.0 or newer. Tested against Pi 0.87.0;
+Use Node 22.19 or newer and Pi 0.86.0 or newer. Tested against Pi 0.87.1;
 development dependencies follow latest Pi releases.
 
 ```bash

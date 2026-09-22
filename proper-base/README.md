@@ -213,7 +213,7 @@ highlight. Custom replacement footers are not changed.
 
 ## Install
 
-Node 22.19 or newer is required. The package is tested against Pi 0.87.0.
+Node 22.19 or newer is required. The package is tested against Pi 0.87.1.
 
 From npm:
 

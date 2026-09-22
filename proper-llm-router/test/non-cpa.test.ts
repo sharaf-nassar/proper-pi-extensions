@@ -171,7 +171,7 @@ test("first input routes through Pi providers without CPA", async () => {
 });
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Trivial input fixture]]
-test("trivial first input uses the fallback without a judge call", async () => {
+test("trivial and image-only first inputs use the fallback without a judge call", async () => {
 	for (const text of [
 		"y",
 		"A",
@@ -236,6 +236,28 @@ test("trivial first input uses the fallback without a judge call", async () => {
 		{ action: "transform", text: "y", images: [] },
 	);
 	assert.equal(switched?.id, "gpt-5.6-terra");
+
+	const images = [
+		{ type: "image", mimeType: "image/png", data: "fixture-image" },
+	];
+	for (const source of ["interactive", "rpc", "extension"]) {
+		for (const text of ["", " \n\t"]) {
+			switched = undefined;
+			const event = { text, images, source };
+			const original = structuredClone(event);
+			assert.deepEqual(await inputHandler(event, ctx), { action: "continue" });
+			assert.equal(switched?.id, "gpt-5.6-terra");
+			assert.deepEqual(event, original);
+			assert.equal(event.images, images);
+		}
+	}
+	for (const images of [undefined, []]) {
+		switched = undefined;
+		assert.deepEqual(await inputHandler({ text: " \n", images }, ctx), {
+			action: "continue",
+		});
+		assert.equal(switched, undefined);
+	}
 });
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]

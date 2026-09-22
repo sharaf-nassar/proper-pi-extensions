@@ -6,7 +6,7 @@ proper-pacify is a Pi package whose extension rewrites user prompt tone before t
 
 The package uses Pi's extension API and authenticated model registry without a service, runtime dependency, or build step.
 
-`pacify.ts` owns configuration, model completion, commands, cancellation, and transcript links. `host.ts` isolates reversible Pi adapters tested against 0.87.0 for pre-command dispatch and message-aware rendering. The published `host-interop.ts` carries the shared submission and wrapper-ownership protocol; it is source-shipped so each package remains independently installable. `test/` includes real-host offline regressions. The package is registered in `.release-me.json` and the npm publishing workflow, so it releases through the same path as every other package; see [[proper-pacify#Installation status]] for the first-publish constraint.
+`pacify.ts` owns configuration, model completion, commands, cancellation, and transcript links. `host.ts` isolates reversible Pi adapters tested against 0.87.1 for pre-command dispatch and message-aware rendering. The published `host-interop.ts` carries the shared submission and wrapper-ownership protocol; it is source-shipped so each package remains independently installable. `test/` includes real-host offline regressions. The package is registered in `.release-me.json` and the npm publishing workflow, so it releases through the same path as every other package; see [[proper-pacify#Installation status]] for the first-publish constraint.
 
 ## Tone-only contract
 
@@ -74,7 +74,7 @@ An `AsyncLocalStorage` scope marks one prepared dispatch. The ordinary input han
 
 Each runtime owns its adapters. Shutdown aborts pending rewrites, clears message/bypass state and stale context references, and restores methods only while it still owns them. Restoration skips inactive participating wrappers underneath it and reinstates the original property descriptor or inheritance, so load-order shutdown cannot reintroduce dead callbacks on repeated reloads. A later foreign wrapper is never overwritten; an inactive wrapper becomes pass-through. Reload installs fresh code and carries only the session override, checked against the continuing manager. Disabling the extension leaves no active rewrite callback. Migration from older releases clears their global runtime so their historical unremovable input wrapper becomes inert.
 
-Remove the dispatch adapter when Pi exposes a public pre-command input hook with ordering guarantees. Real-host tests pin this compatibility boundary to the lockfile's resolved Pi version, currently 0.87.0. Development dependencies follow latest Pi releases.
+Remove the dispatch adapter when Pi exposes a public pre-command input hook with ordering guarantees. Real-host tests pin this compatibility boundary to the lockfile's resolved Pi version, currently 0.87.1. Development dependencies follow latest Pi releases.
 
 ## Automatic mode
 

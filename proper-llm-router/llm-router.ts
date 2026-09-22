@@ -1615,7 +1615,8 @@ export default function (pi: ExtensionAPI) {
 	pi.on("input", async (event, ctx) => {
 		const cfg = loadConfig();
 		if (ctx.model?.provider !== PROVIDER) return { action: "continue" };
-		if (!event.text.trim()) return { action: "continue" };
+		if (!event.text.trim() && !event.images?.length)
+			return { action: "continue" };
 
 		// our own commands (/llm-router, /llm-router-config) are pure UI —
 		// never route or switch on them

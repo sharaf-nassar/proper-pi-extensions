@@ -165,16 +165,41 @@ test("native AgentSession persists custom summary, boundary and usage without re
 test("split turns and three successive compactions retain focus and prior checkpoint input", async (t) => {
 	const f = await fixture(t);
 	f.manager.appendMessage(user("Original request with invariant."));
+	f.manager.appendMessage({
+		...assistant("Public early progress."),
+		content: [
+			{
+				type: "thinking",
+				thinking: "PRIVATE_THINKING_SENTINEL",
+				thinkingSignature: "PRIVATE_SIGNATURE_SENTINEL",
+			},
+			{ type: "text", text: "Public early progress." },
+		],
+	});
 	addTool(f.manager, "prefix", `${"log ".repeat(1500)}PREFIX_FAILURE`, true);
 	f.manager.appendMessage(assistant("Retained suffix reasoning. ".repeat(30)));
 	for (let cycle = 1; cycle <= 3; cycle++) {
 		f.complete(() => response(checkpoint(`CYCLE_${cycle}`)));
 		const result = await f.session.compact("SPLIT_FOCUS");
-		const input = JSON.stringify(f.calls.at(-1)[1]);
+		const request = f.calls.at(-1)[1];
+		const input = JSON.stringify(request);
+		const prompt = request.messages[1].content;
 		assert.ok(input.includes("SPLIT_FOCUS"));
+		assert.match(prompt, /# Conversation\n/);
+		assert.match(prompt, /\n\n# Instructions\nCreate or update/);
+		assert.match(prompt, /Later messages are retained separately/);
+		assert.match(prompt, /do not infer or reconstruct later messages/);
 		if (cycle === 1) {
 			assert.ok(input.includes("turn-prefix"));
 			assert.ok(input.includes("PREFIX_FAILURE"));
+			assert.ok(input.includes("Public early progress."));
+			assert.ok(
+				prompt.indexOf("PREFIX_FAILURE") < prompt.indexOf("# Instructions"),
+			);
+			assert.doesNotMatch(
+				input,
+				/PRIVATE_THINKING_SENTINEL|PRIVATE_SIGNATURE_SENTINEL|Retained suffix reasoning/,
+			);
 		} else assert.ok(input.includes(`CYCLE_${cycle - 1}`));
 		assert.match(result.summary, new RegExp(`CYCLE_${cycle}`));
 		f.manager.appendMessage(user(`New request ${cycle}`));
@@ -203,9 +228,9 @@ test("oversized source is fully covered by bounded sequential calls with summed 
 	assert.ok(f.calls.length > 1);
 	const chunks = f.calls.map(
 		(call) =>
-			call[1].messages[1].content.split(
-				"TRANSCRIPT DATA, through end of message:\n",
-			)[1],
+			call[1].messages[1].content
+				.split("# Conversation\n")[1]
+				.split("\n\n# Instructions\n")[0],
 	);
 	assert.ok(chunks.join("").includes(source));
 	assert.equal(result.usage.totalTokens, usage.totalTokens * f.calls.length);
@@ -230,6 +255,40 @@ test("invalid output uses explicit stock fallback and preserves failed-attempt u
 	assert.equal(attempt.data.status, "failed");
 	assert.deepEqual(attempt.data.usage, usage);
 	assert.deepEqual(f.errors, []);
+});
+
+test("plain-text refusals fall back or cancel without persisting a custom checkpoint", async (t) => {
+	for (const onError of ["stock", "cancel"] as const) {
+		await t.test(onError, async (t) => {
+			const f = await fixture(t);
+			f.populate();
+			await saveConfig(f.configPath, { ...DEFAULTS, onError });
+			const before = f.manager.buildSessionContext().messages;
+			const refusal = "This request was blocked due to reasoning_extraction.";
+			f.complete(() => response(refusal));
+			if (onError === "stock") {
+				assert.equal((await f.session.compact()).summary, "STOCK FALLBACK");
+			} else {
+				await assert.rejects(f.session.compact(), /cancelled/);
+				assert.deepEqual(f.manager.buildSessionContext().messages, before);
+			}
+			const summaries = f.manager
+				.getEntries()
+				.filter((entry) => entry.type === "compaction");
+			assert.deepEqual(
+				summaries.map((entry) => entry.summary),
+				onError === "stock" ? ["STOCK FALLBACK"] : [],
+			);
+			assert.equal(f.fallbacks(), onError === "stock" ? 1 : 0);
+			assert.equal(f.calls.length, 1);
+			const attempt: any = f.manager
+				.getEntries()
+				.find((entry) => entry.type === "custom");
+			assert.equal(attempt.data.status, "failed");
+			assert.deepEqual(attempt.data.usage, usage);
+			assert.deepEqual(f.errors, []);
+		});
+	}
 });
 
 test("cancel policy leaves native context intact and capacity preflight spends nothing", async (t) => {

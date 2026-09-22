@@ -115,9 +115,9 @@ test("native compaction preserves replacement provenance and omits edited-out me
 	f.manager.appendContextEdit(omitted, null);
 	f.manager.appendMessage(user("Retained request. ".repeat(40)));
 	await f.session.compact();
-	const transcript = f.calls[0][1].messages[1].content.split(
-		"TRANSCRIPT DATA, through end of message:\n",
-	)[1];
+	const transcript = f.calls[0][1].messages[1].content
+		.split("# Conversation\n")[1]
+		.split("\n\n# Instructions\n")[0];
 	assert.doesNotMatch(
 		transcript,
 		/OLD_|SUPERSEDED_REPLACEMENT|OMITTED_ATTEMPT/,
