@@ -6,6 +6,7 @@ import properBase from "./base-only-fixture.ts";
 type CommandHandler = (args: string, ctx: any) => Promise<void>;
 const RESTORE = "__proper-restore-model";
 const MODEL = { provider: "cliproxyapi", id: "gpt-6-astra" };
+const NO_BRANCH = { getBranch: () => [] };
 const encode = (value: unknown) => encodeURIComponent(JSON.stringify(value));
 
 function session(acceptModel = true) {
@@ -26,6 +27,10 @@ function session(acceptModel = true) {
 		getThinkingLevel() {
 			assert.ok(active, "outgoing API must not run after replacement");
 			return thinkingLevel;
+		},
+		appendEntry(customType: string, data: unknown) {
+			assert.ok(active);
+			calls.push({ customType, data });
 		},
 		setThinkingLevel(level: string) {
 			assert.ok(active);
@@ -84,6 +89,7 @@ test("clear restores model, every thinking level, and session Fast on the replac
 				await outgoing.restore(encode(settings), outgoing.ctx);
 				await outgoing.clear("", {
 					model: MODEL,
+					sessionManager: NO_BRANCH,
 					async newSession(options: any) {
 						assert.deepEqual(Object.keys(options), ["withSession"]);
 						outgoing.shutdown();
@@ -112,6 +118,7 @@ test("clear restores model, every thinking level, and session Fast on the replac
 				await replacement.restore(encode(settings), replacement.ctx);
 				await replacement.clear("", {
 					model: MODEL,
+					sessionManager: NO_BRANCH,
 					async newSession(options: any) {
 						await options.withSession({
 							async sendUserMessage(text: string) {
@@ -137,6 +144,7 @@ test("clear leaves cancelled, model-less, and failed restores alone", async () =
 		current.calls.length = 0;
 		await current.clear("", {
 			model: MODEL,
+			sessionManager: NO_BRANCH,
 			async newSession() {
 				return { cancelled: true };
 			},
@@ -145,6 +153,7 @@ test("clear leaves cancelled, model-less, and failed restores alone", async () =
 		assert.equal(current.pi.getThinkingLevel(), "off");
 		await current.clear("", {
 			model: undefined,
+			sessionManager: NO_BRANCH,
 			async newSession(options: unknown) {
 				assert.equal(options, undefined);
 				return { cancelled: false };
@@ -188,5 +197,55 @@ test("clear leaves cancelled, model-less, and failed restores alone", async () =
 		);
 	} finally {
 		rejected.shutdown();
+	}
+});
+
+test("clear carries the session context window choice", async () => {
+	const outgoing = session();
+	const replacement = session();
+	const entry = {
+		type: "custom",
+		customType: "proper-base-context-tokens",
+		data: { mode: "max" },
+	};
+	const settings = {
+		...MODEL,
+		thinkingLevel: "medium",
+		sessionFast: false,
+		contextTokens: "max",
+	};
+	try {
+		await outgoing.clear("", {
+			model: MODEL,
+			sessionManager: { getBranch: () => [entry] },
+			async newSession(options: any) {
+				await options.withSession({
+					async sendUserMessage(text: string) {
+						assert.equal(text, `/${RESTORE} ${encode(settings)}`);
+						await replacement.restore(
+							text.slice(text.indexOf(" ") + 1),
+							replacement.ctx,
+						);
+					},
+				});
+				return { cancelled: false };
+			},
+		});
+		assert.deepEqual(replacement.calls, [
+			MODEL,
+			"medium",
+			{ customType: entry.customType, data: entry.data },
+		]);
+		await replacement.restore(
+			encode({ ...settings, contextTokens: "huge" }),
+			replacement.ctx,
+		);
+		assert.equal(
+			replacement.notifications.pop(),
+			"Could not restore model after /clear",
+		);
+	} finally {
+		replacement.shutdown();
+		outgoing.shutdown();
 	}
 });

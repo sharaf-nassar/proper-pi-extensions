@@ -32,6 +32,17 @@ import { installBaseKeybindings } from "./src/base-keybindings.ts";
 import { installClipboardLeakGuard } from "./src/clipboard-guard.ts";
 import { installClipboardSelection } from "./src/clipboard-selection.ts";
 import { commitGuardReason } from "./src/commit-guard.ts";
+import {
+	asTokensSession,
+	CONTEXT_TOKENS_ENTRY,
+	ContextTokens,
+	type ContextTokensMode,
+	installTokensScopeCompletion,
+	parseTokensArgs,
+	TOKENS_USAGE,
+	tokensArgumentCompletions,
+	tokensNotice,
+} from "./src/context-tokens.ts";
 import { installEditorMouseGuard } from "./src/editor-mouse.ts";
 import {
 	installEditorNavigation,
@@ -175,6 +186,7 @@ type ClearSettings = {
 	id: string;
 	thinkingLevel: ReturnType<ExtensionAPI["getThinkingLevel"]>;
 	sessionFast: boolean;
+	contextTokens?: ContextTokensMode | undefined;
 };
 
 function decodeClearSettings(value: string): ClearSettings | undefined {
@@ -190,7 +202,10 @@ function decodeClearSettings(value: string): ClearSettings | undefined {
 			!parsed.id ||
 			!parsed.thinkingLevel ||
 			!THINKING_LEVELS.includes(parsed.thinkingLevel) ||
-			typeof parsed.sessionFast !== "boolean"
+			typeof parsed.sessionFast !== "boolean" ||
+			(parsed.contextTokens !== undefined &&
+				parsed.contextTokens !== "max" &&
+				parsed.contextTokens !== "default")
 		)
 			return undefined;
 		return {
@@ -198,6 +213,7 @@ function decodeClearSettings(value: string): ClearSettings | undefined {
 			id: parsed.id,
 			thinkingLevel: parsed.thinkingLevel,
 			sessionFast: parsed.sessionFast,
+			contextTokens: parsed.contextTokens,
 		};
 	} catch (error) {
 		if (error instanceof URIError || error instanceof SyntaxError)
@@ -255,6 +271,99 @@ export default function (pi: ExtensionAPI) {
 			});
 			ctx.ui.notify(notice.message, notice.level);
 		},
+	});
+
+	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Context window scopes]]
+	const tokenWindows = new ContextTokens(getAgentDir(), () =>
+		fastOverlay.providerId(),
+	);
+	const applyContextTokens = (ctx: ExtensionContext) => {
+		const session = asTokensSession(stickyDefaults.session(ctx.sessionManager));
+		if (!session) return undefined;
+		const applied = tokenWindows.apply(session, ctx.modelRegistry);
+		activeTui?.requestRender();
+		return applied && { session, ...applied };
+	};
+	pi.registerCommand?.("tokens", {
+		description:
+			"Show or set the OpenAI context window: /tokens [max|default] [global]",
+		getArgumentCompletions: tokensArgumentCompletions,
+		handler: async (args, ctx) => {
+			const request = parseTokensArgs(args);
+			if (!request) {
+				ctx.ui.notify(TOKENS_USAGE, "error");
+				return;
+			}
+			if (!asTokensSession(stickyDefaults.session(ctx.sessionManager))) {
+				ctx.ui.notify(
+					"/tokens is unavailable: this Pi version does not expose the live session model.",
+					"error",
+				);
+				return;
+			}
+			const { mode, global } = request;
+			if (mode && global) {
+				try {
+					tokenWindows.setGlobalMode(mode);
+				} catch (error) {
+					const message =
+						error instanceof Error ? error.message : String(error);
+					ctx.ui.notify(`Failed to save context window: ${message}`, "error");
+					return;
+				}
+				// This session drops its own choice and follows the new global one.
+				if (tokenWindows.sessionMode(ctx.sessionManager.getBranch())) {
+					pi.appendEntry(CONTEXT_TOKENS_ENTRY, { mode: null });
+				}
+			} else if (mode) {
+				pi.appendEntry(CONTEXT_TOKENS_ENTRY, { mode });
+			}
+			const modelId = ctx.model?.id ?? "No model";
+			const applied = applyContextTokens(ctx);
+			if (!applied) {
+				const saved = mode
+					? `Context window ${mode} saved ${global ? "for all sessions" : "for this session"}, but `
+					: "";
+				ctx.ui.notify(
+					`${saved}${modelId} has no larger window: /tokens applies to OpenAI models on openai, openai-codex, and CLIProxyAPI whose maximum exceeds the default.`,
+					mode ? "warning" : "info",
+				);
+				return;
+			}
+			const branch = ctx.sessionManager.getBranch();
+			const sessionMode = tokenWindows.sessionMode(branch);
+			const globalMode = tokenWindows.globalMode();
+			const notice = tokensNotice({
+				modelId,
+				mode:
+					mode ??
+					(sessionMode
+						? `${sessionMode}, set for this session`
+						: globalMode
+							? `${globalMode}, set globally`
+							: "default"),
+				scope: mode ? (global ? "global" : "session") : "status",
+				window: applied.window,
+				limits: applied.limits,
+				compaction: applied.session.settingsManager.getCompactionSettings(
+					applied.session.agent.state.model,
+				),
+				contextTokens: ctx.getContextUsage()?.tokens,
+			});
+			ctx.ui.notify(notice.message, notice.level);
+		},
+	});
+	// Pi reads the session model's window live in every compaction and
+	// overflow check. The session_start guard windows every model write; a
+	// global choice made in another process lands before each check instead:
+	// prompt-time checks run after `input`, continuation and post-run checks
+	// after `turn_end`.
+	let removeTokensGuard: (() => void) | undefined;
+	pi.on("input", (_event, ctx) => {
+		applyContextTokens(ctx);
+	});
+	pi.on("turn_end", (_event, ctx) => {
+		applyContextTokens(ctx);
 	});
 
 	let removeFooterColors: (() => void) | undefined;
@@ -367,6 +476,11 @@ export default function (pi: ExtensionAPI) {
 			pi.setThinkingLevel(reference.thinkingLevel);
 			if (fastOverlay.isSessionEnabled() !== reference.sessionFast)
 				fastOverlay.toggleSession();
+			if (reference.contextTokens) {
+				pi.appendEntry(CONTEXT_TOKENS_ENTRY, { mode: reference.contextTokens });
+			}
+			// Reselecting the same model writes nothing, so apply the new entry.
+			applyContextTokens(ctx);
 			activeTui?.requestRender();
 		},
 	});
@@ -374,7 +488,7 @@ export default function (pi: ExtensionAPI) {
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Model-preserving clear]]
 	pi.registerCommand?.("clear", {
 		description:
-			"Start a new session with the current model, thinking, and Fast",
+			"Start a new session with the current model, thinking, Fast, and context window",
 		handler: async (_args, ctx) => {
 			const restoreCommand = ctx.model
 				? `/${RESTORE_MODEL_COMMAND} ${encodeURIComponent(
@@ -383,6 +497,9 @@ export default function (pi: ExtensionAPI) {
 							id: ctx.model.id,
 							thinkingLevel: pi.getThinkingLevel(),
 							sessionFast: fastOverlay.isSessionEnabled(),
+							contextTokens: tokenWindows.sessionMode(
+								ctx.sessionManager.getBranch(),
+							),
 						} satisfies ClearSettings),
 					)}`
 				: undefined;
@@ -610,6 +727,8 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", () => {
 		removeFastSessionList();
+		removeTokensGuard?.();
+		removeTokensGuard = undefined;
 		stickyDefaults.restore();
 		removeKeybindings?.();
 		removeKeybindings = undefined;
@@ -825,6 +944,8 @@ export default function (pi: ExtensionAPI) {
 				},
 			);
 			installModelAutocompleteSubmit(editor, keybindings);
+			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Context window scopes]]
+			installTokensScopeCompletion(editor, keybindings);
 			removePromptClear?.();
 			removePromptClear = installPromptClear(editor, tui, keybindings, ctx);
 			historySearch = installReverseHistorySearch(
@@ -849,6 +970,14 @@ export default function (pi: ExtensionAPI) {
 		factory[WRAPPED] = base ?? null;
 
 		ctx.ui.setEditorComponent(factory);
+		// Window the restored model now and every model written later.
+		removeTokensGuard?.();
+		const tokensSession = asTokensSession(
+			stickyDefaults.session(ctx.sessionManager),
+		);
+		removeTokensGuard =
+			tokensSession && tokenWindows.guard(tokensSession, ctx.modelRegistry);
+		applyContextTokens(ctx);
 	});
 	// Base setup and cleanup must register before the updater's lifecycle hooks.
 	registerAutoUpdates(pi);

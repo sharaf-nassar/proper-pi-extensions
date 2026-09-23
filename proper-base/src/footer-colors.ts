@@ -166,9 +166,10 @@ export function installFooterColors(
 			typeof state.ctx.sessionManager?.getLeafId === "function"
 				? (state.ctx.sessionManager.getLeafId() ?? "")
 				: "";
-		const key = `${leafId}\u0000${model ?? ""}\u0000${level}\u0000${
-			isFast ? "1" : "0"
-		}`;
+		// /tokens swaps the window without a new entry or model id.
+		const key = `${leafId}\u0000${model ?? ""}\u0000${
+			state.ctx.model?.contextWindow ?? ""
+		}\u0000${level}\u0000${isFast ? "1" : "0"}`;
 		const base = (at: number) => {
 			const lines = baseLines(at, key, theme, now);
 			return model && isFast ? tagFast(lines, at, model, theme) : lines;

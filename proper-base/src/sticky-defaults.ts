@@ -39,6 +39,8 @@ type LiveSession = {
 
 export type StickyDefaultsController = {
 	activate(sessionManager: SessionIdentity): void;
+	/** The live AgentSession behind an extension context's session manager. */
+	session(sessionManager: SessionIdentity): unknown;
 	restore(): void;
 };
 
@@ -62,7 +64,7 @@ export function installStickyDefaultsAdapter(
 		typeof originalCycleModel !== "function" ||
 		typeof originalSetThinkingLevel !== "function"
 	) {
-		return { activate() {}, restore() {} };
+		return { activate() {}, session: () => undefined, restore() {} };
 	}
 	let installed = true;
 	const sessions = new WeakMap<SessionIdentity, LiveSession>();
@@ -173,6 +175,7 @@ export function installStickyDefaultsAdapter(
 			const session = sessions.get(sessionManager);
 			if (session) active.add(session);
 		},
+		session: (sessionManager) => sessions.get(sessionManager),
 		restore() {
 			installed = false;
 			if (prototype[INSTALLED] !== controller) return;

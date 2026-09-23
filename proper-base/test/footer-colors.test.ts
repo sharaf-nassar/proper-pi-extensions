@@ -547,6 +547,15 @@ test("footer memoizes pi's per-frame session scan until the leaf moves", async (
 		leafId = "leaf-2";
 		footer.render(100);
 		assert.ok(scans > afterResize);
+
+		// /tokens swaps the context window without a new entry or model id.
+		const afterLeaf = scans;
+		ctx.model = {
+			id: "gpt-5.6-sol",
+			contextWindow: 922000,
+		} as typeof ctx.model;
+		footer.render(100);
+		assert.ok(scans > afterLeaf);
 	} finally {
 		footer.dispose();
 		await rm(cwd, { recursive: true, force: true });

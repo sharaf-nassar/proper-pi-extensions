@@ -19,7 +19,8 @@ footer layout, and deferred automatic updates.
   successful assistant response. Existing, resumed, and already-named sessions
   keep their names.
 - `/clear` starts an empty session but preserves the current provider, model,
-  thinking level, and session Fast setting. Global Fast stays unchanged.
+  thinking level, session Fast setting, and session context window. Global
+  Fast and the global context window stay unchanged.
   No messages, name, or branch state carry over.
 - The model you pick in `/model` and the level you pick in `/thinking` become
   Pi's startup defaults, so the next session opens on them. Pi otherwise saves
@@ -34,6 +35,16 @@ footer layout, and deferred automatic updates.
   the slash command you typed, such as `/implement-ready epic-1 4`.
 - CLIProxyAPI `empty_stream` failures become normal retryable network errors, so
   Pi applies its existing retry budget and backoff.
+- `/tokens max` raises an OpenAI model's context window from its 272K default
+  to the backend's 922K input cap for this session, through `openai-codex`,
+  CLIProxyAPI, or the `openai` API. `/tokens default` returns to
+  the default. Append `global` to set it for every session (saved as
+  `contextTokens` in `~/.pi/agent/proper-base.json`); a session choice
+  overrides the global one. Bare `/tokens` shows the current window. Tab on
+  `max` or `default` opens the scope menu, where `global` is one arrow away.
+  Auto-compaction then triggers at the new window minus your `reserveTokens`,
+  including per-model `compaction.modelOverrides`. Input above 272K bills at
+  the long-context rate.
 
 ### Automatic updates
 
