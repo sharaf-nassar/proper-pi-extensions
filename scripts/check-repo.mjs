@@ -8,12 +8,14 @@ const PACKAGES = [
 	"proper-compact",
 	"proper-flow",
 	"proper-llm-router",
+	"proper-model-prompts",
 	"proper-pacify",
 ];
 const LOCKED_PACKAGES = [
 	"proper-base",
 	"proper-compact",
 	"proper-llm-router",
+	"proper-model-prompts",
 	"proper-pacify",
 ];
 
@@ -45,6 +47,7 @@ function fast() {
 	run("npm", ["test"], "proper-compact");
 	run("npm", ["test"], "proper-flow");
 	run("npm", ["run", "test:unit"], "proper-llm-router");
+	run("npm", ["test"], "proper-model-prompts");
 	run("npm", ["run", "test"], "proper-pacify");
 	for (const cwd of LOCKED_PACKAGES) run("npm", ["run", "typecheck"], cwd);
 	for (const cwd of LOCKED_PACKAGES) {

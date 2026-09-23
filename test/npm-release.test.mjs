@@ -8,6 +8,7 @@ const packages = [
 	"proper-compact",
 	"proper-flow",
 	"proper-llm-router",
+	"proper-model-prompts",
 	"proper-pacify",
 ];
 

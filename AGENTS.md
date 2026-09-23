@@ -3,7 +3,8 @@
 Independently installable local Pi packages: `proper-base/` (TS extension),
 `proper-llm-router/` (TS routing extension + exemplar corpus),
 `proper-pacify/` (TS tone-rewriting extension), `proper-compact/` (TS compaction
-and transcript recall extension), and `proper-flow/`
+and transcript recall extension), `proper-model-prompts/` (TS per-model system
+prompt extension), and `proper-flow/`
 (workflow prompts + Beads formulas + implementation rail). Root is NOT an npm
 package/workspace — use `npm --prefix <pkg>` or cd into each package.
 
@@ -29,6 +30,7 @@ npm --prefix proper-base install
 npm --prefix proper-llm-router install
 npm --prefix proper-pacify install
 npm --prefix proper-compact install
+npm --prefix proper-model-prompts install
 git config core.hooksPath .beads/hooks
 pre-commit install-hooks
 ```
@@ -81,8 +83,11 @@ publish-npm.yml --repo sharaf-nassar/proper-pi-extensions --env npm-release`.
 - Router self-registers the `llm-router/auto` placeholder at load; a
   manual models.json entry is optional. Its port-1 URL is an intentional
   dead placeholder, not a service.
-- Toolchain: Node 22.19+, Pi 0.87.1 compatibility (proper-compact requires
-  0.87.0), TypeScript 6.
-- proper-compact is not published yet. Its first release requires maintainer
-  authentication and subsequent npm trusted-publisher registration. No global
-  installation or provider inference belongs in its offline test gate.
+- Toolchain: Node 22.19+, Pi 0.87.1 compatibility (proper-compact and
+  proper-model-prompts require 0.87.0), TypeScript 6.
+- proper-compact and proper-model-prompts are not published yet. Their first
+  releases require maintainer authentication and subsequent npm
+  trusted-publisher registration. No global installation or provider inference
+  belongs in their offline test gates.
+- `npm run test:subagents` in proper-model-prompts/ is an opt-in smoke run of
+  the installed `pi` and pi-subagents with a fake provider; it is not gated.

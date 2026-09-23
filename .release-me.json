@@ -6,6 +6,7 @@
     "proper-compact": "proper-compact/package.json",
     "proper-flow": "proper-flow/package.json",
     "proper-llm-router": "proper-llm-router/package.json",
+    "proper-model-prompts": "proper-model-prompts/package.json",
     "proper-pacify": "proper-pacify/package.json"
   }
 }
