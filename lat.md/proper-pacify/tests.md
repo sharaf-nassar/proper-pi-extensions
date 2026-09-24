@@ -12,7 +12,7 @@ The fixture verifies defaults, sanitized configuration, provider-qualified looku
 
 ## Model request contract
 
-The fixture verifies one-call rewriting, immutable tone-only instructions, unchanged model input, configured effort and priority options, text extraction, and rejection of truncated output.
+The fixture verifies one-call rewriting, immutable tone-only instructions, unchanged model input, configured effort in both the raw and simple option fields, priority options, text extraction, and rejection of truncated output.
 
 It also asserts that the operative contract and the prompt travel in the user turn, that the prompt occupies the end of that turn so a forged fence cannot end the data region early, that the system prompt carries only the role declaration and the tone guidance, and that the request carries text only, with no images attached.
 

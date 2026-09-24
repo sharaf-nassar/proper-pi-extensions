@@ -9,10 +9,10 @@ Missing files and missing keys use built-in defaults.
 | Field | Default | Contract |
 | --- | --- | --- |
 | `enabled` | `true` | global routing switch; `false` stops automatic activation in every session |
-| `judge.model` | `gpt-5.6-terra` | authenticated Pi judge model ID or `provider/model-id` |
+| `judge.model` | `gpt-6-sol` | authenticated Pi judge model ID or `provider/model-id` |
 | `judge.effort` | `medium` | optional provider-specific thinking effort; `null` omits it |
 | `judge.fast` | `false` | `true` sends `service_tier: "priority"` on judge requests |
-| `fallbackModel` | `gpt-5.6-terra` | model ID or `provider/model-id` used after judged-path failure or for trivial input such as bare commands |
+| `fallbackModel` | `gpt-6-sol` | model ID or `provider/model-id` used after judged-path failure or for trivial input such as bare commands |
 | `cpaBase` | `http://127.0.0.1:8317` | CPA base for optional management requests |
 | `exemplarsPath` | `<extension>/exemplars.jsonl` | measured-outcome corpus path |
 | `quotaMaxPct` | `null` | threshold gate; `null` disables it |
@@ -59,7 +59,7 @@ Judge model overrides affect the next judged prompt. They do not affect command 
 
 Judge model overrides replace the execution model attached to a stable arm slot while preserving that slot's calibrated use cases.
 
-`judgeModelOverrides` maps an arm name to a model ID or `provider/model-id`. Keys use `resolveArm()`, so arm keys, default IDs, dated IDs, and unique fragments are accepted. Empty values, unknown keys, and values equal to the arm's default ID have no effect.
+`judgeModelOverrides` maps an arm name to a model ID or `provider/model-id`. Keys use `resolveArm()`, so arm keys, default IDs, dated IDs, retired arm names, and unique fragments are accepted. Empty values, unknown keys, and values equal to the arm's default ID have no effect.
 
 `applyJudgeModelOverrides()` rewrites the complete judge system message, including the rubric and exemplar note. Each source arm becomes `<target> [selection key: <source>]`, and a preamble tells the judge that the target inherits the source slot's use cases. Replacement is simultaneous, so one target cannot trigger another configured replacement.
 
@@ -73,17 +73,19 @@ The built-in map removes judge latency for commands with fixed model needs.
 
 | Command | Arm | Thinking level |
 | --- | --- | --- |
-| `/file` | `claude-fable-5` | `xhigh` |
-| `/triage` | `claude-fable-5` | `xhigh` |
-| `/spec` | `claude-fable-5` | `xhigh` |
-| `/refine` | `claude-fable-5` | `xhigh` |
-| `/implement-ready` | `gpt-5-6-sol` | `xhigh` |
+| `/file` | `claude-fable-5-1` | `xhigh` |
+| `/triage` | `claude-fable-5-1` | `xhigh` |
+| `/spec` | `claude-fable-5-1` | `xhigh` |
+| `/refine` | `claude-fable-5-1` | `xhigh` |
+| `/implement-ready` | `gpt-6-sol` | `xhigh` |
+
+The judge, fallback, and `/implement-ready` defaults moved from GPT-5.6 Terra and Sol to GPT-6 Sol, which inherited both slots. The planning pins moved from Fable 5 to Fable 5.1.
 
 Existing user maps that still pin `backlog` must rename that key to `refine`. The loader does not migrate custom command names because `commandPins` may contain unrelated user-defined commands.
 
 Pin keys may include or omit `/` and match case-insensitively. Matching is exact on the first slash-command token, so `/filet` does not match `/file` and embedded text such as `fix /file` is not a command.
 
-Pin models accept any name handled by the `Deterministic names` contract in `models.md`. The interactive editor offers canonical arm keys, while JSON may use an arm key, default model ID, dated ID, or unique fragment. An invalid model falls through to normal routing.
+Pin models accept any name handled by the `Deterministic names` contract in `models.md`. The interactive editor offers canonical arm keys, while JSON may use an arm key, default model ID, dated ID, retired arm name, or unique fragment. An invalid model falls through to normal routing.
 
 Pin edits affect the next armed routing decision. They do not repin a session that has already routed; use `/llm-router` or select `llm-router/auto` before invoking the command when a fresh choice is required.
 
@@ -117,7 +119,7 @@ Judge effort and session thinking use related but different controls.
 
 Pinned commands can select `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`, plus a choice that leaves the session default unchanged. They can also select `ultra` when the chosen model explicitly maps that level. The judge-effort picker remains `minimal` through `xhigh` plus `none`; it omits `off`, `max`, and `ultra`.
 
-A non-null judge effort is sent through Pi's provider-specific raw request options: Responses and Chat use `reasoningEffort`, Anthropic uses adaptive effort or a compatible thinking budget, Bedrock keeps `reasoning`, and Google uses its thinking object. A pin effort is passed to pi after the final model switch. Pi clamps a saved `ultra` pin to the final model's highest available level if quota swapping or later catalog changes select a model without `ultra` support.
+A non-null judge effort is sent through Pi's provider-specific raw request options: Responses and Chat use `reasoningEffort` plus the `reasoning` field that `streamSimple`-only providers such as CLIProxyAPI read, Anthropic uses adaptive effort or a compatible thinking budget, Bedrock keeps `reasoning`, and Google uses its thinking object. A pin effort is passed to pi after the final model switch. Pi clamps a saved `ultra` pin to the final model's highest available level if quota swapping or later catalog changes select a model without `ultra` support.
 
 ## Management key handling
 

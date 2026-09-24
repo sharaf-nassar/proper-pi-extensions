@@ -9,11 +9,11 @@ const targets = {
 		id: "claude-haiku-4-5-20251001",
 	},
 	"claude-sonnet-5": { provider: "cliproxyapi", id: "claude-sonnet-5" },
-	"claude-opus-5": { provider: "cliproxyapi", id: "claude-opus-5" },
-	"claude-fable-5": { provider: "cliproxyapi", id: "claude-fable-5" },
-	"gpt-5-6-luna": { provider: "cliproxyapi", id: "gpt-5.6-luna" },
-	"gpt-5-6-terra": { provider: "cliproxyapi", id: "gpt-5.6-terra" },
-	"gpt-5-6-sol": { provider: "cliproxyapi", id: "gpt-5.6-sol" },
+	"claude-opus-5-5": { provider: "cliproxyapi", id: "claude-opus-5-5" },
+	"claude-fable-5-1": { provider: "cliproxyapi", id: "claude-fable-5-1" },
+	"gpt-6-luna": { provider: "cliproxyapi", id: "gpt-6-luna" },
+	"gpt-6-sol": { provider: "cliproxyapi", id: "gpt-6-sol" },
+	"gpt-6-astra": { provider: "cliproxyapi", id: "gpt-6-astra" },
 };
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Usage rate-limit fixture]]
@@ -54,8 +54,8 @@ test("upstream usage 429 blocks that account's lane at the quota threshold", asy
 	try {
 		const availability = await armAvailability(cfg, targets);
 		assert.equal(availability["claude-haiku-4-5"]?.available, false);
-		assert.equal(availability["claude-fable-5"]?.available, false);
-		assert.equal(availability["gpt-5-6-sol"]?.available, true);
+		assert.equal(availability["claude-fable-5-1"]?.available, false);
+		assert.equal(availability["gpt-6-sol"]?.available, true);
 	} finally {
 		globalThis.fetch = originalFetch;
 	}

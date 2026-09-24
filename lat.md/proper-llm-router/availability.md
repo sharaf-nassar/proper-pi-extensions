@@ -8,7 +8,7 @@ Every routed prompt reads `ctx.modelRegistry.getAvailable()`, excluding the `llm
 
 That call reports models with valid configured authentication, not live upstream capacity, and providers may serve it from a cached catalogue. Registry availability therefore answers "is this model configured and authenticated", never "does it have quota right now".
 
-A configured target may be a model ID or `provider/model-id`. Unqualified IDs prefer `cliproxyapi` for backward compatibility, then the direct provider for that model family. Exact IDs beat dated `-suffix` or `@suffix` variants. Provider-qualified values never fall across providers.
+A configured target may be a model ID or `provider/model-id`. Unqualified IDs prefer `cliproxyapi` for backward compatibility, then the direct provider for that model family. Exact IDs beat dated `-suffix` or `@suffix` variants. IDs that differ only in dots and hyphens count as exact, so GitHub Copilot's `claude-opus-5.5` serves the `claude-opus-5-5` slot. Provider-qualified values never fall across providers.
 
 Judged routes resolve overrides for each semantic slot. Command pins and sentinels resolve the arm's default model instead, preserving the override scope in [[configuration#Judge model overrides]]. A missing target marks that arm unavailable before the verdict is applied.
 
@@ -46,15 +46,17 @@ A down verdict moves once to a fixed cross-lane target.
 
 | Requested arm | Swap target |
 | --- | --- |
-| `claude-fable-5` | `gpt-5-6-sol` |
-| `gpt-5-6-sol` | `claude-fable-5` |
-| `claude-opus-5` | `gpt-5-6-terra` |
-| `gpt-5-6-terra` | `claude-opus-5` |
-| `claude-sonnet-5` | `gpt-5-6-luna` |
-| `claude-haiku-4-5` | `gpt-5-6-luna` |
-| `gpt-5-6-luna` | `claude-haiku-4-5` |
+| `claude-fable-5-1` | `gpt-6-astra` |
+| `gpt-6-astra` | `claude-fable-5-1` |
+| `claude-opus-5-5` | `gpt-6-sol` |
+| `gpt-6-sol` | `claude-opus-5-5` |
+| `claude-sonnet-5` | `gpt-6-luna` |
+| `claude-haiku-4-5` | `gpt-6-luna` |
+| `gpt-6-luna` | `claude-haiku-4-5` |
 
 The graph is intentionally asymmetric at the lower tiers. Luna returns to Haiku, while both Haiku and Sonnet can fall to Luna.
+
+The top pair joins the strongest model of each vendor at the same $10/$50 price. The September 2026 catalog kept the graph's shape: Astra took the old Sol position and Sol took the old Terra position.
 
 Every swap crosses the Claude/Codex lane boundary. Availability does not alter the judge's rubric, but it can change the provider and model that execute the task.
 

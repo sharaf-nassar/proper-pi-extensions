@@ -246,8 +246,8 @@ test("openai-completions judge without supportsStrictMode fails before payload",
 	const base = {
 		...baseModel,
 		provider: "custom",
-		id: "claude-sonnet-4-6",
-		name: "claude-sonnet-4-6",
+		id: "custom-chat-model",
+		name: "custom-chat-model",
 		api: "openai-completions",
 	};
 	// absent compat: supportsStrictMode defaults false, strict require throws
@@ -266,11 +266,12 @@ test("openai-completions judge without supportsStrictMode fails before payload",
 // Endpoints that explicitly advertise supportsStrictMode:true produce the nested
 // Chat Completions function shape, distinct from the flat Responses form.
 test("openai-completions judge with supportsStrictMode:true reaches payload with nested function", async () => {
+	// A non-Claude ID: Claude judges never force the tool (see judge-fast).
 	const payloads = await judgePayload({
 		...baseModel,
 		provider: "custom",
-		id: "claude-sonnet-4-6",
-		name: "claude-sonnet-4-6",
+		id: "custom-chat-model",
+		name: "custom-chat-model",
 		api: "openai-completions",
 		compat: { supportsStrictMode: true },
 	});

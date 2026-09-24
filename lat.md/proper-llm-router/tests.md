@@ -6,7 +6,9 @@ The proper-llm-router package uses Node's built-in test runner for offline compa
 
 `npm run test:unit` runs `test/*.test.ts`, while `npm run test:smoke` runs `smoke.ts`. Both use Node's experimental TypeScript type stripping; `npm test` runs them in that order. Unit tests include a no-CPA provider route and conditional config UI.
 
-`smoke.ts` imports the extension and its public pure functions, runs deterministic assertions, then calls one integrated route with an injected Pi model snapshot and judge runner. The harness verifies that `exemplarsPath` resolves beside the moved extension, accepts an optional CLI task, and requires non-empty verdict fields without credentials or network access.
+`smoke.ts` points `HOME` at a temporary directory, imports the extension and its public pure functions, runs deterministic assertions, then calls one integrated route with an injected Pi model snapshot and judge runner. The harness verifies that `exemplarsPath` resolves beside the moved extension, accepts an optional CLI task, and requires non-empty verdict fields without credentials or network access.
+
+The temporary home keeps the user's `llm-router.json` out of every fixture. The input and config handlers read that file directly, so a personal fallback or override would otherwise decide whether the smoke passes.
 
 ## Quota aggregation fixtures
 
@@ -32,6 +34,8 @@ The judge fast fixture verifies that `judge.fast` controls the `service_tier` fi
 
 It runs the judge under both `cliproxyapi-codex-responses` and `openai-codex-responses` and requires `toolChoice: "required"` for each, pinning the suffix match that covers every provider flavour of the Codex Responses API.
 
+The same runs require the configured effort in both `reasoningEffort` and `reasoning`, because CLIProxyAPI's provider implements only `streamSimple`. A fourth run makes `claude-opus-5-5` the CPA judge and requires `toolChoice: "auto"`, since Claude 5.1 and later reject forced tools through CPA.
+
 ## Provider payload fixtures
 
 `test/judge-provider-payload.test.ts` drives real Pi serializers through the router input handler. `onPayload` stops before network I/O.
@@ -40,7 +44,7 @@ The probes need no credentials and normalize contexts through Pi's public API be
 
 Anthropic budget thinking reserves answer room and uses automatic tool choice; adaptive models honor their `thinkingLevelMap` effort, and managed-effort models retain the host's adaptive/high output policy while receiving configured effort in the message policy. Bedrock budget thinking also uses automatic tool choice and reserves answer room. Google fixtures assert supported uppercase thinking levels and a shared output ceiling large enough for reasoning and the verdict.
 
-Two `openai-completions` fixtures cover the Pi 0.87 behavior change: the adapter now defaults `supportsStrictMode` to false for unknown endpoints. Because `route_model` carries `strict:"require"`, a custom judge endpoint without `compat.supportsStrictMode:true` fails before producing a payload and the router falls back visibly. The absent-compat and explicit-false-compat cases both assert that `judgePayload` rejects with the constrained-sampling error message. The explicit-true-compat case asserts that the payload keeps `strict: true` and uses the nested Chat Completions function shape (`tool_choice: { type: "function", function: { name: "route_model" } }`), which is distinct from the flat Responses form.
+Two `openai-completions` fixtures cover the Pi 0.87 behavior change: the adapter now defaults `supportsStrictMode` to false for unknown endpoints. Because `route_model` carries `strict:"require"`, a custom judge endpoint without `compat.supportsStrictMode:true` fails before producing a payload and the router falls back visibly. The absent-compat and explicit-false-compat cases both assert that `judgePayload` rejects with the constrained-sampling error message. These fixtures use a non-Claude model ID, because Claude judges never force the tool. The explicit-true-compat case asserts that the payload keeps `strict: true` and uses the nested Chat Completions function shape (`tool_choice: { type: "function", function: { name: "route_model" } }`), which is distinct from the flat Responses form.
 
 The file-level setup saves and deletes `LLM_ROUTER_OFF` and `LLM_ROUTER_ON` before importing the module, restoring them in `after()`. This prevents inherited routing overrides from disabling routing during tests.
 
@@ -54,7 +58,7 @@ Legacy router-owned provider auth fields must not survive configuration loading.
 
 The swap fixtures build a complete availability map with selected arms marked down.
 
-`availWith()` supports assertions that an available pick stays unchanged, Fable swaps to Sol, Terra swaps to Opus, Sonnet swaps to Luna, Luna swaps to Haiku, and a request throws when Fable and Sol are both unavailable.
+`availWith()` supports assertions that an available pick stays unchanged, Fable and Astra swap with each other, Sol swaps to Opus, Sonnet swaps to Luna, Luna swaps to Haiku, and a request throws when Fable and Astra are both unavailable.
 
 These assertions exercise `resolveVerdictModel()` without network calls.
 
@@ -62,7 +66,7 @@ These assertions exercise `resolveVerdictModel()` without network calls.
 
 The sentinel fixtures verify marker parsing and loose arm-name resolution.
 
-They cover no marker, CPA ID syntax, case and whitespace tolerance, seam whitespace collapse, exact arm keys, unique fragments, dated Claude IDs, ambiguous names, and unknown names.
+They cover no marker, dotted model IDs, case and whitespace tolerance, seam whitespace collapse, exact arm keys, unique fragments, dated Claude IDs, ambiguous names, unknown names, and every retired arm name resolving to its successor.
 
 These assertions exercise `parseSentinel()` and `resolveArm()`.
 
@@ -70,7 +74,7 @@ These assertions exercise `parseSentinel()` and `resolveArm()`.
 
 The override fixtures verify prompt replacement and stable arm-slot execution mapping without network calls.
 
-They cover arbitrary target IDs, simultaneous replacement when one target names another source arm, preserved selection keys, unchanged labels for unconfigured slots, overridden target lookup, and default lookup.
+They cover arbitrary target IDs, simultaneous replacement when one target names another source arm, preserved selection keys, unchanged labels for unconfigured slots, a retired arm key overriding its successor slot, overridden target lookup, and default lookup.
 
 These assertions exercise `applyJudgeModelOverrides()` and `judgeModelName()`. They do not exercise live target availability, quota behavior for arbitrary CPA-backed targets, or persistence from the override picker.
 
@@ -78,7 +82,7 @@ These assertions exercise `applyJudgeModelOverrides()` and `judgeModelName()`. T
 
 The command fixtures verify that configured slash commands bypass the judge only when their model resolves.
 
-They cover the built-in `/refine` pin, keys with and without `/`, case-insensitive matching, CPA IDs in pin values, nullable effort, invalid models falling through, rejection of prefix matches, and rejection when a command token is not at the start of the prompt.
+They cover the built-in `/refine` pin, keys with and without `/`, case-insensitive matching, retired model IDs in pin values, nullable effort, invalid models falling through, rejection of prefix matches, and rejection when a command token is not at the start of the prompt.
 
 These assertions exercise `commandPin()` as pure matching logic. They do not prove that the pi input event skips the judge, applies quota swapping, switches the model, or sets thinking effort; those behaviors remain integration-only.
 
@@ -106,7 +110,7 @@ It verifies that the top-level menu has one `Judge` entry plus a top-level `Over
 
 The non-CPA fixture verifies provider-aware model resolution and one complete first-input route without CPA.
 
-It checks that unqualified duplicate IDs prefer CPA when available, provider-qualified values resolve exactly, and direct Anthropic/OpenAI Codex models handle judge selection, availability, pinned commands, and `pi.setModel()` while the judged fixture rejects every raw network request.
+It checks that unqualified duplicate IDs prefer CPA when available, provider-qualified values resolve exactly, GitHub Copilot's dotted `claude-opus-5.5` serves the hyphenated default ID, and direct Anthropic/OpenAI Codex models handle judge selection, availability, pinned commands, and `pi.setModel()` while the judged fixture rejects every raw network request.
 
 It also verifies that the factory self-registers exactly one `llm-router` provider whose model list contains `auto` and whose base URL stays on the dead port-1 placeholder.
 
@@ -150,7 +154,7 @@ The final smoke check runs the complete rubric, exemplar, injected judge, regist
 
 Its default task is a README typo. Passing a CLI argument replaces that task. The script injects seven CPA-backed registry targets plus a deterministic judge result, then prints the full verdict as formatted JSON after validating required fields.
 
-This route uses built-in defaults rather than the loaded user config. A personal `judgeModelOverrides` entry naming a model outside the injected snapshot would otherwise mark that arm unavailable and fail the check for reasons unrelated to the code.
+This route uses built-in defaults. A personal `judgeModelOverrides` entry naming a model outside the injected snapshot would otherwise mark that arm unavailable and fail the check for reasons unrelated to the code.
 
 The harness performs no provider call and owns no credential. Pi runtime integration is covered separately by the input-handler fixtures that stub `modelRegistry.complete()` and reject raw network access.
 
@@ -158,7 +162,7 @@ The harness performs no provider call and owns no credential. Pi runtime integra
 
 Strict compiler, lint, and coverage checks prevent new dynamic-data shortcuts from weakening router guarantees.
 
-`npm run typecheck` enables strict mode, exact optional properties, unchecked-index diagnostics, unused checks, fallthrough checks, and no-emit compilation. Development dependencies follow latest coding-agent, pi-ai, and TUI releases, with tested resolutions recorded in the lockfile. Runtime installation uses peer instances supplied by Pi; coding-agent and pi-ai must be 0.86 or newer. Biome rejects explicit `any` in runtime source. `npm run test:coverage` requires at least 40% lines, 55% branches, and 52% functions from the focused unit fixtures. Package `prepack` runs `test:unit` plus type checking; the separate smoke is also deterministic and offline.
+`npm run typecheck` enables strict mode, exact optional properties, unchecked-index diagnostics, unused checks, fallthrough checks, and no-emit compilation. Development dependencies follow latest coding-agent, pi-ai, and TUI releases, with tested resolutions recorded in the lockfile. Runtime installation uses peer instances supplied by Pi; coding-agent and pi-ai must be 0.87.1 or newer. Biome rejects explicit `any` in runtime source. `npm run test:coverage` requires at least 40% lines, 55% branches, and 52% functions from the focused unit fixtures. Package `prepack` runs `test:unit` plus type checking; the separate smoke is also deterministic and offline.
 
 ## Current coverage gaps
 

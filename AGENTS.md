@@ -83,8 +83,9 @@ publish-npm.yml --repo sharaf-nassar/proper-pi-extensions --env npm-release`.
 - Router self-registers the `llm-router/auto` placeholder at load; a
   manual models.json entry is optional. Its port-1 URL is an intentional
   dead placeholder, not a service.
-- Toolchain: Node 22.19+, Pi 0.87.1 compatibility (proper-compact and
-  proper-model-prompts require 0.87.0), TypeScript 6.
+- Toolchain: Node 22.19+, Pi 0.87.1 compatibility (proper-llm-router and
+  proper-pacify require 0.87.1, whose catalog has their default models;
+  proper-compact and proper-model-prompts require 0.87.0), TypeScript 6.
 - proper-compact and proper-model-prompts are not published yet. Their first
   releases require maintainer authentication and subsequent npm
   trusted-publisher registration. No global installation or provider inference

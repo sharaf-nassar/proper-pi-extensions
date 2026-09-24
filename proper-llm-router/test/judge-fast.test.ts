@@ -21,11 +21,11 @@ after(() => {
 const models = [
 	"claude-haiku-4-5",
 	"claude-sonnet-5",
-	"claude-opus-5",
-	"claude-fable-5",
-	"gpt-5.6-luna",
-	"gpt-5.6-terra",
-	"gpt-5.6-sol",
+	"claude-opus-5-5",
+	"claude-fable-5-1",
+	"gpt-6-luna",
+	"gpt-6-sol",
+	"gpt-6-astra",
 ].map((id) => ({
 	provider: "cliproxyapi",
 	id,
@@ -53,7 +53,7 @@ function inputHandler() {
 test("defaults pin refine to the high-judgment arm", () => {
 	const defaults = loadConfig("/__proper-llm-router-missing-config__.json");
 	assert.deepEqual(defaults.commandPins.refine, {
-		model: "claude-fable-5",
+		model: "claude-fable-5-1",
 		effort: "xhigh",
 	});
 });
@@ -72,13 +72,17 @@ test("CPA judge uses Pi registry auth and forwards fast mode", async () => {
 
 	// both CPA- and OpenAI-flavoured Codex Responses ids must take the
 	// "required" toolChoice branch, so the judge entry's api varies per run
-	const judgeEntry = models.find((model) => model.id === "gpt-5.6-terra");
+	const judgeEntry = models.find((model) => model.id === "gpt-6-sol");
 	assert.ok(judgeEntry);
-	const run = async (fast: boolean, api = "cliproxyapi-codex-responses") => {
+	const run = async (
+		fast: boolean,
+		api = "cliproxyapi-codex-responses",
+		model = defaults.judge.model,
+	) => {
 		judgeEntry.api = api;
 		saveConfig({
 			...defaults,
-			judge: { ...defaults.judge, fast },
+			judge: { ...defaults.judge, fast, model },
 		});
 		await handler(
 			{ text: "implement a specified parser", images: [] },
@@ -98,7 +102,7 @@ test("CPA judge uses Pi registry auth and forwards fast mode", async () => {
 									type: "toolCall",
 									name: "route_model",
 									arguments: {
-										model: "gpt-5-6-terra",
+										model: "gpt-6-sol",
 										rationale: "fixture",
 									},
 								},
@@ -115,18 +119,25 @@ test("CPA judge uses Pi registry auth and forwards fast mode", async () => {
 		await run(true);
 		await run(false);
 		await run(false, "openai-codex-responses");
+		await run(false, "cliproxyapi-codex-responses", "claude-opus-5-5");
 	} finally {
 		globalThis.fetch = originalFetch;
 	}
 
-	assert.equal(captured.length, 3);
+	assert.equal(captured.length, 4);
 	assert.equal(captured[0]?.model.provider, "cliproxyapi");
-	assert.equal(captured[0]?.model.id, "gpt-5.6-terra");
+	assert.equal(captured[0]?.model.id, "gpt-6-sol");
 	assert.equal(captured[0]?.options.serviceTier, "priority");
 	assert.equal(captured[0]?.options.toolChoice, "required");
 	assert.equal("serviceTier" in (captured[1]?.options ?? {}), false);
 	assert.equal(captured[1]?.options.toolChoice, "required");
 	assert.equal(captured[2]?.options.toolChoice, "required");
+	// CPA's provider implements only streamSimple, which reads `reasoning`
+	assert.equal(captured[1]?.options.reasoningEffort, "medium");
+	assert.equal(captured[1]?.options.reasoning, "medium");
+	// Claude 5.1+ rejects forced tools, and CPA passes the 400 through
+	assert.equal(captured[3]?.model.id, "claude-opus-5-5");
+	assert.equal(captured[3]?.options.toolChoice, "auto");
 });
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Legacy auth config migration]]

@@ -9,11 +9,11 @@ const targets = {
 		id: "claude-haiku-4-5-20251001",
 	},
 	"claude-sonnet-5": { provider: "cliproxyapi", id: "claude-sonnet-5" },
-	"claude-opus-5": { provider: "cliproxyapi", id: "claude-opus-5" },
-	"claude-fable-5": { provider: "cliproxyapi", id: "claude-fable-5" },
-	"gpt-5-6-luna": { provider: "cliproxyapi", id: "gpt-5.6-luna" },
-	"gpt-5-6-terra": { provider: "cliproxyapi", id: "gpt-5.6-terra" },
-	"gpt-5-6-sol": { provider: "cliproxyapi", id: "gpt-5.6-sol" },
+	"claude-opus-5-5": { provider: "cliproxyapi", id: "claude-opus-5-5" },
+	"claude-fable-5-1": { provider: "cliproxyapi", id: "claude-fable-5-1" },
+	"gpt-6-luna": { provider: "cliproxyapi", id: "gpt-6-luna" },
+	"gpt-6-sol": { provider: "cliproxyapi", id: "gpt-6-sol" },
+	"gpt-6-astra": { provider: "cliproxyapi", id: "gpt-6-astra" },
 };
 
 // Separate file from quota-rate-limit.test.ts: armAvailability caches
@@ -61,8 +61,8 @@ test("codex limit_reached blocks the lane while used_percent is low", async () =
 
 	try {
 		const availability = await armAvailability(cfg, targets);
-		assert.equal(availability["gpt-5-6-sol"]?.available, false);
-		assert.equal(availability["gpt-5-6-terra"]?.available, false);
+		assert.equal(availability["gpt-6-astra"]?.available, false);
+		assert.equal(availability["gpt-6-sol"]?.available, false);
 		assert.equal(availability["claude-sonnet-5"]?.available, true);
 	} finally {
 		globalThis.fetch = originalFetch;

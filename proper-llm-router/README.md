@@ -39,6 +39,9 @@ are normal task text unless pinned.
 - The judge model must resolve through Pi's authenticated model registry.
   Qualified and unqualified IDs both use Pi's provider runtime, credentials,
   endpoint, serialization, and one strict `route_model` tool call.
+- Claude judges are told to call `route_model` instead of being forced to,
+  because Claude Fable 5.1 and Opus 5.5 reject forced tool calls on every
+  provider, including CLIProxyAPI. GPT judges are still forced.
 - Custom `openai-completions` judge endpoints must support strict JSON-schema
   tools. Pi's `openai-completions` adapter defaults to `supportsStrictMode:
   false` for unknown endpoints; the router's `route_model` tool requires strict
@@ -56,18 +59,31 @@ are normal task text unless pinned.
 
 | Slot | Intended use |
 | --- | --- |
-| `claude-fable-5` | Ambiguous architecture, protocol work, concurrency, migrations, and unclear scope. |
-| `claude-opus-5` | Cross-component diagnosis, authentication, data-loss risk, and high-impact changes. |
+| `claude-fable-5-1` | Ambiguous architecture, protocol work, concurrency, migrations, and unclear scope. |
+| `claude-opus-5-5` | Cross-component diagnosis, authentication, data-loss risk, and high-impact changes. |
 | `claude-sonnet-5` | Routine multi-file repository work and test suites. |
 | `claude-haiku-4-5` | Localized repository fixes and mechanical edits. |
-| `gpt-5-6-sol` | Subtle standalone correctness, algorithms, and performance work. |
-| `gpt-5-6-terra` | Fully specified standalone functions, endpoints, or classes. |
-| `gpt-5-6-luna` | Trivial or mechanical standalone edits. |
+| `gpt-6-astra` | Novel algorithms, proofs, math-heavy reasoning, and standalone work beyond Sol. |
+| `gpt-6-sol` | Fully specified standalone code, plus subtle correctness, algorithms, and performance work. |
+| `gpt-6-luna` | Trivial or mechanical standalone edits. |
 
 Repository inspection and agentic tool use belong to the Claude lane.
 Self-contained work whose code and specification are already in the prompt can
 use the GPT lane. When two adjacent tiers fit, the judge chooses the stronger
 one.
+
+The September 2026 catalog moves each slot to the newest model in its tier.
+Opus 5.5 replaced Opus 5 at a lower price, and Fable 5.1 replaced Fable 5 at
+the same price. GPT-6 Luna replaced GPT-5.6 Luna. GPT-6 Sol costs slightly
+less than GPT-5.6 Terra and scores about the same as GPT-5.6 Sol, so it takes
+over both of their roles, and GPT-6 Astra adds a stronger GPT tier above it.
+Sonnet 5 and Haiku 4.5 are still Anthropic's newest models in their tiers.
+
+Names of the retired slots (`claude-opus-5`, `claude-fable-5`,
+`gpt-5-6-luna`, `gpt-5-6-terra`, `gpt-5-6-sol`, and their model IDs) still
+work in overrides, pins, and sentinels and select the slot that replaced them.
+The measured exemplars for the new slots come from the models they replaced,
+except `gpt-6-astra`, which has none yet.
 
 ### Availability, quota, and fallback
 
@@ -85,8 +101,8 @@ the threshold as down. Usage is cached for 60 seconds. Without an available
 
 A down slot swaps once to a fixed partner:
 
-- Fable and Sol swap with each other.
-- Opus and Terra swap with each other.
+- Fable and Astra swap with each other.
+- Opus and Sol swap with each other.
 - Sonnet swaps to Luna.
 - Haiku swaps to Luna; Luna swaps to Haiku.
 
@@ -105,11 +121,12 @@ forced routes, swaps, overrides, skipped quota checks, and fallback errors.
 Use a sentinel in a typed prompt or subagent task:
 
 ```text
-[[llm-router: claude-opus-5]] Fix the race in the session cache
+[[llm-router: claude-opus-5-5]] Fix the race in the session cache
 ```
 
-Names can be an arm key, its default model ID, or a unique fragment such as
-`opus` or `sol`. Unknown names are removed and sent to the judge with a warning.
+Names can be an arm key, its default model ID, a retired slot name, or a unique
+fragment such as `opus`, `sol`, or `astra`. Unknown names are removed and sent
+to the judge with a warning.
 
 pi-subagents spawn-time `model` options are overwritten when the child starts
 on `llm-router/auto`. The sentinel is the supported per-child override:
@@ -117,7 +134,7 @@ on `llm-router/auto`. The sentinel is the supported per-child override:
 ```js
 runs.run("retry", {
   agent: "worker",
-  task: "[[llm-router: claude-fable-5]] Diagnose the failed migration",
+  task: "[[llm-router: claude-fable-5-1]] Diagnose the failed migration",
 })
 ```
 
@@ -125,11 +142,11 @@ runs.run("retry", {
 
 | Command | Model | Thinking effort |
 | --- | --- | --- |
-| `/file` | `claude-fable-5` | `xhigh` |
-| `/triage` | `claude-fable-5` | `xhigh` |
-| `/spec` | `claude-fable-5` | `xhigh` |
-| `/refine` | `claude-fable-5` | `xhigh` |
-| `/implement-ready` | `gpt-5-6-sol` | `xhigh` |
+| `/file` | `claude-fable-5-1` | `xhigh` |
+| `/triage` | `claude-fable-5-1` | `xhigh` |
+| `/spec` | `claude-fable-5-1` | `xhigh` |
+| `/refine` | `claude-fable-5-1` | `xhigh` |
+| `/implement-ready` | `gpt-6-sol` | `xhigh` |
 
 Existing `llm-router.json` files that replace `commandPins` must rename a
 custom `backlog` key to `refine`; custom maps are not merged with defaults.
@@ -174,8 +191,9 @@ modified.
 
 ## Install
 
-Use Node 22.19 or newer. The extension and `ultra` compatibility layer are
-tested against Pi 0.87.1 and require Pi 0.86.0 or newer.
+Use Node 22.19 or newer and Pi 0.87.1 or newer, the first release whose
+built-in catalog lists every default model. The extension and `ultra`
+compatibility layer are tested against Pi 0.87.1.
 
 Install the published package:
 
@@ -232,11 +250,11 @@ available, or qualify ambiguous choices:
 ```json
 {
   "judge": {
-    "model": "openai-codex/gpt-5.6-terra"
+    "model": "openai-codex/gpt-6-sol"
   },
-  "fallbackModel": "anthropic/claude-opus-5",
+  "fallbackModel": "anthropic/claude-opus-5-5",
   "judgeModelOverrides": {
-    "claude-fable-5": "anthropic/claude-fable-5"
+    "claude-fable-5-1": "anthropic/claude-fable-5-1"
   }
 }
 ```
@@ -253,10 +271,10 @@ after the corpus has loaded, and quota data may remain cached for 60 seconds.
 | Field | Default | Behavior |
 | --- | --- | --- |
 | `enabled` | `true` | `false` stops automatic startup activation and sentinel help in every session. A session already on `llm-router/auto` can still route. |
-| `judge.model` | `gpt-5.6-terra` | Authenticated Pi model ID or `provider/model-id` used for the judge. |
+| `judge.model` | `gpt-6-sol` | Authenticated Pi model ID or `provider/model-id` used for the judge. |
 | `judge.effort` | `medium` | Judge `reasoning_effort`; `null` omits it. |
 | `judge.fast` | `false` | Sends `service_tier: "priority"` when enabled. |
-| `fallbackModel` | `gpt-5.6-terra` | Model ID or `provider/model-id` used after judged failure and for trivial input such as bare commands. |
+| `fallbackModel` | `gpt-6-sol` | Model ID or `provider/model-id` used after judged failure and for trivial input such as bare commands. |
 | `cpaBase` | `http://127.0.0.1:8317` | CPA base for optional quota-management requests. |
 | `exemplarsPath` | package `exemplars.jsonl` | Optional measured-outcome corpus. |
 | `quotaMaxPct` | `null` | Average lane usage threshold; `null` disables it. |

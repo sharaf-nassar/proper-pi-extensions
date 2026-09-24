@@ -6,7 +6,7 @@ Operating llm-router requires Pi registration, a placeholder provider, and authe
 
 The repository directory and public npm package are both named `proper-llm-router`.
 
-Install the published package with `pi install npm:proper-llm-router`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-llm-router`. The manifest registers `llm-router.ts`, limits the tarball to runtime source, the exemplar corpus, user documentation, and required license notices, and declares Pi's coding-agent, pi-ai, and TUI APIs as host-supplied peers. Coding-agent and pi-ai require 0.86 or newer.
+Install the published package with `pi install npm:proper-llm-router`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-llm-router`. The manifest registers `llm-router.ts`, limits the tarball to runtime source, the exemplar corpus, user documentation, and required license notices, and declares Pi's coding-agent, pi-ai, and TUI APIs as host-supplied peers. Coding-agent and pi-ai require 0.87.1 or newer, the first release whose built-in catalog lists every default model in [[models#Arm catalog]].
 
 Remove any former direct `extensions` entry for `llm-router.ts` so only one package source loads. The extension factory self-registers provider `llm-router` with model `auto` through `pi.registerProvider()`, including a dead port-1 base URL and dummy key, so installation needs no `~/.pi/agent/models.json` edit. Hosts without `registerProvider` fall back to a manual `models.json` placeholder entry with dummy authentication; an existing manual entry composes with the registration and stays harmless.
 

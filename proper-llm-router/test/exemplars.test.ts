@@ -14,10 +14,10 @@ const CORPUS = [
 		"claude-sonnet-5": 1,
 	}),
 	row("write a standalone quicksort implementation with unit tests", {
-		"gpt-5-6-terra": 0.5,
+		"gpt-6-sol": 0.5,
 	}),
 	row("investigate flaky websocket reconnect backoff timing", {
-		"claude-opus-5": 0,
+		"claude-opus-5-5": 0,
 	}),
 ].join("\n");
 
@@ -62,7 +62,7 @@ test("exemplarNote reloads when exemplarsPath changes", async () => {
 				b,
 				row(
 					"tune the garbage collector pause budget for the streaming service",
-					{ "claude-opus-5": 1 },
+					{ "claude-opus-5-5": 1 },
 				),
 			);
 			const base = loadConfig(join(dir, "missing.json"));

@@ -24,7 +24,7 @@ after(() => {
 const directModels = [
 	{
 		provider: "openai-codex",
-		id: "gpt-5.6-terra",
+		id: "gpt-6-sol",
 		api: "openai-codex-responses",
 	},
 	{
@@ -39,12 +39,12 @@ const directModels = [
 	},
 	{
 		provider: "anthropic",
-		id: "claude-opus-5",
+		id: "claude-opus-5-5",
 		api: "anthropic-messages",
 	},
 	{
 		provider: "anthropic",
-		id: "claude-fable-5",
+		id: "claude-fable-5-1",
 		api: "anthropic-messages",
 	},
 ];
@@ -52,22 +52,33 @@ const directModels = [
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]
 test("model targets resolve across configured Pi providers", () => {
 	assert.equal(resolveModelTarget("", directModels), undefined);
-	assert.equal(
-		resolveModelTarget("openai/gpt-5.6-terra", directModels),
-		undefined,
-	);
+	assert.equal(resolveModelTarget("openai/gpt-6-sol", directModels), undefined);
 	assert.deepEqual(
-		resolveModelTarget("claude-opus-5", directModels),
+		resolveModelTarget("claude-opus-5-5", directModels),
 		directModels[3],
 	);
 	assert.deepEqual(
-		resolveModelTarget("anthropic/claude-opus-5", directModels),
+		resolveModelTarget("anthropic/claude-opus-5-5", directModels),
 		directModels[3],
+	);
+	// Copilot spells Claude versions with dots
+	const copilotOpus = {
+		provider: "github-copilot",
+		id: "claude-opus-5.5",
+		api: "anthropic-messages",
+	};
+	assert.deepEqual(
+		resolveModelTarget("claude-opus-5-5", [copilotOpus]),
+		copilotOpus,
 	);
 
 	const withCpa = [
 		...directModels,
-		{ provider: "cliproxyapi", id: "claude-opus-5", api: "openai-responses" },
+		{
+			provider: "cliproxyapi",
+			id: "claude-opus-5-5",
+			api: "openai-responses",
+		},
 		{
 			provider: "cliproxyapi",
 			id: "claude-haiku-4-5-20251001",
@@ -75,7 +86,7 @@ test("model targets resolve across configured Pi providers", () => {
 		},
 	];
 	assert.equal(
-		resolveModelTarget("claude-opus-5", withCpa)?.provider,
+		resolveModelTarget("claude-opus-5-5", withCpa)?.provider,
 		"cliproxyapi",
 	);
 	assert.equal(
@@ -146,7 +157,7 @@ test("first input routes through Pi providers without CPA", async () => {
 								type: "toolCall",
 								name: "route_model",
 								arguments: {
-									model: "claude-opus-5",
+									model: "claude-opus-5-5",
 									rationale: "localized repository fix",
 								},
 							},
@@ -164,7 +175,7 @@ test("first input routes through Pi providers without CPA", async () => {
 		await inputHandler({ text: "fix typo in README.md", images: [] }, ctx);
 		assert.equal(completed, 1);
 		assert.equal(switched?.provider, "anthropic", notices.join("\n"));
-		assert.equal(switched?.id, "claude-opus-5");
+		assert.equal(switched?.id, "claude-opus-5-5");
 	} finally {
 		globalThis.fetch = originalFetch;
 	}
@@ -227,7 +238,7 @@ test("trivial and image-only first inputs use the fallback without a judge call"
 	assert.deepEqual(await inputHandler({ text: "1A 2B", images: [] }, ctx), {
 		action: "continue",
 	});
-	assert.equal(switched?.id, "gpt-5.6-terra");
+	assert.equal(switched?.id, "gpt-6-sol");
 
 	// an unknown sentinel on a trivial reply is still stripped
 	switched = undefined;
@@ -235,7 +246,7 @@ test("trivial and image-only first inputs use the fallback without a judge call"
 		await inputHandler({ text: "[[llm-router: nope]] y", images: [] }, ctx),
 		{ action: "transform", text: "y", images: [] },
 	);
-	assert.equal(switched?.id, "gpt-5.6-terra");
+	assert.equal(switched?.id, "gpt-6-sol");
 
 	const images = [
 		{ type: "image", mimeType: "image/png", data: "fixture-image" },
@@ -246,7 +257,7 @@ test("trivial and image-only first inputs use the fallback without a judge call"
 			const event = { text, images, source };
 			const original = structuredClone(event);
 			assert.deepEqual(await inputHandler(event, ctx), { action: "continue" });
-			assert.equal(switched?.id, "gpt-5.6-terra");
+			assert.equal(switched?.id, "gpt-6-sol");
 			assert.deepEqual(event, original);
 			assert.equal(event.images, images);
 		}
@@ -294,7 +305,7 @@ test("pinned commands switch direct providers without CPA", async () => {
 		},
 	);
 	assert.equal(switched?.provider, "anthropic");
-	assert.equal(switched?.id, "claude-fable-5");
+	assert.equal(switched?.id, "claude-fable-5-1");
 });
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA config fixture]]
@@ -380,7 +391,7 @@ test("config UI preselects values and wraps backward", async () => {
 		},
 	});
 	assert.deepEqual(picks.slice(0, 2), ["Judge", "Model"]);
-	assert.equal(picks[2]?.startsWith("openai-codex/gpt-5.6-terra"), true);
+	assert.equal(picks[2]?.startsWith("openai-codex/gpt-6-sol"), true);
 	assert.deepEqual(picks.slice(3, 5), ["Judge", "Fast"]);
 	assert.equal(picks[5]?.startsWith("off"), true);
 	assert.equal(picks[6], "Done");
@@ -586,7 +597,7 @@ test("routing switch disables globally and re-enables per session", async () => 
 		assert.equal(menus[0]?.[0], "Disable routing (all sessions)");
 		assert.equal(menus[0]?.includes("Enable routing for this session"), false);
 		assert.equal(loadConfig(configPath).enabled, false);
-		assert.deepEqual(switches, ["openai-codex/gpt-5.6-terra"]);
+		assert.deepEqual(switches, ["openai-codex/gpt-6-sol"]);
 		assert.deepEqual(menus[1]?.slice(0, 2), [
 			"Enable routing (all sessions)",
 			"Enable routing for this session",
@@ -645,7 +656,7 @@ test("routing switch disables globally and re-enables per session", async () => 
 		assert.equal(process.env.LLM_ROUTER_ON, undefined);
 		assert.equal(loadConfig(configPath).enabled, true);
 		assert.deepEqual(switches.slice(3), [
-			"openai-codex/gpt-5.6-terra",
+			"openai-codex/gpt-6-sol",
 			"llm-router/auto",
 		]);
 		assert.equal(

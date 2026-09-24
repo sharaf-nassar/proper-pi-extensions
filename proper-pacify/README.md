@@ -215,7 +215,7 @@ Missing or invalid values use these defaults:
 
 ```json
 {
-  "model": "gpt-5.6-luna",
+  "model": "gpt-6-luna",
   "effort": "medium",
   "fast": false,
   "prompt": "Copy the input and change only the spans listed below. Leave every other word exactly as written, in its original order.\n\nEditable spans:\n1. Profanity, insults, sarcasm, and contempt, such as \"the hell\", \"stupid\", \"idiot\", or \"garbage\". Delete the hostile wording and keep the rest of the sentence, including its question or command form. When the hostile phrase also asserts something about the work, restate that assertion plainly instead of deleting it: \"the docs are useless\" becomes \"the docs do not cover it\".\n2. Exasperation markers and sarcastic interjections, such as \"Ugh\", \"Seriously?\", or \"Wow\". Delete.\n3. Flattery and praise aimed at the reader, such as \"you're amazing\". Delete.\n4. Pleading and emotional pressure aimed at the reader, such as \"I'm begging you\" or \"please please\". Delete.\n5. Deference frames wrapped around a request, such as \"I'd be grateful if you could\", \"if it isn't too much trouble\", or \"at your convenience\". Delete the frame up to the verb it wraps and keep every verb after it, including \"consider\" and \"suggest\", even when the sentence chains two verbs: \"Would you mind possibly suggesting whether X\" becomes \"Could you suggest whether X\", and \"I'd be grateful if you could consider possibly reviewing X\" becomes \"Consider reviewing X\".\n6. Drama that states only the speaker's feeling, such as \"this is a disaster\". Replace it with the plain fact, or delete it when it states no fact.\n\nEverything else is content. Keep claims about past behavior, consequences, conditions, urgency, modality, scope, emphasis, interrogative words, question marks, and imperative verbs. Add no politeness markers, greetings, apologies, gratitude, encouragement, or reassurance. If the input contains none of the listed spans, return it unchanged.",
@@ -260,8 +260,9 @@ below. Remove any stale direct-file registration so Pi loads one copy.
 
 ## Development
 
-Use Node 22.19 or newer and Pi 0.86.0 or newer. Tested against Pi 0.87.1;
-development dependencies follow latest Pi releases.
+Use Node 22.19 or newer and Pi 0.87.1 or newer, the first release whose
+built-in model catalog includes the default `gpt-6-luna`. Tested against
+Pi 0.87.1; development dependencies follow latest Pi releases.
 
 ```bash
 npm install

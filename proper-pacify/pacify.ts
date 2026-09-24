@@ -59,7 +59,7 @@ export interface Config {
 }
 
 export const DEFAULTS: Config = {
-	model: "gpt-5.6-luna",
+	model: "gpt-6-luna",
 	effort: "medium",
 	fast: false,
 	prompt: `Copy the input and change only the spans listed below. Leave every other word exactly as written, in its original order.
@@ -484,7 +484,9 @@ export function completionOptions(
 	}
 	return {
 		...options,
-		...(effort ? { reasoningEffort: effort } : {}),
+		// Providers registered with only streamSimple, such as CLIProxyAPI, read
+		// `reasoning` and drop `reasoningEffort`; raw streams read the reverse.
+		...(effort ? { reasoningEffort: effort, reasoning: effort } : {}),
 		...(config.fast ? { serviceTier: "priority" as const } : {}),
 	};
 }

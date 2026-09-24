@@ -27,17 +27,17 @@
  *   "judge": { "model": "...",               // authenticated Pi model
  *              "effort": "medium" | null,
  *              "fast": false },              // priority service tier
- *   "fallbackModel": "gpt-5.6-terra",         // id or provider/id
+ *   "fallbackModel": "gpt-6-sol",             // id or provider/id
  *   "cpaBase": "http://127.0.0.1:8317",       // optional quota management API
  *   "exemplarsPath": ".../exemplars.jsonl",   // optional few-shot corpus
  *   "quotaMaxPct": null,                      // gate: exclude arms >= this % used
  *   "cpaManagementKey": "",                   // plaintext; env fallback below
  *   "cpaManagementKeyEnv": "CPA_MANAGEMENT_KEY",
  *   "judgeModelOverrides": {                  // arm slot -> id or provider/id
- *     "claude-fable-5": "anthropic/claude-fable-5"
+ *     "claude-fable-5-1": "anthropic/claude-fable-5-1"
  *   },
  *   "commandPins": {                          // slash command -> fixed arm,
- *     "file": { "model": "claude-fable-5", "effort": "xhigh" }  // judge skipped
+ *     "file": { "model": "claude-fable-5-1", "effort": "xhigh" }  // judge skipped
  *   }
  * }
  *
@@ -50,7 +50,7 @@
  * targets also use per-account usage through CPA's management api-call
  * passthrough (claude: oauth/usage incl. per-model 7d; codex: wham/usage
  * used_percent). An out-of-quota pick swaps to its fixed cross-lane partner
- * (fable<->sol, opus<->terra, sonnet->luna, haiku<->luna); both sides dead
+ * (fable<->astra, opus<->sol, sonnet->luna, haiku<->luna); both sides dead
  * falls back to fallbackModel. Usage is cached 60s; usage failures skip the
  * threshold gate. The judge always uses one strict Pi model-registry tool call.
  *
@@ -264,11 +264,11 @@ export interface Config {
 const DEFAULTS: Config = {
 	enabled: true,
 	judge: {
-		model: "gpt-5.6-terra",
+		model: "gpt-6-sol",
 		effort: "medium",
 		fast: false,
 	},
-	fallbackModel: "gpt-5.6-terra",
+	fallbackModel: "gpt-6-sol",
 	cpaBase: "http://127.0.0.1:8317",
 	exemplarsPath: path.join(EXTENSION_DIR, "exemplars.jsonl"),
 	quotaMaxPct: null,
@@ -276,11 +276,11 @@ const DEFAULTS: Config = {
 	cpaManagementKeyEnv: "CPA_MANAGEMENT_KEY",
 	judgeModelOverrides: {},
 	commandPins: {
-		file: { model: "claude-fable-5", effort: "xhigh" },
-		triage: { model: "claude-fable-5", effort: "xhigh" },
-		spec: { model: "claude-fable-5", effort: "xhigh" },
-		refine: { model: "claude-fable-5", effort: "xhigh" },
-		"implement-ready": { model: "gpt-5-6-sol", effort: "xhigh" },
+		file: { model: "claude-fable-5-1", effort: "xhigh" },
+		triage: { model: "claude-fable-5-1", effort: "xhigh" },
+		spec: { model: "claude-fable-5-1", effort: "xhigh" },
+		refine: { model: "claude-fable-5-1", effort: "xhigh" },
+		"implement-ready": { model: "gpt-6-sol", effort: "xhigh" },
 	},
 };
 
@@ -323,13 +323,26 @@ export function saveConfig(cfg: Config): void {
 const ARMS = {
 	"claude-haiku-4-5": { model: "claude-haiku-4-5" },
 	"claude-sonnet-5": { model: "claude-sonnet-5" },
-	"claude-opus-5": { model: "claude-opus-5" },
-	"claude-fable-5": { model: "claude-fable-5" },
-	"gpt-5-6-luna": { model: "gpt-5.6-luna" },
-	"gpt-5-6-terra": { model: "gpt-5.6-terra" },
-	"gpt-5-6-sol": { model: "gpt-5.6-sol" },
+	"claude-opus-5-5": { model: "claude-opus-5-5" },
+	"claude-fable-5-1": { model: "claude-fable-5-1" },
+	"gpt-6-luna": { model: "gpt-6-luna" },
+	"gpt-6-sol": { model: "gpt-6-sol" },
+	"gpt-6-astra": { model: "gpt-6-astra" },
 } as const;
 type Arm = keyof typeof ARMS;
+
+// Arm keys retired by the September 2026 catalog update, mapped to the arm
+// that inherited each model's role, so existing overrides, pins, and
+// sentinels keep resolving. GPT-6 Sol matches GPT-5.6 Sol and costs less
+// than Terra, so both of their keys land on it.
+// @lat: [[models#Deterministic names]]
+const RETIRED_ARMS: Record<string, Arm> = {
+	"claude-opus-5": "claude-opus-5-5",
+	"claude-fable-5": "claude-fable-5-1",
+	"gpt-5-6-luna": "gpt-6-luna",
+	"gpt-5-6-terra": "gpt-6-sol",
+	"gpt-5-6-sol": "gpt-6-sol",
+};
 
 export interface ModelTarget {
 	provider: string;
@@ -344,7 +357,9 @@ type ArmTargets = Partial<Record<Arm, ModelTarget>>;
 function modelIdRank(candidate: string, wanted: string): number {
 	const id = candidate.toLowerCase();
 	const target = wanted.toLowerCase();
-	if (id === target) return 0;
+	// Copilot and Cloudflare spell Claude versions with dots (claude-opus-5.5)
+	const dotless = (value: string) => value.replaceAll(".", "-");
+	if (id === target || dotless(id) === dotless(target)) return 0;
 	return id.startsWith(`${target}-`) || id.startsWith(`${target}@`) ? 1 : 2;
 }
 
@@ -412,20 +427,20 @@ function isArm(value: string): value is Arm {
 const CLAUDE_ARMS = new Set([
 	"claude-haiku-4-5",
 	"claude-sonnet-5",
-	"claude-opus-5",
-	"claude-fable-5",
+	"claude-opus-5-5",
+	"claude-fable-5-1",
 ]);
 // Post-verdict availability swap: fixed cross-lane tier pairs. The judge
 // is never menu-filtered; an unavailable pick swaps to its partner (both
 // unavailable -> caller falls back). Luna's return pair is Haiku.
 const SWAP: Record<Arm, Arm> = {
-	"claude-fable-5": "gpt-5-6-sol",
-	"gpt-5-6-sol": "claude-fable-5",
-	"claude-opus-5": "gpt-5-6-terra",
-	"gpt-5-6-terra": "claude-opus-5",
-	"claude-sonnet-5": "gpt-5-6-luna",
-	"claude-haiku-4-5": "gpt-5-6-luna",
-	"gpt-5-6-luna": "claude-haiku-4-5",
+	"claude-fable-5-1": "gpt-6-astra",
+	"gpt-6-astra": "claude-fable-5-1",
+	"claude-opus-5-5": "gpt-6-sol",
+	"gpt-6-sol": "claude-opus-5-5",
+	"claude-sonnet-5": "gpt-6-luna",
+	"claude-haiku-4-5": "gpt-6-luna",
+	"gpt-6-luna": "claude-haiku-4-5",
 };
 
 // ---------------------------------------------------- sentinel override
@@ -436,12 +451,15 @@ const SWAP: Record<Arm, Arm> = {
 // session_start forcing clobbers pi-subagents' --model resolution).
 export const SENTINEL_RE = /\[\[\s*llm-router\s*:\s*([^\]]+?)\s*\]\]/i;
 
-/** Resolve a sentinel model name to an arm key. Accepts arm keys
- * ("gpt-5-6-sol"), default IDs ("gpt-5.6-sol"), or any unique fragment
- * ("sol", "opus"); ambiguous or unknown -> null. Pure — see smoke.ts. */
+/** Resolve a sentinel model name to an arm key. Accepts arm keys and
+ * default IDs ("claude-opus-5-5", dotted "claude-opus-5.5"), retired arm
+ * keys and IDs ("gpt-5.6-sol"), or any unique fragment ("sol", "opus");
+ * ambiguous or unknown -> null. Pure — see smoke.ts. */
 export function resolveArm(name: string): Arm | null {
 	const normalized = name.trim().toLowerCase().replace(/[\s.]/g, "-");
 	if (isArm(normalized)) return normalized;
+	const successor = RETIRED_ARMS[normalized];
+	if (successor) return successor;
 	const hits = (Object.keys(ARMS) as Arm[]).filter(
 		(arm) => arm.includes(normalized) || normalized.includes(arm),
 	);
@@ -571,15 +589,17 @@ escalate when scope is ambiguous or reasoning is deep.
     - claude-haiku-4-5   (fast: narrow, well-reproduced repo fixes and
                           mechanical in-repo edits)
     - claude-sonnet-5    (balanced: routine multi-file work, test suites)
-    - claude-opus-5      (powerful: cross-component diagnosis, high
+    - claude-opus-5-5    (powerful: cross-component diagnosis, high
                           blast-radius refactors)
-    - claude-fable-5     (frontier: architecture, ambiguous scope)
+    - claude-fable-5-1   (frontier: architecture, ambiguous scope)
   harness: codex (cheapest first) — self-contained/algorithmic lane
-    - gpt-5-6-luna       (fast: trivial edits to code given in the prompt)
-    - gpt-5-6-terra      (balanced: implementing well-specified functions,
-                          endpoints, or classes from a clear spec)
-    - gpt-5-6-sol        (powerful: hard algorithmic work, performance
-                          optimization, tricky single-file logic)
+    - gpt-6-luna         (fast: trivial edits to code given in the prompt)
+    - gpt-6-sol          (balanced: implementing well-specified functions,
+                          endpoints, or classes from a clear spec; hard
+                          algorithmic work, performance optimization,
+                          tricky single-file logic)
+    - gpt-6-astra        (frontier: novel algorithms, proof- or
+                          math-heavy reasoning, work beyond gpt-6-sol)
 
 Lane rule (measured, not stylistic): any task that requires working
 inside an existing repository or project (bug fix, feature, tests,
@@ -591,9 +611,9 @@ or edits to code pasted into the task.
 
 Tier boundaries (apply in order, first match wins):
 1. Concurrency/distributed correctness, protocol or migration design, or
-   scope you cannot pin down from the prompt -> claude-fable-5.
+   scope you cannot pin down from the prompt -> claude-fable-5-1.
 2. Diagnosing behavior across components/services, or changes with high
-   blast radius (auth, data loss, hot paths) -> claude-opus-5. Routine
+   blast radius (auth, data loss, hot paths) -> claude-opus-5-5. Routine
    multi-file work with clear scope does NOT need opus (sonnet measured
    reliable on 82% of opus-passing tasks) -> claude-sonnet-5.
 3. Repo bug fix or small feature with a clear reproduction/description
@@ -601,13 +621,15 @@ Tier boundaries (apply in order, first match wins):
    on 59% of agentic repo fixes, covering 77% of what sonnet passes).
    Vague report, several suspect areas, or touches tests+docs+code
    together -> claude-sonnet-5.
-4. Self-contained single-file work where correctness is subtle
-   (boundary conditions, complexity bounds, performance targets)
-   -> gpt-5-6-sol.
-5. Implementation fully specified and mechanical -> gpt-5-6-terra
-   (or claude-sonnet-5 if it must integrate into a repo).
+4. Self-contained work that needs a novel algorithm, a proof, or a
+   math-heavy derivation, or whose similar measured tasks show
+   gpt-6-sol failing -> gpt-6-astra.
+5. Self-contained single-file work where correctness is subtle
+   (boundary conditions, complexity bounds, performance targets), or
+   an implementation that is fully specified -> gpt-6-sol (or
+   claude-sonnet-5 if it must integrate into a repo).
 6. Mechanical one-line/one-symbol edits: inside a repo
-   -> claude-haiku-4-5; on pasted/standalone code -> gpt-5-6-luna.
+   -> claude-haiku-4-5; on pasted/standalone code -> gpt-6-luna.
 
 Tie-break: when torn between two adjacent tiers, ALWAYS pick the higher
 tier (quality-first).
@@ -761,16 +783,16 @@ async function fetchJson<T = unknown>(
 // used_percent per rate-limit window. All values are 0-100 (they feed
 // the management panel's percent meters directly).
 const CLAUDE_WINDOW_ARMS: Record<string, string> = {
-	seven_day_opus: "claude-opus-5",
+	seven_day_opus: "claude-opus-5-5",
 	seven_day_sonnet: "claude-sonnet-5",
-	iguana_necktie: "claude-fable-5", // CPA panel maps this key to "seven-day-fable"
+	iguana_necktie: "claude-fable-5-1", // CPA panel maps this key to "seven-day-fable"
 };
 // The window objects above are often null; the authoritative per-model
 // percentages live in the limits[] array, scoped by model display name
 // (probed live 2026-08-15: weekly_scoped percent=85 scope.model "Fable").
 const CLAUDE_MODEL_ARMS: Record<string, string> = {
-	fable: "claude-fable-5",
-	opus: "claude-opus-5",
+	fable: "claude-fable-5-1",
+	opus: "claude-opus-5-5",
 	sonnet: "claude-sonnet-5",
 	haiku: "claude-haiku-4-5",
 };
@@ -1320,12 +1342,20 @@ function registryJudgeRunner(
 					);
 			} else {
 				options.reasoningEffort = cfg.judge.effort;
+				// Providers registered with only streamSimple, such as CLIProxyAPI,
+				// read the simple option and drop reasoningEffort.
+				options.reasoning = cfg.judge.effort;
 			}
 		}
 		if (cfg.judge.fast) options.serviceTier = "priority";
-		if (hasApi(model, "anthropic-messages")) {
+		// Strict arguments plus the validated retry loop retain the verdict
+		// contract wherever the tool cannot be forced.
+		if (model.id.toLowerCase().includes("claude")) {
+			// Claude 5.1 and later reject forced tool use through every transport
+			// (CPA returns the upstream 400), and thinking Claude models can too.
+			options.toolChoice = "auto";
+		} else if (hasApi(model, "anthropic-messages")) {
 			// Manual thinking and managed-effort models can reject forced tools.
-			// Strict arguments plus the validated retry loop retain the verdict contract.
 			options.toolChoice =
 				options.thinkingBudgetTokens !== undefined ||
 				model.compat?.supportsMidConvoEffort
@@ -1588,10 +1618,10 @@ export default function (pi: ExtensionAPI) {
 		"Spawned subagents are model-routed automatically per task; a model= option in the " +
 		"spawn call is ignored. To pin a model on one spawn (e.g. retrying a failed task on " +
 		'a stronger model), prefix that task string with "[[llm-router: <model>]]", e.g. ' +
-		'task: "[[llm-router: claude-opus-5]] Fix the race in …". The marker is stripped ' +
+		'task: "[[llm-router: claude-opus-5-5]] Fix the race in …". The marker is stripped ' +
 		"before the child sees it. Models, weakest to strongest: repo/agentic work — " +
-		"claude-haiku-4-5, claude-sonnet-5, claude-opus-5, claude-fable-5; self-contained/" +
-		"algorithmic work — gpt-5.6-luna, gpt-5.6-terra, gpt-5.6-sol.";
+		"claude-haiku-4-5, claude-sonnet-5, claude-opus-5-5, claude-fable-5-1; self-contained/" +
+		"algorithmic work — gpt-6-luna, gpt-6-sol, gpt-6-astra.";
 	pi.on("before_agent_start", (event) => {
 		if (!routingEnabled(loadConfig())) return;
 		if (

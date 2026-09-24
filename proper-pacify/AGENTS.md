@@ -14,7 +14,8 @@ Beads (`bd`) is managed from the repository root.
 
 Pi loads `pacify.ts` through this package's `pi` manifest. There is no build
 step. Pi supplies coding-agent, pi-ai, and pi-tui as peer packages. Coding-agent
-and pi-ai require 0.86 or newer; development dependencies follow latest.
+and pi-ai require 0.87.1 or newer, the first release whose built-in catalog
+includes the default `gpt-6-luna`; development dependencies follow latest.
 
 ```bash
 npm test

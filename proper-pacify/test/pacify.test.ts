@@ -48,7 +48,7 @@ type TerminalInputHook =
 const models = [
 	{
 		provider: "openai-codex",
-		id: "gpt-5.6-luna",
+		id: "gpt-6-luna",
 		api: "openai-codex-responses",
 		reasoning: true,
 		thinkingLevelMap: {
@@ -63,7 +63,7 @@ const models = [
 	},
 	{
 		provider: "cliproxyapi",
-		id: "gpt-5.6-luna",
+		id: "gpt-6-luna",
 		api: "openai-responses",
 		reasoning: true,
 		thinkingLevelMap: {
@@ -125,9 +125,9 @@ test("configuration and model resolution stay deterministic", () => {
 		resolveModel("anthropic/claude-haiku-4-5", models)?.provider,
 		"anthropic",
 	);
-	assert.equal(resolveModel("gpt-5.6-luna", models)?.provider, "cliproxyapi");
+	assert.equal(resolveModel("gpt-6-luna", models)?.provider, "cliproxyapi");
 	assert.equal(
-		resolveModel("gpt-5.6-luna", models, "openai-codex")?.provider,
+		resolveModel("gpt-6-luna", models, "openai-codex")?.provider,
 		"openai-codex",
 	);
 	assert.deepEqual(splitCommandPrefix("/skill:review fix this"), {
@@ -172,7 +172,7 @@ test("pacify sends tone-only instructions and configured request options", async
 	const input = "Fix this now.";
 	const result = await pacifyText(
 		ctx,
-		{ ...DEFAULTS, model: "openai-codex/gpt-5.6-luna", fast: true },
+		{ ...DEFAULTS, model: "openai-codex/gpt-6-luna", fast: true },
 		input,
 		new AbortController().signal,
 	);
@@ -205,6 +205,8 @@ test("pacify sends tone-only instructions and configured request options", async
 	assert.equal(captured[0].context.messages.length, 2);
 	assert.equal(user.images, undefined);
 	assert.equal(captured[0].options.reasoningEffort, "medium");
+	// streamSimple-only providers such as CLIProxyAPI read this field instead
+	assert.equal(captured[0].options.reasoning, "medium");
 	assert.equal(captured[0].options.serviceTier, "priority");
 	assert.equal(captured.length, 1);
 
@@ -278,7 +280,7 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 		configPath,
 		JSON.stringify({
 			...DEFAULTS,
-			model: "openai-codex/gpt-5.6-luna",
+			model: "openai-codex/gpt-6-luna",
 			effort: "minimal",
 			auto: true,
 		}),
@@ -346,7 +348,7 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 	// plus the rewritten argument, which renders as its own user message.
 	assert.deepEqual(entries[0].data, {
 		before: "/skill:review fix this now",
-		model: "openai-codex/gpt-5.6-luna",
+		model: "openai-codex/gpt-6-luna",
 	});
 	// A successful rewrite reports nothing separately: the entry is the progress
 	// indicator, so no notification duplicates the prompt beside it.
@@ -418,7 +420,7 @@ test("commands and auto mode record the prompt and send pacified user text", asy
 	// rewrite itself, so its entry carries the pairing opt-out.
 	assert.deepEqual(entries[2].data, {
 		before: "/file fix this now",
-		model: "openai-codex/gpt-5.6-luna",
+		model: "openai-codex/gpt-6-luna",
 		command: true,
 	});
 	assert.deepEqual(
@@ -571,7 +573,7 @@ test("session commands set automatic mode without touching stored config", async
 	const configPath = join(testDir, "pacify.json");
 	const stored = {
 		...DEFAULTS,
-		model: "openai-codex/gpt-5.6-luna",
+		model: "openai-codex/gpt-6-luna",
 		auto: false,
 	};
 	writeFileSync(configPath, JSON.stringify(stored));
@@ -697,7 +699,7 @@ test("unpacify sends its argument unchanged while automatic mode is on", async (
 		configPath,
 		JSON.stringify({
 			...DEFAULTS,
-			model: "openai-codex/gpt-5.6-luna",
+			model: "openai-codex/gpt-6-luna",
 			auto: true,
 		}),
 	);

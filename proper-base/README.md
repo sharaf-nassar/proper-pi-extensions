@@ -3,18 +3,19 @@
 Baseline [Pi](https://pi.dev) behavior for quieter transcripts, automatic
 session titles, model-preserving `/clear`, project prompt history, prompt
 editing, fullscreen navigation, image handling, cancellation, autocomplete,
-footer layout, and deferred automatic updates.
+footer layout, context-window and Fast-mode control, commit message checks,
+proactive subagent delegation, and deferred automatic updates.
 
 ## User-facing features
 
 ### Sessions and transcript
 
-- Completed tools and errors collapse into separate one-line rows after a run
-  settles. Click one row to expand it, use its `collapse` control to close it,
-  or use Pi's normal tool-output shortcut, Ctrl+O by default, for all rows.
-  Settlement resets Pi's global tool-output state to collapsed. Thoughts,
-  tool-calling text, direct replies, and agent status updates remain fully
-  visible and in their original order.
+- Completed tools and errors collapse into separate one-line rows once later
+  output appears, or when the run settles. In fullscreen mode, click a row to
+  expand it and its `collapse` control to close it. Pi's tool-output shortcut,
+  Ctrl+O by default, expands or collapses every row, and every row returns to
+  collapsed when a run settles. Thoughts, tool-calling text, direct replies,
+  and agent status updates remain fully visible and in their original order.
 - A fresh unnamed session gets a hidden 3 to 7 word title from the first
   successful assistant response. Existing, resumed, and already-named sessions
   keep their names.
@@ -22,8 +23,9 @@ footer layout, and deferred automatic updates.
   thinking level, session Fast setting, and session context window. Global
   Fast and the global context window stay unchanged.
   No messages, name, or branch state carry over.
-- The model you pick in `/model` and the level you pick in `/thinking` become
-  Pi's startup defaults, so the next session opens on them. Pi otherwise saves
+- The model you pick with `/model` or Ctrl+P and the level you pick with
+  `/thinking`, Shift+Tab, or `/model <model> <level>` become Pi's startup
+  defaults, so the next session opens on them. Pi otherwise saves
   those only when you press Ctrl+S in the picker, and because Pi re-derives the
   thinking level from the saved default on every model switch, an unsaved level
   is otherwise lost mid-session at the next `/model` or Ctrl+P.
@@ -33,8 +35,13 @@ footer layout, and deferred automatic updates.
   in `~/.pi/agent/proper-base.json` to turn this off.
 - Prompt-template expansions remain model-facing, while the transcript shows
   the slash command you typed, such as `/implement-ready epic-1 4`.
-- CLIProxyAPI `empty_stream` failures become normal retryable network errors, so
-  Pi applies its existing retry budget and backoff.
+- `/resume` builds its session list from a raw byte scan of each session file
+  instead of parsing every message, then loads message text in the background.
+  Search matches session names, IDs, and working directories at once, and
+  message text as it arrives.
+- CLIProxyAPI `empty_stream` failures and `Selected model is at capacity`
+  overload errors become normal retryable network errors, so Pi applies its
+  existing retry budget and backoff.
 - `/tokens max` raises an OpenAI model's context window from its 272K default
   to the backend's 922K input cap for this session, through `openai-codex`,
   CLIProxyAPI, or the `openai` API. `/tokens default` returns to
@@ -45,6 +52,26 @@ footer layout, and deferred automatic updates.
   Auto-compaction then triggers at the new window minus your `reserveTokens`,
   including per-model `compaction.modelOverrides`. Input above 272K bills at
   the long-context rate.
+
+### Fast mode
+
+With the CLIProxyAPI provider (`@router-for-me/pi-cliproxyapi-provider`),
+proper-base takes over its `/fast` command and splits the priority-tier Fast
+mode into two scopes:
+
+- `/fast` toggles Fast for the current session only. proper-base never saves
+  it, so new, resumed, and reloaded sessions start with it off; `/clear` keeps
+  it.
+- `/fast-global` toggles Fast for every session by saving the provider's
+  `fast` key in `~/.pi/agent/cliproxyapi.json`. Running sessions pick up the
+  change on their next request.
+
+Fast applies when either scope is on, and only to models the provider's
+catalog marks as Fast-capable. Turning one scope off tells you when the other
+still keeps Fast on, and turning Fast on warns when the current model cannot
+use it. While `CLIPROXYAPI_FAST` is set, `/fast-global` refuses to change the
+saved setting and reports the environment value. The footer shows the `fast`
+tag whenever Fast applies to the current model.
 
 ### Automatic updates
 
@@ -108,6 +135,10 @@ directory to forget all proper-base history.
 - Slash-command completion works after whitespace and on later prompt lines.
   It replaces only the active slash segment and ignores slashes inside paths
   and URLs.
+- Accepting a slash command completion opens that command's argument menu
+  right away, such as the model list after `/model`.
+- Word and line deletes (Alt+Backspace, Ctrl+W, Ctrl+U, Ctrl+K) refresh an
+  open menu instead of leaving suggestions for text that no longer exists.
 - `/model ` results sort by displayed model ID in descending numeric-aware
   order. Typed terms must all match when strict matches exist.
 - `/model` takes an optional thinking level after the model name, as in
@@ -133,18 +164,26 @@ Enable Pi's native fullscreen mode with `/settings` or:
 }
 ```
 
-proper-base keeps the prompt, queued messages, status, widgets, and footer
-pinned while Pi scrolls the transcript above them.
+Pi keeps the prompt, queued messages, status, and footer pinned while the
+transcript scrolls above them. Submitting a prompt scrolls the transcript back
+to the newest output.
 
 | Input | Behavior in fullscreen mode |
 | --- | --- |
 | Home, End, PageUp, PageDown | Stay assigned to the prompt editor. |
 | Ctrl+Shift+Home or End | Jump the transcript to its top or bottom. |
 | Ctrl+Shift+PageUp or PageDown | Scroll the transcript by one page. |
+| Mouse wheel | Scroll three lines per notch instead of Pi's one. |
+| Double-click | Select a complete one-line URL, path, flag, qualified identifier, or quoted value when possible. |
 
+Set `PROPER_WHEEL_SCROLL_LINES` to a positive integer to change the wheel step,
+for example `1` in a terminal that already sends one report per scrolled line.
 Wheel and transcript scroll keys keep working while an `ask_user_question`
 questionnaire or other overlay has focus, so earlier context stays reachable.
-| Double-click | Select a complete one-line URL, path, flag, qualified identifier, or quoted value when possible. |
+
+Typing or pasting clears a mouse selection, so a stale highlight never sits
+over changing text. The copy shortcut leaves the selection in place, so it can
+still be copied.
 
 Copying fullscreen Markdown paragraphs and blockquotes removes display margins,
 quote borders, and screen-width line breaks. Real newlines, paragraph boundaries,
@@ -165,6 +204,16 @@ the viewport between your own prompts. Clicking `↓` past the last prompt scrol
 to the bottom. While you are scrolled up, a dimmer `position/total` reading sits
 centred under the arrows and counts the prompts in the session; it disappears
 once the viewport is following output again.
+
+A column of colored symbols along the transcript's right edge marks each
+prompt, reply, and tool call in session order, newest at the bottom. `›` marks
+your prompts, `‹` replies, and `×` failures. Tools show `/` for search, `≡`
+for reads, `±` for edits, `+` for writes, `$` for shell commands, `@` for web
+requests, `&` for agents, and `·` for anything else. Click a symbol to scroll
+to that action. The action the viewport sits in shows in inverse video. At
+rest the rail is faint and gives way to transcript text in its column, and
+hovering it brings it to full strength with each action's name. Under a
+terminal multiplexer, where Pi receives no hover events, it stays fully lit.
 
 Pi 0.85.0 moves the prompt cursor to wherever you click in the prompt. If you
 click the prompt area to focus the terminal or to select text, turn off
@@ -190,11 +239,22 @@ inverse-highlights the complete marker; Backspace removes the whole highlighted
 token. On submit, each marker expands back to the original path the agent can
 read.
 
-Under `TERM_PROGRAM=Scribe`, proper-base enables Kitty capability before Pi's
-renderer starts. Other terminals keep Pi's detected capabilities. Images remain
-in model context for every tool loop in the turn that introduced them. A later
-user message replaces older image blocks only in the outbound context copy, so
-saved sessions, exports, resumes, and branches retain the originals.
+Images remain in model context for every tool loop in the turn that introduced
+them. A later user message replaces older image blocks only in the outbound
+context copy, so saved sessions, exports, resumes, and branches retain the
+originals.
+
+Under `TERM_PROGRAM=Scribe`, proper-base enables Kitty images and OSC 8
+hyperlinks before Pi's renderer starts, so previews render and Ctrl+click on
+any row of a wrapped link opens the full URL. Other terminals keep Pi's
+detected capabilities. Every row of a wrapped link carries the same OSC 8 id,
+so terminals that group links by id highlight and open it as one link.
+
+On Linux, proper-base reads clipboard text through `wl-paste`, `xclip`, or
+`xsel`, the tools Pi already uses to copy, instead of Pi's native clipboard
+addon. That addon leaks two X connections on every read, and a long session
+eventually hits the X server's client limit, after which paste silently stops
+working. Image paste is unchanged, and macOS and Windows keep the addon.
 
 ### Skill context
 
@@ -213,6 +273,43 @@ cannot re-trigger the compaction that just ran. Restoration honors the latest
 context edit on the active branch: omitted or replaced skill text is not
 resurrected, while replacement skill bodies remain eligible. Only the outbound copy changes,
 so saved sessions, exports, resumes, and branches retain the originals.
+
+### Commit message guard
+
+proper-base checks each `git commit` the agent runs through the `bash` or
+`quill_execute` tool, and blocks the call unless all of these hold:
+
+- The command is one direct `git commit` call. Chains (`&&`, `||`, `;`, `|`),
+  wrappers such as `sh -c`, `env`, `sudo`, or `timeout`, variable-assignment
+  prefixes, and dynamic text (`$(...)`, backticks, `$VAR`) are rejected.
+- The message comes only from literal `-m` or `--message` text. `-F`, `-e`,
+  `-c`, `-C`, `-t`, `-s`, `--fixup`, `--squash`, `--trailer`, `--cleanup`,
+  `--allow-empty-message`, and `--no-verify` are rejected.
+- The subject and every body line fit in 72 columns, the second line is blank,
+  and no line carries a `Co-Authored-By`, `noreply@anthropic`, or
+  `Generated with Claude` attribution. A final block of `Key: value` trailers
+  may exceed the length limit.
+
+A blocked call lists every problem at once, so the agent can fix the whole
+message in one retry. Commands that do not contain both `git` and `commit` skip
+the check, and a commit command the guard cannot parse is blocked. There is no
+setting to turn the guard off.
+
+### Proactive delegation
+
+When pi-subagents' `subagent` tool is active, proper-base replaces its rule to
+delegate only when needed with a proactive multi-agent mode. The agent hands
+independent work that is large enough to justify a fresh context to subagents
+without waiting to be asked. It keeps sequential steps, small tasks, and edits
+to the same area in the main session, and writes the final answer itself. Your
+own instructions still take priority.
+
+If the session has scoped models (from `--models`, `enabledModels`, or
+`/scoped-models`), the prompt names them as the only models subagents may use
+and asks the agent to pick one per task by difficulty and cost. The
+`llm-router/auto` placeholder is left out. Sessions without the `subagent`
+tool keep their system prompt unchanged. Set `"proactiveDelegation": false` in
+`~/.pi/agent/proper-base.json` to keep pi-subagents' ask-first policy.
 
 ### Footer
 
@@ -247,6 +344,31 @@ This package replaces the former local `proper-customs` identity. Keep only one
 registration. Existing data under the legacy `proper-history` path remains
 compatible.
 
+## Configuration
+
+proper-base needs no configuration. Optional settings live in
+`~/.pi/agent/proper-base.json`, and a missing or unreadable file keeps every
+default.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `stickyDefaults` | `true` | `false` stops model and thinking choices from becoming Pi's startup defaults. |
+| `contextTokens` | unset | Global `/tokens` window, `"max"` or `"default"`. `/tokens <mode> global` writes it. |
+| `sessionRail` | `true` | Shows the session action rail. Toggle it with `Session action rail` in `/settings`. |
+| `editorMouse` | `true` | Lets prompt clicks move the cursor. Toggle it with `Prompt mouse clicks` in `/settings`. |
+| `proactiveDelegation` | `true` | `false` keeps pi-subagents' ask-first delegation policy. |
+
+The **Automatic updates** entry in `/settings` is stored separately, as
+described in [UPDATES.md](./UPDATES.md#disable).
+
+| Environment variable | Effect |
+| --- | --- |
+| `PROPER_WHEEL_SCROLL_LINES` | Lines per mouse-wheel notch in fullscreen mode. Default `3`. |
+| `PROPER_UPDATER_OFF=1` | Skips automatic updates for one launch, like `--no-auto-update`. |
+| `CLIPROXYAPI_FAST` | The provider's Fast override. While it is set, `/fast-global` refuses to write. |
+| `CLIPROXYAPI_PROVIDER_ID` | Provider ID that Fast mode and `/tokens` treat as CLIProxyAPI. Otherwise `providerId` from `cliproxyapi.json`, then `cliproxyapi`. |
+| `TERM_PROGRAM=Scribe` | Set by the Scribe terminal. Enables Kitty image previews and OSC 8 links. |
+
 ## Compatibility
 
 Restart Pi once when upgrading from releases with permanent host patches.
@@ -261,7 +383,6 @@ New installations restore owned patches on unload and support reload takeover.
   disable individual enhancements; later-loaded replacements still win.
 - Ctrl+Shift fullscreen keys require a terminal that reports modifiers
   distinctly.
-- proper-base has no extension-specific runtime config file or feature toggles.
 - Slash commands beginning with `__proper-` are reserved for internal session
   recovery.
 

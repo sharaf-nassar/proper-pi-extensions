@@ -16,7 +16,7 @@ An immutable instruction requires preservation of facts, requests, constraints, 
 
 The user-configured tone prompt is additional guidance. It cannot replace the immutable rules. Each eligible prompt makes one rewrite model call. Aborted, non-stop, or empty responses fail instead of becoming the user prompt.
 
-Raw provider options preserve configured thinking: Anthropic receives adaptive effort or a numeric budget; Bedrock retains its `reasoning` field with bounded budgets; Google receives supported uppercase levels or numeric budgets. Thinking allocations reserve answer room and respect model and estimated context ceilings. Small mapping helpers remain package-local because bundled Pi exposes public module roots, not internal pi-ai option modules. Authentication and transport still belong to the host registry. Requests use Pi 0.86's leading system message followed by the text-only user turn, not legacy top-level context fields; the package therefore requires Pi and pi-ai 0.86 or newer.
+Raw provider options preserve configured thinking: Anthropic receives adaptive effort or a numeric budget; Bedrock retains its `reasoning` field with bounded budgets; Google receives supported uppercase levels or numeric budgets. Other APIs receive the effort as both `reasoningEffort`, which raw streams read, and `reasoning`, which providers registered with only `streamSimple` read; CLIProxyAPI is one, and without that field it silently ran every rewrite at the model's default effort. Thinking allocations reserve answer room and respect model and estimated context ceilings. Small mapping helpers remain package-local because bundled Pi exposes public module roots, not internal pi-ai option modules. Authentication and transport still belong to the host registry. Requests use Pi 0.86's leading system message followed by the text-only user turn, not legacy top-level context fields. The package requires Pi and pi-ai 0.87.1 or newer because the default model first appears in that release's catalog.
 
 ## Rewrite integrity
 
@@ -132,7 +132,7 @@ The configuration menu title appends the active override so the stored value and
 
 The menu selects an authenticated scoped model, model-supported reasoning effort, priority service tier, additional tone prompt, automatic mode, and whether the rendered user message shows the rewrite diff. It filters effort through the model's `thinkingLevelMap`; unsupported stored values clamp to the lowest supported level. Configuration is read before each rewrite.
 
-Missing files, invalid JSON, and invalid field values use built-in defaults; saves create the parent directory. The default model is `gpt-5.6-luna`, effort is `medium`, fast and automatic modes are off, and the diff display is on.
+Missing files, invalid JSON, and invalid field values use built-in defaults; saves create the parent directory. The default model is `gpt-6-luna`, effort is `medium`, fast and automatic modes are off, and the diff display is on.
 
 Default tone guidance enumerates the span categories the model may edit — profanity and contempt, exasperation markers, flattery, pleading, deference frames, and feeling-only drama — and declares everything else content that must be copied verbatim.
 
@@ -174,7 +174,7 @@ The repository directory and public npm package are both named `proper-pacify`.
 
 Install the published package with `pi install npm:proper-pacify`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-pacify`. Installation order does not matter because `Dispatch priority` guarantees ordering at runtime.
 
-The manifest registers `pacify.ts`, limits the tarball to runtime source, user documentation, and the license, and declares Pi's coding-agent, pi-ai, and TUI APIs as host-supplied peers. Coding-agent and pi-ai require 0.86 or newer. Releases run from the repository root with `./tools/release-me/release.sh bump <part> proper-pacify`, which creates the `proper-pacify-vMAJOR.MINOR.PATCH` tag that [[lat#Package releases]] verifies and publishes. The maintainer-authenticated initial publish is done, but the package does not yet trust the release workflow, so npm rejects workflow publishes until that trusted publisher is registered.
+The manifest registers `pacify.ts`, limits the tarball to runtime source, user documentation, and the license, and declares Pi's coding-agent, pi-ai, and TUI APIs as host-supplied peers. Coding-agent and pi-ai require 0.87.1 or newer, the first release whose built-in catalog includes the default `gpt-6-luna`. Releases run from the repository root with `./tools/release-me/release.sh bump <part> proper-pacify`, which creates the `proper-pacify-vMAJOR.MINOR.PATCH` tag that [[lat#Package releases]] verifies and publishes. The maintainer-authenticated initial publish is done, but the package does not yet trust the release workflow, so npm rejects workflow publishes until that trusted publisher is registered.
 
 ## Documentation map
 

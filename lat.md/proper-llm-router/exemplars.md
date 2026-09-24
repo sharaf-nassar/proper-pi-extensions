@@ -6,7 +6,7 @@ The exemplar corpus gives the judge nearby tasks with measured verifier outcomes
 
 Each line of `exemplars.jsonl` is one JSON object with `task_id`, `prompt`, and `rates`.
 
-`prompt` is the prior task text. `rates` maps any evaluated arm to a score where `1.0` means reliable, a positive value below `1.0` means flaky, and `0.0` means failure. The current corpus uses only `0`, `0.5`, and `1`. Rows may contain one lane or all seven arms.
+`prompt` is the prior task text. `rates` maps any evaluated arm to a score where `1.0` means reliable, a positive value below `1.0` means flaky, and `0.0` means failure. The current corpus uses only `0`, `0.5`, and `1`. Rows may contain one lane or both; no row rates `gpt-6-astra`.
 
 `task_id` preserves corpus provenance for offline work. Runtime retrieval uses only `prompt` and `rates`.
 
@@ -14,22 +14,25 @@ Each line of `exemplars.jsonl` is one JSON object with `task_id`, `prompt`, and 
 
 The current file contains 112 unique task IDs and 112 unique prompts.
 
-- 54 rows contain only the three Codex arms.
+- 54 rows contain only the two rated Codex arms.
 - 32 rows contain only the four Claude arms.
-- 26 rows contain all seven arms.
-- Claude arms therefore have 58 measured rows each; Codex arms have 80 each.
+- 26 rows contain all six rated arms.
+- Claude arms therefore have 58 measured rows each; rated Codex arms have 80 each.
 
 | Arm | Pass | Flaky | Fail |
 | --- | ---: | ---: | ---: |
-| `claude-fable-5` | 55 | 1 | 2 |
+| `claude-fable-5-1` | 55 | 1 | 2 |
 | `claude-haiku-4-5` | 34 | 7 | 17 |
-| `claude-opus-5` | 51 | 2 | 5 |
+| `claude-opus-5-5` | 51 | 2 | 5 |
 | `claude-sonnet-5` | 43 | 7 | 8 |
-| `gpt-5-6-luna` | 4 | 23 | 53 |
-| `gpt-5-6-sol` | 13 | 31 | 36 |
-| `gpt-5-6-terra` | 2 | 26 | 52 |
+| `gpt-6-luna` | 4 | 23 | 53 |
+| `gpt-6-sol` | 13 | 31 | 36 |
 
-These columns are not all measured on the same tasks: only 26 rows compare all seven arms directly. The corpus-wide totals must not be read as a head-to-head ranking; the rubric's lane rule comes from the repository-task subset. These are routing evidence, not live health or quota data.
+These columns are not all measured on the same tasks: only 26 rows compare all six rated arms directly. The corpus-wide totals must not be read as a head-to-head ranking; the rubric's lane rule comes from the repository-task subset. These are routing evidence, not live health or quota data.
+
+The rows were measured on the previous catalog. Haiku 4.5 and Sonnet 5 rates are their own. The `claude-opus-5-5`, `claude-fable-5-1`, `gpt-6-luna`, and `gpt-6-sol` rates were measured on Opus 5, Fable 5, GPT-5.6 Luna, and GPT-5.6 Sol and moved to the slot that replaced each model. GPT-5.6 Terra's rates were dropped because GPT-6 Sol outscores it, so its failures would understate that slot.
+
+The vendors report each successor at or above its predecessor, except that GPT-6 Sol trails GPT-5.6 Sol on DeepSWE while independent indexes put the two level. The moved rates therefore approximate the current slots rather than measure them.
 
 ## Snapshot maintenance
 
