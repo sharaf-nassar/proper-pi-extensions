@@ -1,10 +1,10 @@
 # proper-base
 
-proper-base combines history, editor, fullscreen, cancellation, footer, provider fast-tier and context-window customizations, and [[auto-updates|deferred automatic updates]].
+proper-base combines history, editor, fullscreen, cancellation, footer, skill context management, provider fast-tier and context-window customizations, and [[auto-updates|deferred automatic updates]].
 
 ## Purpose
 
-The package groups local pi behavior in one extension: session naming and listing, model-preserving clearing, cross-session prompt history, autocomplete details, fullscreen compatibility, footer styling, cancellation, and commit-message gating.
+One extension owns session naming and listing, model-preserving clearing, raw prompt history, skill context management, autocomplete, fullscreen behavior, footer styling, cancellation and commit-message checks.
 
 Pi session messages contain model-facing expansions rather than trustworthy raw input. The extension records editor submissions in a private append-only store and rejects replayed session messages, while keeping autocomplete descriptions compact and visible above the prompt.
 
@@ -23,7 +23,9 @@ The runtime is split by responsibility.
 - `src/overlay-scroll.ts` keeps wheel and viewport-key transcript scrolling working while a capturing overlay such as `ask_user_question` owns focus.
 - `src/jump-to-bottom.ts` renders the scrolled-up jump-to-bottom button as an editor row and claims mouse input ahead of the alternate-screen renderer.
 - `src/prompt-jump.ts` composites previous/next prompt chips, a scrolled-only position reading, and the faint-resting, hover-expanded session action rail of per-type symbols into the transcript viewport, and scrolls between user prompt blocks or to a clicked action.
-- `src/settings.ts` persists proper-base's on/off choices (session action rail, prompt mouse clicks) in the agent directory and splices their toggles into Pi's native settings selector through a guarded container wrapper.
+- `src/settings.ts` persists session-rail, prompt-mouse and skill-context preferences in the agent directory and adds native settings rows through a guarded container wrapper. Writes merge the latest valid configuration and replace it atomically; failed saves retain the displayed value.
+- `src/skills.ts` owns exact catalog-matched command-chain expansion, the `/skill-context` controls, the model's `skill_context` tool, instruction-budget admission and the per-run enable preference. It uses the live Pi session captured by the sticky-defaults adapter rather than scanning for skills independently.
+- `src/skill-context.ts` derives selected snapshots from active-branch messages and control entries, honors context edits, deduplicates full instruction bodies, omits removed or superseded versions and restores missing snapshots without replaying workflow requests. See [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Skill context]].
 - `src/editor-mouse.ts` wraps the editor's mouse handler so, while the prompt mouse setting is off, a left click on the prompt's text rows is consumed without moving the cursor.
 - `src/image-context.ts` replaces prior-turn image blocks in outbound context while leaving current-turn and persisted session content intact.
 - `src/image-preview.ts` enables Kitty and OSC 8 hyperlink capabilities for Scribe before renderer startup, replaces clipboard paths with compact markers, animates Pi's native loader during asynchronous cross-platform `sharp` thumbnailing, retransmits active sources on terminal focus return, renders image previews with source-path fallback, and expands markers before submission.
@@ -48,7 +50,7 @@ The runtime is split by responsibility.
 
 ## Core invariants
 
-These rules preserve history and autocomplete details without destabilizing the editor.
+These rules preserve session state and skill instructions without destabilizing the editor.
 
 1. Only a fresh unnamed session requests a model-generated title; explicit names and branches with a completed assistant response remain unchanged, and title text is bounded and stripped of terminal control characters.
 2. `/clear` uses Pi's native new-session replacement without copying conversation state, then restores the exact outgoing provider and model through a command bound to the replacement extension runtime.
@@ -91,6 +93,8 @@ These rules preserve history and autocomplete details without destabilizing the 
 39. Fullscreen above-editor widgets render inside the transcript document with trailing blank rows dropped, the dock keeps only Pi's one spacer row, regular mode is untouched, and disposal restores the native dock.
 40. Proactive delegation changes the system prompt only when the `subagent` tool is selected for the turn, replaces exactly pi-subagents' two explicit-only sentences while leaving its preflight and safety guidance intact, appends the mode paragraph once with the session's scoped models minus the `llm-router` placeholder as the only permitted child models, and is turned off by `proactiveDelegation: false`.
 
+41. Skill activation recognizes only complete, case-sensitive `/skill:name` tokens in a leading chain whose names match Pi's live catalog. Unknown tokens and URL-like references start literal request text; shorthand spellings are not inferred. Selected full snapshots follow the active branch, explicit controls and context edits. Compaction restores instructions without refreshing files or replaying requests, and budget overflow reports an error instead of silently truncating or evicting a selection. The persistent skill-management toggle restores native behavior when disabled.
+
 ## Clipboard leak guard
 
 At activation on Linux, the extension replaces the two clipboard read entry points that route through pi's bundled `@mariozechner/clipboard` addon.
@@ -105,10 +109,10 @@ macOS and Windows keep the addon untouched: pi implements no subprocess clipboar
 
 Each document owns one runtime concern.
 
-- [lifecycle](./lifecycle.md) — startup, session listing, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, settled transcript detail, transcript widgets, early-cancel recovery, editor composition, fullscreen key routing, wheel scroll rate, overlay transcript scrolling, smart selection, selection dismissal, fast tier scopes, the jump-to-bottom button, the prompt jump chips, the session action rail, prompt mouse clicks, autocomplete details, footer decoration, the sticky startup defaults, the commit message guard, and transient stream retry.
+- [lifecycle](./lifecycle.md): startup, session listing, prompt sources, reverse search, prompt clearing and exit, cursor navigation, image previews and outbound image context, skill selection and compaction recovery, settled transcript detail, transcript widgets, early-cancel recovery, editor composition, fullscreen key routing, wheel scroll rate, overlay transcript scrolling, smart selection, selection dismissal, fast tier scopes, the jump-to-bottom button, the prompt jump chips, the session action rail, prompt mouse clicks, autocomplete details, footer decoration, the sticky startup defaults, the commit message guard, and transient stream retry.
 - [storage](./storage.md) — project paths, JSONL format, permissions, bounded reads, limits, and compaction.
 - [operations](./operations.md) — package identity, installation, runtime requirements, and data removal.
-- [tests](./tests.md) — deterministic history, recorder, autocomplete, fullscreen key routing, footer styling, and real-filesystem store coverage.
+- [tests](./tests.md): deterministic history, recorder, autocomplete, fullscreen key routing, footer styling, skill parsing and lifecycle, native Pi tool/context integration, settings persistence and real-filesystem store coverage.
 
 <!-- lat-index
 - [[lifecycle]] — package index entry

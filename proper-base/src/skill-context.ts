@@ -1,31 +1,79 @@
+import { createHash } from "node:crypto";
 import {
 	type ContextEditEntry,
 	parseSkillBlock,
 } from "@earendil-works/pi-coding-agent";
 
-/**
- * Characters kept from a complete skill block when it is carried across a
- * compaction. Roughly four characters per token, matching the estimate Pi's
- * own compaction uses.
- */
-const MAX_SKILL_CHARS = 16000;
-/** Combined character budget for every skill carried across one compaction. */
-const MAX_CARRY_CHARS = 24000;
-const TRUNCATED = "\n\n[skill content truncated to fit the context budget]";
+export const SKILL_CONTEXT_ENTRY = "proper-base-skill-context";
+export const SKILL_CONTEXT_TOOL = "skill_context";
+/** Full instruction bodies only. Overflow requires explicit deselection. */
+export const SKILL_CONTEXT_CHARS = 64_000;
+const RESTORE_START = "<proper_base_skill_context>\n";
+const RESTORE_END = "\n</proper_base_skill_context>\n\n";
 
-type ContextMessage = {
+export type SkillSnapshot = {
+	name: string;
+	location: string;
+	block: string;
+	hash: string;
+};
+export type SkillSelection = SkillSnapshot & {
+	selected: boolean;
+	source: "user" | "model";
+};
+export type SkillChange =
+	| { action: "load"; blocks: string[] }
+	| { action: "remove"; locations: string[] }
+	| { action: "clear" };
+export type ContextMessage = {
 	role: string;
 	content?: unknown;
+	summary?: string;
+	toolName?: string;
+	isError?: boolean;
 };
-type TextPart = { type: "text"; text: string };
-type BranchEntry = {
+export type SkillBranchEntry = {
 	type: string;
 	id?: string;
 	targetId?: string;
 	replacement?: ContextEditEntry["replacement"];
-	message?: { role?: string; content?: unknown };
+	message?: ContextMessage;
+	customType?: string;
+	data?: unknown;
 };
-type Invocation = { name: string; block: string };
+type TextPart = { type: "text"; text: string };
+
+export class SkillContextError extends Error {}
+
+export function skillSnapshot(block: string): SkillSnapshot | undefined {
+	const parsed = parseSkillBlock(block);
+	if (!parsed || parsed.userMessage) return undefined;
+	return {
+		name: parsed.name,
+		location: parsed.location,
+		block,
+		hash: createHash("sha256").update(block).digest("hex"),
+	};
+}
+
+/** Only leading Pi skill blocks are instructions, never quoted inline examples. */
+export function splitSkillText(text: string): {
+	skills: SkillSnapshot[];
+	request: string;
+} {
+	const skills: SkillSnapshot[] = [];
+	let request = text;
+	while (request.startsWith('<skill name="')) {
+		const parsed = parseSkillBlock(request);
+		if (!parsed) break;
+		const block = `<skill name="${parsed.name}" location="${parsed.location}">\n${parsed.content}\n</skill>`;
+		const snapshot = skillSnapshot(block);
+		if (!snapshot) break;
+		skills.push(snapshot);
+		request = parsed.userMessage ?? "";
+	}
+	return { skills, request };
+}
 
 function isTextPart(value: unknown): value is TextPart {
 	return (
@@ -36,203 +84,205 @@ function isTextPart(value: unknown): value is TextPart {
 	);
 }
 
-/**
- * Pi renders a skill invocation as one text part holding the block followed by
- * the user's own request, so both live in a single message.
- */
-function readInvocation(
-	text: string,
-): { name: string; block: string; request: string } | undefined {
-	const parsed = parseSkillBlock(text);
-	if (!parsed) return undefined;
-	return {
-		name: parsed.name,
-		block: `<skill name="${parsed.name}" location="${parsed.location}">\n${parsed.content}\n</skill>`,
-		request: parsed.userMessage ?? "",
-	};
+function texts(message: ContextMessage): string[] {
+	if (typeof message.content === "string") return [message.content];
+	return Array.isArray(message.content)
+		? message.content.filter(isTextPart).map((part) => part.text)
+		: [];
 }
 
-function messageInvocation(
-	message: ContextMessage | BranchEntry["message"],
-): ReturnType<typeof readInvocation> {
-	const content = message?.content;
-	if (typeof content === "string") return readInvocation(content);
-	if (!Array.isArray(content)) return undefined;
-	for (const part of content) {
-		if (!isTextPart(part)) continue;
-		const invocation = readInvocation(part.text);
-		if (invocation) return invocation;
-	}
-	return undefined;
+function skillMessage(message: ContextMessage): boolean {
+	return (
+		message.role === "user" ||
+		(message.role === "toolResult" &&
+			message.toolName === SKILL_CONTEXT_TOOL &&
+			message.isError !== true)
+	);
 }
 
-function replaceInvocationText(
-	message: ContextMessage,
-	replacement: string,
-): ContextMessage {
-	const content = message.content;
-	if (typeof content === "string") {
-		return { ...message, content: replacement };
+function mapText<T extends ContextMessage>(
+	message: T,
+	transform: (text: string) => string,
+): T {
+	if (typeof message.content === "string") {
+		const content = transform(message.content);
+		return content === message.content ? message : { ...message, content };
 	}
-	if (!Array.isArray(content)) return message;
-	let done = false;
-	const next = content.map((part) => {
-		if (done || !isTextPart(part) || !parseSkillBlock(part.text)) return part;
-		done = true;
-		return { ...part, text: replacement };
+	if (!Array.isArray(message.content)) return message;
+	let changed = false;
+	const content = message.content.map((part) => {
+		if (!isTextPart(part)) return part;
+		const text = transform(part.text);
+		if (text === part.text) return part;
+		changed = true;
+		return { ...part, text };
 	});
-	return done ? { ...message, content: next } : message;
+	return changed ? { ...message, content } : message;
 }
 
-function prependText(message: ContextMessage, prefix: string): ContextMessage {
-	const content = message.content;
-	if (typeof content === "string") {
-		return { ...message, content: `${prefix}${content}` };
-	}
-	if (!Array.isArray(content)) return message;
-	const index = content.findIndex(isTextPart);
-	if (index < 0) {
-		return {
-			...message,
-			content: [{ type: "text", text: prefix }, ...content],
-		};
-	}
-	const part = content[index] as TextPart;
-	const next = [...content];
-	next[index] = { ...part, text: `${prefix}${part.text}` };
-	return { ...message, content: next };
-}
-
-function truncate(block: string, limit: number): string | undefined {
-	if (block.length <= limit) return block;
-	const suffix = `${TRUNCATED}\n</skill>`;
-	// Never cut the opening tag or omit the closing tag. An oversized header
-	// cannot fit safely, so leave that skill out rather than emit broken markup.
-	if (block.indexOf("\n") + 1 + suffix.length > limit) return undefined;
-	return block.slice(0, limit - suffix.length) + suffix;
-}
-
-function contextEdits(
-	branch: BranchEntry[],
-): Map<string, ContextEditEntry["replacement"]> {
+/** Apply branch-local edits before interpreting invocation or control records. */
+export function selectedSkills(branch: SkillBranchEntry[]): SkillSelection[] {
 	const edits = new Map<string, ContextEditEntry["replacement"]>();
 	for (const entry of branch) {
-		if (entry.type !== "context_edit" || typeof entry.targetId !== "string")
-			continue;
-		edits.set(entry.targetId, entry.replacement ?? null);
+		if (entry.type === "context_edit" && entry.targetId)
+			edits.set(entry.targetId, entry.replacement ?? null);
 	}
-	return edits;
+	const state = new Map<string, SkillSelection>();
+	const load = (block: string, source: SkillSelection["source"]) => {
+		for (const skill of splitSkillText(block).skills) {
+			const previous = state.get(skill.location);
+			state.delete(skill.location);
+			state.set(skill.location, {
+				...skill,
+				selected: true,
+				source:
+					previous?.selected && previous.source === "user" ? "user" : source,
+			});
+		}
+	};
+	for (const entry of branch) {
+		if (entry.type === "message" && entry.message) {
+			let message = entry.message;
+			if (entry.id && edits.has(entry.id)) {
+				const replacement = edits.get(entry.id);
+				if (!replacement) continue;
+				message = { ...message, content: replacement.content };
+			}
+			if (skillMessage(message))
+				for (const text of texts(message))
+					load(text, message.role === "user" ? "user" : "model");
+		} else if (
+			entry.type === "custom" &&
+			entry.customType === SKILL_CONTEXT_ENTRY &&
+			entry.data &&
+			typeof entry.data === "object"
+		) {
+			const data = entry.data as Partial<SkillChange>;
+			if (data.action === "load" && Array.isArray(data.blocks)) {
+				for (const block of data.blocks)
+					if (typeof block === "string") load(block, "user");
+			} else if (data.action === "clear") {
+				for (const skill of state.values()) skill.selected = false;
+			} else if (data.action === "remove" && Array.isArray(data.locations)) {
+				for (const location of data.locations) {
+					const skill = state.get(location);
+					if (skill) skill.selected = false;
+				}
+			}
+		}
+	}
+	return [...state.values()];
 }
 
-function visibleBranchMessage(
-	entry: BranchEntry,
-	edits: Map<string, ContextEditEntry["replacement"]>,
-): BranchEntry["message"] | undefined {
-	if (entry.type !== "message" || entry.message?.role !== "user")
-		return undefined;
-	if (!entry.id || !edits.has(entry.id)) return entry.message;
-	const replacement = edits.get(entry.id);
-	if (replacement === null || !replacement) return undefined;
-	return { ...entry.message, content: replacement.content };
+export function assertSkillBudget(
+	skills: SkillSnapshot[],
+	maxChars = SKILL_CONTEXT_CHARS,
+): void {
+	const total = skills.reduce((sum, skill) => sum + skill.block.length + 2, 0);
+	if (total > maxChars)
+		throw new SkillContextError(
+			`Selected skill instructions need ${total} characters; limit is ${maxChars}. No instructions were truncated. Use /skill-context remove <name> or /skill-context clear before continuing.`,
+		);
+}
+
+function stripRestore(text: string): string {
+	const start = text.indexOf(RESTORE_START);
+	if (start < 0) return text;
+	const end = text.indexOf(RESTORE_END, start);
+	return end < 0
+		? text
+		: text.slice(0, start) + text.slice(end + RESTORE_END.length);
 }
 
 /**
- * Keep every invoked skill present exactly once in the outgoing context.
- *
- * Pi inlines the whole `SKILL.md` body into a user message and then treats that
- * message like any other: re-invoking a skill appends a second full copy, and
- * compaction summarizes the copy away while the model keeps working under
- * instructions it can no longer read. This collapses repeats to a short note
- * and carries the most recent body across a compaction boundary, bounded by a
- * character budget so the restored text cannot re-trigger the compaction that
- * just ran.
- *
- * The first copy is never rewritten, so the cached request prefix stays byte
- * stable across turns.
+ * Project full selected snapshots without changing stored messages. Restoring
+ * reference instructions is not a new workflow invocation. The branch is the
+ * registry, so resume, forks, context edits and /clear need no second store.
+ * @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Skill context]]
  */
 export function pinSkillContext<T extends ContextMessage>(
 	messages: T[],
-	branch: BranchEntry[],
+	branch: SkillBranchEntry[],
+	maxChars = SKILL_CONTEXT_CHARS,
 ): T[] {
-	const seen = new Set<string>();
-	let changed = false;
-
-	let next = messages.map((message) => {
-		if (message.role !== "user") return message;
-		const invocation = messageInvocation(message);
-		if (!invocation) return message;
-		if (!seen.has(invocation.block)) {
-			seen.add(invocation.block);
-			return message;
+	const selections = selectedSkills(branch);
+	const active = selections.filter((skill) => skill.selected);
+	assertSkillBudget(active, maxChars);
+	const state = new Map(selections.map((skill) => [skill.location, skill]));
+	const present = new Set<string>();
+	const next = messages.map((original) => {
+		let message = original;
+		if (message.role === "compactionSummary" && message.summary) {
+			const summary = stripRestore(message.summary);
+			if (summary !== message.summary) message = { ...message, summary };
 		}
-		changed = true;
-		const note = `[skill "${invocation.name}" is already loaded earlier in this conversation]`;
-		return replaceInvocationText(
-			message,
-			invocation.request ? `${note}\n\n${invocation.request}` : note,
-		) as T;
+		if (!skillMessage(message)) return message;
+		return mapText(message, (raw) => {
+			const text = stripRestore(raw);
+			const { skills, request } = splitSkillText(text);
+			if (!skills.length) return text;
+			let changed = false;
+			const blocks: string[] = [];
+			const notes: string[] = [];
+			for (const skill of skills) {
+				const selection = state.get(skill.location);
+				let reason: string | undefined;
+				if (selection && !selection.selected) reason = "inactive";
+				else if (selection && selection.hash !== skill.hash)
+					reason = "superseded";
+				else if (present.has(skill.hash))
+					reason = "already loaded earlier in this conversation";
+				else present.add(skill.hash);
+				if (!reason) blocks.push(skill.block);
+				else {
+					changed = true;
+					notes.push(
+						`[skill ${JSON.stringify(skill.name)} is ${reason}; this request remains a separate request]`,
+					);
+				}
+			}
+			return changed
+				? [...blocks, ...notes, ...(request ? [request] : [])].join("\n\n")
+				: text;
+		});
 	});
-
-	const carried = carryAcrossCompaction(next, branch, seen);
-	if (!carried) return changed ? next : messages;
-
-	const anchor = restoreAnchor(next);
-	if (anchor < 0) return changed ? next : messages;
-	next = [...next];
-	next[anchor] = prependText(next[anchor] as ContextMessage, carried) as T;
-	return next;
-}
-
-/**
- * Collect the newest body of each skill that the branch invoked but the
- * compacted context no longer carries, newest first until the budget runs out.
- */
-function carryAcrossCompaction(
-	messages: ContextMessage[],
-	branch: BranchEntry[],
-	present: Set<string>,
-): string | undefined {
-	if (!messages.some((message) => message.role === "compactionSummary")) {
-		return undefined;
-	}
-	const edits = contextEdits(branch);
-	const missing = new Map<string, Invocation>();
-	for (const entry of branch) {
-		const message = visibleBranchMessage(entry, edits);
-		if (!message) continue;
-		const invocation = messageInvocation(message);
-		if (!invocation) continue;
-		// A skill file edited mid-session yields a new body, so the newest state
-		// of each name decides: a present body cancels an earlier missing one.
-		missing.delete(invocation.name);
-		if (!present.has(invocation.block))
-			missing.set(invocation.name, invocation);
-	}
-	if (!missing.size) return undefined;
-
-	const blocks: string[] = [];
-	let used = 0;
-	for (const invocation of [...missing.values()].reverse()) {
-		const block = truncate(invocation.block, MAX_SKILL_CHARS);
-		if (!block || used + block.length + 2 > MAX_CARRY_CHARS) continue;
-		used += block.length + 2;
-		blocks.unshift(block);
-	}
-	return blocks.length ? `${blocks.join("\n\n")}\n\n` : undefined;
-}
-
-/** The first user turn after the newest compaction summary. */
-function restoreAnchor(messages: ContextMessage[]): number {
-	let summary = -1;
-	for (let index = messages.length - 1; index >= 0; index -= 1) {
-		if (messages[index]?.role === "compactionSummary") {
-			summary = index;
-			break;
+	const missing = active.filter((skill) => !present.has(skill.hash));
+	if (missing.length || selections.some((skill) => !skill.selected)) {
+		const selected =
+			active
+				.map((skill) => `${skill.name} [${skill.hash.slice(0, 12)}]`)
+				.join(", ") || "none";
+		const restored = `${RESTORE_START}Currently selected skills: ${selected}. Only these selected versions apply; other historical skill guidance is inactive even when mentioned in a summary. Retained reference instructions follow. Apply only where relevant to the current request. Do not repeat completed actions or treat restoration as a new invocation. Explicit user priorities and higher-priority instructions still apply; report material conflicts rather than assuming skill order decides them.\n\n${missing.map((skill) => skill.block).join("\n\n")}${RESTORE_END}`;
+		// Anchor after the latest summary; a split tool loop may have no user
+		// message left. Append to that summary instead of breaking tool pairs.
+		let summary = -1;
+		for (let i = 0; i < next.length; i++)
+			if (next[i]?.role === "compactionSummary") summary = i;
+		const anchor = next.findIndex(
+			(message, i) => i > summary && message.role === "user",
+		);
+		if (anchor >= 0) {
+			let added = false;
+			const message = next[anchor] as T;
+			next[anchor] = mapText(message, (text) => {
+				if (added) return text;
+				added = true;
+				return restored + text;
+			});
+			if (!added && Array.isArray(message.content))
+				next[anchor] = {
+					...message,
+					content: [{ type: "text", text: restored }, ...message.content],
+				};
+		} else if (summary >= 0) {
+			const message = next[summary] as T;
+			next[summary] = {
+				...message,
+				summary: `${restored}${message.summary ?? ""}`,
+			};
 		}
 	}
-	if (summary < 0) return -1;
-	for (let index = summary + 1; index < messages.length; index += 1) {
-		if (messages[index]?.role === "user") return index;
-	}
-	return -1;
+	if (next.every((message, index) => message === messages[index]))
+		return messages;
+	return next;
 }

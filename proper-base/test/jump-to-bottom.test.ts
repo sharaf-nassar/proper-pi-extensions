@@ -115,6 +115,7 @@ test("sending an interactive prompt follows transcript output", async () => {
 	};
 	const ctx = {
 		cwd,
+		isIdle: () => true,
 		sessionManager: {
 			getBranch: () => [],
 			getSessionFile: () => undefined,

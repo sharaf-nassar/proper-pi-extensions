@@ -22,6 +22,8 @@ proper-base has no install-time scripts. Runtime sticky defaults use Pi's live `
 
 Pi therefore owns its cache, field-level locked save, error handling, and preservation of unrelated settings.
 
+Skill context management is enabled by default. The native settings row and `/skill-context on|off` persist `skillContext` in `proper-base.json`; malformed or unreadable configuration disables it. The preference is latched for each agent run. Selection snapshots and remove/refresh controls live on the current session branch rather than in that global preference file. [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Skill context]] defines invocation, compaction and budget behavior.
+
 The complete environment setup in [PI_SETUP.md](../../PI_SETUP.md) asks the setup agent to merge `subagents.agentOverrides.worker.defaultContext: fresh` when no worker override exists. Existing worker overrides remain user-owned because they may deliberately select forked context.
 
 Fresh worker context avoids replaying the parent transcript and its token cost for self-contained tasks. Current pi-subagents versions sanitize signed Anthropic thinking blocks in forked sessions, so this preference is setup policy rather than a proper-base correctness dependency.

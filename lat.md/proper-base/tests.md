@@ -90,9 +90,21 @@ It supplies user and tool-result images on both sides of a newer user message. E
 
 ## Skill context fixture
 
-A focused fixture verifies invoked skills stay present once in outbound context and survive compaction.
+Focused fixtures verify complete selected skill instructions appear once in outbound context and survive compaction without replaying requests.
 
-It asserts a repeated identical body keeps the first message by reference, so the cached request prefix cannot shift, while the later message retains its request beside an already-loaded note. A changed body returns the context unmodified, proving different arguments still reach the model. A compacted context holding only a summary and a follow-up turn regains the dropped bodies on the first user turn after the summary, in invocation order, without inserting a message; a skill still present is not carried a second time, and a branch with no summary is left alone. Native SessionManager regressions prove `context_edit` omissions and plain replacements do not restore stale raw skill bodies, replacement skill content does survive compaction, and repeated edits use the latest replacement. Native navigation and repeated compaction verify sibling-branch edits cannot leak, post-compaction omissions stay omitted, an array-content replacement can restore a later skill, and original entries remain unchanged. Oversized bodies truncate with intact tags, the 24,000-character combined ceiling includes separators and drops older invocations, plain transcripts return by reference, and repeated runs over one input are byte-identical. An A, B, A sequence proves replacing A refreshes its priority: the latest A survives a budget that excludes B.
+Identical bodies preserve the first message by reference; new requests survive deduplication, and changed snapshots supersede older instructions. Multiple leading blocks, string and array content, non-text attachments, and already-transformed contexts remain deterministic. Native SessionManager fixtures exercise omission, plain replacement, skill replacement, repeated context edits, sibling branches and repeated compaction. Split-turn restoration prefixes the summary without inserting messages between tool calls and results. Custom selection controls and successful managed tool results share the branch-derived state; ordinary read results do not become selections. Over-budget context raises an actionable error rather than truncating or dropping instructions, and stored history remains unchanged.
+
+## Skill management fixture
+
+Native Pi dispatch fixtures verify command-chain expansion, selection controls, snapshots, budgets and the disable fallback without provider inference.
+
+The fixture drives AgentSession prompt, steering and follow-up methods with transport stubbed. It checks multiple skills, repeated names, literal examples, the explicit separator, RPC expansion opt-outs and atomic rejection of ambiguous and unreadable sources. Exact catalog matching is exercised against full and protocol-relative URLs, paths, queries, fragments, filename suffixes, punctuation, quoted/fenced/escaped text, case changes, incomplete names and unsupported shorthand spellings. The first nonmatching token preserves the entire remaining request, including later skill-like text; newline and tab separators between valid names work. Explicit control loads retain atomic unknown-name errors. Undelivered queues do not activate skills. Compaction and adapter replacement retain snapshots while disk changes require explicit refresh. Remove and clear are branch-local, and active-run mutation is refused. The model tool shares snapshot management, respects explicit-only skills and cannot refresh selected versions implicitly. Budget tests cover rejection before persistence and abort on a smaller model window. Disabled mode restores native expansion and bypasses projection, while reenabling restores management without stacked wrappers. Config writes preserve unrelated keys and refuse to overwrite malformed files.
+
+## Skill host fixture
+
+A real Pi session checks catalog access, tool-schema validation, provider-facing context and enable/disable behavior with an offline stream stub.
+
+The fixture uses DefaultResourceLoader, ModelRuntime, AgentSession, ExtensionRunner, SessionManager and the same session-capture adapter as proper-base. A real model tool call loads a second skill through the ordinary validation and execution loop. Subsequent provider requests contain each full body once, compaction restores both snapshots, disabling removes the tool, reenabling restores it, and clearing selections strips bodies and invalidates historical skill guidance without provider inference.
 
 ## Prompt display fixture
 
@@ -202,7 +214,9 @@ Rail cases supply a scripted typed outline. One proves the symbols anchor to the
 
 ## Settings fixture
 
-A fake component tree verifies the `/settings` rail and prompt-mouse toggles without instantiating Pi's selector.
+A fake component tree verifies the native settings rows for the session rail, prompt mouse clicks and skill context management.
+
+Skill preference tests cover persistence, reopening after a command-side change, malformed configuration disabling management, and failed saves preserving the displayed value and original file.
 
 It installs onto a container already holding the editor, mounts a fake `SettingsSelectorComponent`, and proves both toggle items appear once with their persisted values while other mounted components and Pi's native items stay untouched. Toggling through the list's change callback flips only the matching live state, writes `sessionRail` or `editorMouse` to `proper-base.json` while preserving unrelated keys and the sibling toggle, and never reaches Pi's own handler, which native ids still do. A replacement install reads the persisted choices and takes over the wrapper instead of stacking second items, disposal restores the container's native `addChild`, and a missing or damaged config file reads both as enabled.
 

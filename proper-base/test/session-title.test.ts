@@ -112,7 +112,10 @@ test("first response names a fresh session and hides the title marker", async ()
 		);
 		assert.equal(fixture.getName(), "Fix terminal tab title");
 		assert.equal(
-			await beforeAgentStart({ systemPrompt: "next" }, fixture.ctx),
+			await beforeAgentStart(
+				{ systemPromptOptions: { sections: {} } },
+				fixture.ctx,
+			),
 			undefined,
 		);
 	} finally {
@@ -176,7 +179,10 @@ test("a completed response without metadata ends automatic naming", async () => 
 			fixture.ctx,
 		);
 		assert.equal(
-			await beforeAgentStart({ systemPrompt: "next prompt" }, fixture.ctx),
+			await beforeAgentStart(
+				{ systemPromptOptions: { sections: {} } },
+				fixture.ctx,
+			),
 			undefined,
 		);
 	} finally {
@@ -193,7 +199,10 @@ test("automatic naming leaves explicit and established sessions alone", async ()
 			assert.ok(beforeAgentStart);
 			assert.ok(messageEnd);
 			assert.equal(
-				await beforeAgentStart({ systemPrompt: "base" }, fixture.ctx),
+				await beforeAgentStart(
+					{ systemPromptOptions: { sections: {} } },
+					fixture.ctx,
+				),
 				undefined,
 			);
 			await messageEnd(

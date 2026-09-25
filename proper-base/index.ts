@@ -87,7 +87,7 @@ import { installRecorder } from "./src/recorder.ts";
 import { installSelectionDismiss } from "./src/selection-dismiss.ts";
 import { installFastSessionList } from "./src/session-list.ts";
 import { installSettings, type SettingsController } from "./src/settings.ts";
-import { pinSkillContext } from "./src/skill-context.ts";
+import { registerSkillContext } from "./src/skills.ts";
 import { installSmartSelection } from "./src/smart-selection.ts";
 import { stickyDefaultsEnabled } from "./src/startup-defaults.ts";
 import { installStickyDefaultsAdapter } from "./src/sticky-defaults.ts";
@@ -233,6 +233,9 @@ export default function (pi: ExtensionAPI) {
 	);
 	const stickyDefaults = installStickyDefaultsAdapter(() =>
 		stickyDefaultsEnabled(getAgentDir()),
+	);
+	const skills = registerSkillContext(pi, getAgentDir(), (ctx) =>
+		stickyDefaults.session(ctx.sessionManager),
 	);
 
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Fast tier scopes]]
@@ -541,7 +544,9 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.on("input", (event) => {
+	pi.on("input", (event, ctx) => {
+		const blocked = skills.input(event, ctx);
+		if (blocked) return blocked;
 		if (event.source === "interactive") {
 			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Pinned transcript scrolling]]
 			if (event.text.trim()) activeTui?.scrollToBottom?.();
@@ -591,12 +596,8 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Model image context]]
-	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Skill context]]
 	pi.on("context", (event, ctx) => {
-		const messages = pinSkillContext(
-			omitPriorTurnImages(event.messages),
-			ctx.sessionManager.getBranch(),
-		);
+		const messages = skills.transform(omitPriorTurnImages(event.messages), ctx);
 		if (messages !== event.messages) return { messages };
 	});
 
@@ -614,6 +615,7 @@ export default function (pi: ExtensionAPI) {
 
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Automatic session title]]
 	pi.on("before_agent_start", (event) => {
+		skills.prepare(event);
 		if (!sessionTitlePending || pi.getSessionName?.()) {
 			sessionTitlePending = false;
 			return;
@@ -772,10 +774,12 @@ export default function (pi: ExtensionAPI) {
 		restoreRequest = undefined;
 		sessionTitlePending = false;
 		promptDisplayHost.dispose();
+		skills.stop();
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
 		stickyDefaults.activate(ctx.sessionManager);
+		skills.start(ctx);
 		// /clear restores its captured session Fast after startup completes.
 		fastOverlay.resetSession();
 		promptDisplayHost.activate(ctx.sessionManager);
@@ -897,7 +901,12 @@ export default function (pi: ExtensionAPI) {
 			removeJumpToBottom = installJumpToBottom(editor, tui);
 			removePromptJump?.();
 			settings?.dispose();
-			settings = installSettings(tui, editor, getAgentDir());
+			settings = installSettings(tui, editor, getAgentDir(), (error) =>
+				ctx.ui.notify(
+					`Could not save proper-base setting: ${error.message}`,
+					"error",
+				),
+			);
 			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Prompt mouse clicks]]
 			removeEditorMouseGuard?.();
 			removeEditorMouseGuard = installEditorMouseGuard(

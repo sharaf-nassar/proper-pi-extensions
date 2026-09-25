@@ -3,7 +3,13 @@ import { test } from "node:test";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
-import { pinSkillContext } from "../src/skill-context.ts";
+import {
+	pinSkillContext,
+	SKILL_CONTEXT_ENTRY,
+	SKILL_CONTEXT_TOOL,
+	SkillContextError,
+	selectedSkills,
+} from "../src/skill-context.ts";
 
 type Message = { role: string; content?: unknown };
 
@@ -46,6 +52,7 @@ function nativeUserMessage(content: string) {
 	return { role: "user" as const, content, timestamp: Date.now() };
 }
 
+// @lat: [[lat.md/proper-base/tests#Verification#Skill context fixture]]
 test("repeat invocations collapse to a note without touching the first copy", () => {
 	const first = user(skillText("audit", "Body one.", "check the parser"));
 	const messages: Message[] = [
@@ -65,7 +72,7 @@ test("repeat invocations collapse to a note without touching the first copy", ()
 	assert.match(repeat, /now check the lexer/);
 });
 
-test("a changed skill body is kept rather than deduplicated", () => {
+test("a changed skill body supersedes old instructions while preserving both requests", () => {
 	const messages: Message[] = [
 		user(skillText("audit", "Body one.", "first")),
 		user(skillText("audit", "Body two.", "second")),
@@ -73,7 +80,9 @@ test("a changed skill body is kept rather than deduplicated", () => {
 
 	const next = pinSkillContext(messages, messages.map(entry));
 
-	assert.equal(next, messages);
+	assert.notEqual(next, messages);
+	assert.match(textOf(next[0]), /superseded[\s\S]*first/);
+	assert.doesNotMatch(textOf(next[0]), /Body one/);
 	assert.match(textOf(next[1]), /Body two\./);
 });
 
@@ -252,16 +261,16 @@ test("native context edits stay branch-local across navigation and repeated comp
 	assert.deepEqual(manager.getEntries(), originalEntries);
 });
 
-test("carrying is skipped when no compaction dropped anything", () => {
+test("missing selected snapshots are restored without replaying their requests", () => {
 	const dropped = [user(skillText("audit", "Body one.", "check the parser"))];
 	const messages: Message[] = [user("unrelated follow up")];
-
 	const next = pinSkillContext(messages, [...dropped, ...messages].map(entry));
-
-	assert.equal(next, messages, "no summary means nothing was compacted away");
+	assert.match(textOf(next[0]), /Apply only where relevant/);
+	assert.doesNotMatch(textOf(next[0]), /check the parser/);
+	assert.match(textOf(next[0]), /unrelated follow up$/);
 });
 
-test("oversized bodies truncate and the combined budget drops the oldest", () => {
+test("oversized selected context fails visibly without truncating or dropping instructions", () => {
 	const huge = "x".repeat(40000);
 	const dropped = [
 		user(skillText("first", huge, "a")),
@@ -273,17 +282,16 @@ test("oversized bodies truncate and the combined budget drops the oldest", () =>
 		user("keep going"),
 	];
 
-	const restored = textOf(
-		pinSkillContext(messages, [...dropped, ...messages].map(entry))[1],
+	assert.throws(
+		() => pinSkillContext(messages, [...dropped, ...messages].map(entry)),
+		(error) =>
+			error instanceof SkillContextError &&
+			/No instructions were truncated/.test(error.message),
 	);
-
-	assert.match(restored, /skill content truncated/);
-	assert.ok(restored.length < 60000, "combined budget is enforced");
-	assert.match(restored, /<skill name="third"/, "newest skill wins the budget");
-	assert.doesNotMatch(restored, /<skill name="first"/);
+	assert.equal(textOf(messages[1]), "keep going");
 });
 
-test("restoration budgets complete blocks in latest invocation order", () => {
+test("restoration retains complete latest versions and enforces the aggregate budget", () => {
 	const messages: Message[] = [
 		{ role: "compactionSummary", content: [] },
 		user("keep going"),
@@ -295,10 +303,14 @@ test("restoration budgets complete blocks in latest invocation order", () => {
 	].map(entry);
 	const restored = textOf(pinSkillContext(messages, branch)[1]);
 	assert.match(restored, /<skill name="a"/);
-	assert.doesNotMatch(restored, /<skill name="b"/);
+	assert.match(restored, /<skill name="b"/);
+	assert.doesNotMatch(restored, /old a|truncated/);
 	assert.match(restored, /new a/);
-	assert.match(restored, /truncated[\s\S]*<\/skill>\n\nkeep going$/);
-	assert.ok(restored.length <= 24000 + "keep going".length);
+	assert.match(restored, /keep going$/);
+	assert.throws(
+		() => pinSkillContext(messages, branch, 24_000),
+		SkillContextError,
+	);
 
 	const exact = textOf(
 		pinSkillContext(messages, [
@@ -306,7 +318,7 @@ test("restoration budgets complete blocks in latest invocation order", () => {
 			entry(user(skillText("two", "y".repeat(11900)))),
 		])[1],
 	);
-	assert.ok(exact.length <= 24000 + "keep going".length);
+	assert.doesNotMatch(exact, /truncated/);
 	assert.equal(
 		exact.match(/<skill /g)?.length,
 		exact.match(/<\/skill>/g)?.length,
@@ -339,6 +351,96 @@ test("plain transcripts are returned untouched", () => {
 		{ role: "assistant", content: [{ type: "text", text: "hi" }] },
 	];
 	assert.equal(pinSkillContext(messages, messages.map(entry)), messages);
+});
+
+test("multiple blocks, repeat requests and image parts survive idempotent projection", () => {
+	const first = user(
+		`${skillText("audit", "AUDIT_BODY")}\n\n${skillText("tests", "TEST_BODY")}\n\nfirst request`,
+	);
+	const second = {
+		role: "user",
+		content: [
+			{
+				type: "text",
+				text: `${skillText("audit", "AUDIT_BODY")}\n\n${skillText("style", "STYLE_BODY")}\n\nsecond request`,
+			},
+			{ type: "image", data: "IMAGE_SENTINEL" },
+		],
+	};
+	const messages = [first, second];
+	const branch = messages.map(entry);
+	const projected = pinSkillContext(messages, branch);
+	assert.equal(JSON.stringify(projected).split("AUDIT_BODY").length - 1, 1);
+	assert.match(textOf(projected[1]), /STYLE_BODY[\s\S]*second request/);
+	assert.match(JSON.stringify(projected[1]), /IMAGE_SENTINEL/);
+	assert.deepEqual(pinSkillContext(projected, branch), projected);
+	assert.equal(selectedSkills(branch).length, 3);
+});
+
+test("split-turn compaction restores to the summary without inserting messages between tool calls", () => {
+	const branch = [
+		entry(user(skillText("audit", "BODY_SENTINEL", "completed request"))),
+	];
+	const messages = [
+		{ role: "compactionSummary", summary: "Task progress retained." },
+		{ role: "assistant", content: [{ type: "toolCall", id: "call" }] },
+		{ role: "toolResult", content: [{ type: "text", text: "result" }] },
+	];
+	const next = pinSkillContext(messages, branch);
+	assert.match(next[0]?.summary ?? "", /BODY_SENTINEL/);
+	assert.equal(next[1], messages[1]);
+	assert.equal(next[2], messages[2]);
+	assert.deepEqual(pinSkillContext(next, branch), next);
+	assert.doesNotMatch(JSON.stringify(next), /completed request/);
+});
+
+test("control records and native tool-result edits govern the selected set", () => {
+	const block = skillText("audit", "TOOL_BODY");
+	const branch = [
+		{
+			type: "message",
+			id: "tool",
+			message: {
+				role: "toolResult",
+				toolName: SKILL_CONTEXT_TOOL,
+				content: block,
+			},
+		},
+		{
+			type: "custom",
+			customType: SKILL_CONTEXT_ENTRY,
+			data: { action: "remove", locations: ["/skills/audit/SKILL.md"] },
+		},
+	];
+	assert.equal(selectedSkills(branch)[0]?.selected, false);
+	const restored = [
+		...branch,
+		{
+			type: "custom",
+			customType: SKILL_CONTEXT_ENTRY,
+			data: { action: "load", blocks: [block] },
+		},
+	];
+	assert.equal(selectedSkills(restored)[0]?.source, "user");
+	assert.equal(selectedSkills(restored)[0]?.selected, true);
+	const toolEntry = branch[0];
+	assert.ok(toolEntry);
+	assert.equal(
+		selectedSkills([
+			toolEntry,
+			{ type: "context_edit", targetId: "tool", replacement: null },
+		]).length,
+		0,
+	);
+	assert.equal(
+		selectedSkills([
+			{
+				type: "message",
+				message: { role: "toolResult", toolName: "read", content: block },
+			},
+		]).length,
+		0,
+	);
 });
 
 test("the transform is deterministic so the request prefix stays cacheable", () => {

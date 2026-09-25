@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -8,6 +8,8 @@ import {
 	installSettings,
 	readEditorMouseEnabled,
 	readRailEnabled,
+	readSkillContextEnabled,
+	writeSkillContextEnabled,
 } from "../src/settings.ts";
 
 const RAIL_ID = "proper-base-session-rail";
@@ -133,6 +135,55 @@ test("the settings selector gains persisted rail and mouse toggles", async () =>
 		after.settingsList.items.some((i) => i.id === RAIL_ID),
 		false,
 	);
+});
+
+test("skill settings persist, refresh on reopening and preserve the displayed value after a failed save", async () => {
+	const { dir, editor, container, tui } = harness();
+	const errors: Error[] = [];
+	const controller = installSettings(
+		tui as never,
+		editor as never,
+		dir,
+		(error) => errors.push(error),
+	);
+	try {
+		await tick();
+		const first = new SettingsSelectorComponent();
+		container.addChild(first);
+		const id = "proper-base-skill-context";
+		assert.equal(
+			first.settingsList.items.find((item) => item.id === id)?.currentValue,
+			"true",
+		);
+		first.settingsList.onChange(id, "false");
+		assert.equal(readSkillContextEnabled(dir), false);
+		writeSkillContextEnabled(dir, true);
+		const second = new SettingsSelectorComponent();
+		container.addChild(second);
+		assert.equal(
+			second.settingsList.items.find((item) => item.id === id)?.currentValue,
+			"true",
+		);
+		writeFileSync(join(dir, "proper-base.json"), "broken json");
+		second.settingsList.onChange(id, "false");
+		assert.equal(errors.length, 1);
+		assert.equal(
+			second.settingsList.items.find((item) => item.id === id)?.currentValue,
+			"true",
+		);
+		assert.equal(
+			readSkillContextEnabled(dir),
+			false,
+			"malformed config disables management",
+		);
+		assert.equal(
+			readFileSync(join(dir, "proper-base.json"), "utf8"),
+			"broken json",
+		);
+	} finally {
+		controller.dispose();
+		rmSync(dir, { recursive: true, force: true });
+	}
 });
 
 test("a missing or damaged config enables both and installs nothing twice", async () => {

@@ -258,21 +258,76 @@ working. Image paste is unchanged, and macOS and Windows keep the addon.
 
 ### Skill context
 
-Pi expands `/skill:<name>` into a user message holding the whole `SKILL.md`
-body, then treats it like any other message. Invoking the same skill twice
-therefore sends two full copies, and compaction summarizes the body away while
-the model keeps following instructions it can no longer read.
+Load several skills before one request:
 
-proper-base keeps each invoked skill present exactly once in the outbound
-context. A repeat invocation of an unchanged body keeps its request and shows
-the model a one-line already-loaded note instead of a second copy; a body that
-changed with its arguments is sent in full. After a compaction, the newest body
-of each dropped skill is restored on the first user turn following the summary,
-truncated to a character ceiling per skill and in total so the restored text
-cannot re-trigger the compaction that just ran. Restoration honors the latest
-context edit on the active branch: omitted or replaced skill text is not
-resurrected, while replacement skill bodies remain eligible. Only the outbound copy changes,
-so saved sessions, exports, resumes, and branches retain the originals.
+```text
+/skill:security /skill:testing fix the login flow
+```
+
+Only complete `/skill:name` tokens matching Pi's discovered catalog activate
+skills. Matching is exact and case-sensitive; duplicate selections load once.
+The first unknown or malformed token starts the literal request, with all
+remaining text preserved. URLs, paths, queries, fragments, filename suffixes and
+punctuation do not partially match names. Ambiguous, unreadable or over-budget
+registered selections reject the whole request. Explicit `/skill-context load`
+and model-tool loads still report unknown names.
+
+Use `--` after the command chain when the request itself starts with a literal
+`/skill:` example. Inline, quoted, escaped, and fenced mentions are not commands.
+Pi autocomplete completes partial input to `/skill:name`; submitted `/name`,
+`$name`, `/skill name` and `/ skill:name` are not Pi skill aliases and remain
+untouched. Other registered commands keep their own behavior. Pi's explicit
+expansion opt-out remains respected, including RPC and queued prompts.
+
+Each selected skill retains a full snapshot and SHA-256 identity. Unchanged
+instructions appear once in outbound context; repeating a workflow command
+still submits its new request. Explicit reinvocation or refresh loads the current
+file and supersedes older instructions. Compaction restores the selected
+snapshots, never silently rereads changed files, and never replays the original
+request. Normal task progress determines which workflow steps remain to do.
+
+Manage the working set without starting a model turn:
+
+```text
+/skill-context
+/skill-context load security testing
+/skill-context remove testing
+/skill-context refresh security
+/skill-context clear
+```
+
+The list shows selected and removed snapshots, their version hashes, source
+paths, changes on disk, and the character budget. Selections follow the current
+session branch through resume, forks, context edits, and repeated compaction.
+New sessions start empty. There is no guessed task expiry: reference instructions
+apply only where relevant, and removal explicitly ends a selection. Removing a
+skill omits its instruction blocks from future managed requests without deleting
+historical user requests or the saved transcript. Conflicts are reported rather
+than resolved by mention order; loading never grants extra tool permissions.
+
+The model can use `skill_context` to list or load the smallest relevant set from
+Pi's catalog. Explicit-only skills require the user's `/skill:` invocation.
+Ordinary file reads remain available but do not automatically pin every skill
+file inspected. Supporting resources load on demand; their files are not
+snapshotted or version-pinned by this feature.
+
+Selected bodies must fit 64,000 characters, reduced to 0.4 times the current
+model's context-window tokens for smaller models. This is a bounded character
+allowance, not exact token accounting. Overflow stops the request with instructions
+to remove selections; it never silently truncates a skill or drops an older one.
+
+**Skill context management** in `/settings` enables or disables the feature.
+The preference is enabled by default and saved as `"skillContext"` in
+`~/.pi/agent/proper-base.json`. `/skill-context on` and `/skill-context off`
+provide a fallback when the native menu adapter is unavailable. Changes apply
+to the next agent run. Disabled mode restores Pi's normal expansion and context
+behavior; it does not erase instructions already delivered. Malformed or
+unreadable configuration disables skill management until repaired.
+
+Native menu integration and multi-command expansion use guarded Pi compatibility
+adapters. `/skill-context load` remains available if expansion internals change.
+The rest uses public command, tool, context, and session APIs. No new dependencies
+or external registry are required.
 
 ### Commit message guard
 

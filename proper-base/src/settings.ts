@@ -1,4 +1,11 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import {
+	mkdirSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import type { Component, TUI } from "@earendil-works/pi-tui";
@@ -22,6 +29,13 @@ const TOGGLES = [
 		label: "Prompt mouse clicks",
 		description:
 			"proper-base: clicking the prompt moves the cursor; off leaves the cursor where typing put it",
+	},
+	{
+		id: "proper-base-skill-context",
+		key: "skillContext",
+		label: "Skill context management",
+		description:
+			"proper-base: load multiple skills, manage snapshots and restore full instructions after compaction; applies to the next run",
 	},
 ] as const;
 type ToggleKey = (typeof TOGGLES)[number]["key"];
@@ -64,8 +78,13 @@ function readToggle(agentDir: string, key: ToggleKey): boolean {
 			readFileSync(configPath(agentDir), "utf8"),
 		) as unknown;
 		return (parsed as Record<string, unknown> | null)?.[key] !== false;
-	} catch {
-		return true;
+	} catch (error) {
+		if (
+			error instanceof SyntaxError ||
+			typeof (error as NodeJS.ErrnoException).code === "string"
+		)
+			return true;
+		throw error;
 	}
 }
 
@@ -77,28 +96,59 @@ export function readEditorMouseEnabled(agentDir: string): boolean {
 	return readToggle(agentDir, "editorMouse");
 }
 
-/** Fail-open like the history store: a read-only agent dir only costs
- * persistence, never the session. Other keys in the file are preserved. */
-function writeToggle(agentDir: string, key: ToggleKey, enabled: boolean): void {
+export function readSkillContextEnabled(agentDir: string): boolean {
 	try {
-		let parsed: Record<string, unknown> = {};
-		try {
-			const existing = JSON.parse(
-				readFileSync(configPath(agentDir), "utf8"),
-			) as unknown;
-			if (existing && typeof existing === "object") {
-				parsed = existing as Record<string, unknown>;
-			}
-		} catch {
-			// Damaged or absent config starts fresh.
-		}
-		parsed[key] = enabled;
-		writeFileSync(
-			configPath(agentDir),
-			`${JSON.stringify(parsed, null, "\t")}\n`,
+		const parsed: unknown = JSON.parse(
+			readFileSync(configPath(agentDir), "utf8"),
 		);
-	} catch {
-		// Persistence is best-effort.
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+			return false;
+		const value = (parsed as Record<string, unknown>).skillContext;
+		return value === undefined || value === true;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+		if (
+			error instanceof SyntaxError ||
+			typeof (error as NodeJS.ErrnoException).code === "string"
+		)
+			return false;
+		throw error;
+	}
+}
+
+export function writeSkillContextEnabled(
+	agentDir: string,
+	enabled: boolean,
+): void {
+	writeToggle(agentDir, "skillContext", enabled);
+}
+
+/** Fresh-disk merge and atomic replacement; failed saves keep the live value. */
+function writeToggle(agentDir: string, key: ToggleKey, enabled: boolean): void {
+	let parsed: Record<string, unknown> = {};
+	try {
+		const existing: unknown = JSON.parse(
+			readFileSync(configPath(agentDir), "utf8"),
+		);
+		if (!existing || typeof existing !== "object" || Array.isArray(existing))
+			throw new SyntaxError(
+				"proper-base.json must contain an object; preference was not saved.",
+			);
+		parsed = existing as Record<string, unknown>;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+	}
+	parsed[key] = enabled;
+	mkdirSync(agentDir, { recursive: true });
+	const temporary = `${configPath(agentDir)}.${randomUUID()}.tmp`;
+	try {
+		writeFileSync(temporary, `${JSON.stringify(parsed, null, "\t")}\n`, {
+			flag: "wx",
+			mode: 0o600,
+		});
+		renameSync(temporary, configPath(agentDir));
+	} finally {
+		rmSync(temporary, { force: true });
 	}
 }
 
@@ -139,8 +189,7 @@ function findEditorContainer(
 }
 
 /**
- * Add proper-base's toggles to Pi's native `/settings` menu: the session
- * action rail and prompt mouse clicks.
+ * Add proper-base's toggles to Pi's native `/settings` menu.
  *
  * Pi has no extension hook into that menu, so this is a guarded
  * compatibility layer in the house style: the container Pi mounts selectors
@@ -148,11 +197,11 @@ function findEditorContainer(
  * settings selector that mounts receives the extra items spliced into its
  * `SettingsList`, whose instance-held `onChange` is wrapped to keep the
  * toggles out of Pi's own switch. A renamed component or list shape installs
- * or injects nothing and both features simply stay enabled.
+ * or injects nothing; config-file and command controls remain available.
  *
- * Choices persist as `sessionRail` and `editorMouse` in the agent
- * directory's `proper-base.json`; other sessions pick a change up at their
- * next start.
+ * Choices persist as `sessionRail`, `editorMouse` and `skillContext` in the
+ * agent directory's `proper-base.json`. Skill management reads its preference
+ * at the next run; the editor toggles remain cached for the session.
  *
  * @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Session action rail]]
  * @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Prompt mouse clicks]]
@@ -161,15 +210,18 @@ export function installSettings(
 	tui: TUI,
 	editor: Component,
 	agentDir: string,
+	onError?: (error: Error) => void,
 ): SettingsController {
 	const state: Record<ToggleKey, boolean> = {
 		sessionRail: readToggle(agentDir, "sessionRail"),
 		editorMouse: readToggle(agentDir, "editorMouse"),
+		skillContext: readSkillContextEnabled(agentDir),
 	};
 	let disposed = false;
 	let uninstall: (() => void) | undefined;
 
 	const inject = (selector: SettingsHost): void => {
+		state.skillContext = readSkillContextEnabled(agentDir);
 		const list = selector.settingsList;
 		const items = list?.items;
 		if (!list || !Array.isArray(items) || typeof list.onChange !== "function")
@@ -188,8 +240,20 @@ export function installSettings(
 		list.onChange = (id, value) => {
 			const toggle = TOGGLES.find((entry) => entry.id === id);
 			if (toggle) {
-				state[toggle.key] = value === "true";
-				writeToggle(agentDir, toggle.key, state[toggle.key]);
+				if (disposed || (value !== "true" && value !== "false")) return;
+				try {
+					writeToggle(agentDir, toggle.key, value === "true");
+					state[toggle.key] = value === "true";
+				} catch (error) {
+					if (
+						!(error instanceof SyntaxError) &&
+						typeof (error as NodeJS.ErrnoException).code !== "string"
+					)
+						throw error;
+					onError?.(error as Error);
+				}
+				const item = items.find((entry) => entry.id === id);
+				if (item) item.currentValue = String(state[toggle.key]);
 				return;
 			}
 			native(id, value);

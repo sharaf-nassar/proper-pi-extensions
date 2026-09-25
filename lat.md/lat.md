@@ -11,7 +11,7 @@ The root is not an installable pi package and has no npm workspace manifest. Pac
 Current packages:
 
 - [proper-llm-router](../proper-llm-router/) — npm package `proper-llm-router`, routing each session's first task to an appropriate model.
-- [proper-base](../proper-base/) — npm package `proper-base`, providing baseline history, prompt editing, cancellation, fullscreen navigation, image previews, and footer layout.
+- [proper-base](../proper-base/): npm package `proper-base`, providing baseline history, prompt editing, skill context management, cancellation, fullscreen navigation, image previews, and footer layout.
 - [proper-pacify](../proper-pacify/) — npm package `proper-pacify`, rewriting prompt tone while preserving content and logging both forms.
 - [proper-compact](../proper-compact/): npm package `proper-compact`, providing structured compaction and bounded transcript recall. Local-only until its initial publication.
 - [proper-model-prompts](../proper-model-prompts/): npm package `proper-model-prompts`, adding configured system prompt text and built-in Claude and GPT prompts for matching models and run modes in sessions and subagent children. Local-only until its initial publication.
