@@ -256,15 +256,20 @@ function renderActive(
 	base: number,
 ): string[] {
 	const output: string[][] = Array.from({ length: children.length });
+	const hits: DetailHit[][] = Array.from({ length: children.length });
 	let hasTextBelow = false;
 	for (let index = children.length - 1; index >= 0; index--) {
 		const child = children[index];
 		if (!child) continue;
-		const native = child.render(width);
+		const hitStart = state.pendingHits.length;
+		const native = isUserBoundary(child)
+			? renderExpandable(child, width, state)
+			: child.render(width);
 		output[index] =
 			state.completed.has(child) && hasTextBelow
 				? renderGroup([child], width, state, [], 0)
 				: native;
+		hits[index] = state.pendingHits.splice(hitStart);
 		if (hasSectionText(native)) hasTextBelow = true;
 	}
 	// Outline rows are recorded on a forward pass because the render loop above
@@ -272,6 +277,7 @@ function renderActive(
 	let row = base;
 	for (let index = 0; index < children.length; index++) {
 		const rendered = output[index];
+		state.pendingHits.push(...(hits[index] ?? []));
 		const child = children[index];
 		if (child && rendered?.length) {
 			const entry = actionEntry(child);
@@ -358,7 +364,7 @@ function renderGroup(
 				row: base + lines.length,
 				label: "prompt",
 			});
-			lines.push(...child.render(width));
+			lines.push(...renderExpandable(child, width, state));
 			continue;
 		}
 		if (name === "Spacer") {

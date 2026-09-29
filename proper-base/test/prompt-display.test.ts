@@ -3,9 +3,12 @@ import { test } from "node:test";
 import {
 	AgentSession,
 	ExtensionRunner,
+	getMarkdownTheme,
 	InteractiveMode,
+	initTheme,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { Container, stripTerminalSequences } from "@earendil-works/pi-tui";
 import {
 	createPromptDisplay,
 	PROMPT_DISPLAY_ENTRY,
@@ -83,7 +86,21 @@ function fixture() {
 		_findLastAssistantMessage: () => undefined,
 		_runAgentPrompt: (messages: any[]) => agent.prompt(messages),
 	});
-	const ui = { session, getMarkdownTransformers: () => [marker] };
+	const history: string[] = [];
+	const ui: any = Object.setPrototypeOf(
+		{
+			session,
+			getMarkdownTransformers: () => [marker],
+			getMarkdownThemeWithSettings: () => getMarkdownTheme(),
+			chatContainer: new Container(),
+			loadedResourcesContainer: new Container(),
+			showStatus() {},
+			toolOutputExpanded: false,
+			outputPad: 1,
+			editor: { addToHistory: (text: string) => history.push(text) },
+		},
+		InteractiveMode.prototype,
+	);
 	const text = (message: any) =>
 		(InteractiveMode.prototype as any).getUserMessageText.call(ui, message);
 	const persist = () => {
@@ -94,6 +111,8 @@ function fixture() {
 	return {
 		manager,
 		session,
+		ui,
+		history,
 		sent,
 		queued,
 		text,
@@ -110,6 +129,76 @@ function fixture() {
 		close: () => adapter.dispose(),
 	};
 }
+
+test("skill chains render separate native disclosures without changing messages or history", () => {
+	initTheme("dark", false);
+	const host = fixture();
+	try {
+		const first =
+			'<skill name="one" location="/one/SKILL.md">\nFIRST_BODY\n</skill>';
+		const second =
+			'<skill name="two" location="/two/SKILL.md">\nSECOND_BODY\n</skill>';
+		const text = `${first}\n\n${second}\n\nKeep this request visible.`;
+		const message: any = {
+			role: "user",
+			content: [
+				{ type: "text", text },
+				{ type: "image", data: "attachment", mimeType: "image/png" },
+			],
+			timestamp: 1,
+		};
+		const before = structuredClone(message);
+		const render = () =>
+			host.ui.chatContainer.render(80).map(stripTerminalSequences).join("\n");
+		for (const replay of [false, true]) {
+			if (replay) host.reload();
+			host.ui.chatContainer.clear();
+			host.ui.addMessageToChat(message, { populateHistory: true });
+			const skills = host.ui.chatContainer.children.filter(
+				(child: any) =>
+					child.constructor.name === "SkillInvocationMessageComponent",
+			);
+			assert.equal(skills.length, 2);
+			assert.match(render(), /Keep this request visible/);
+			assert.doesNotMatch(render(), /FIRST_BODY|SECOND_BODY|<skill/);
+			const click = {
+				type: "click",
+				button: "left",
+				x: 1,
+				y: 1,
+				screenX: 1,
+				screenY: 1,
+				width: 80,
+				height: 3,
+				shift: false,
+				alt: false,
+				ctrl: false,
+			};
+			assert.ok(skills[1].handleMouse(click)?.handled);
+			assert.match(render(), /SECOND_BODY/);
+			assert.doesNotMatch(render(), /FIRST_BODY/);
+			assert.ok(skills[1].handleMouse(click)?.handled);
+			assert.doesNotMatch(render(), /SECOND_BODY/);
+			host.ui.setToolsExpanded(true);
+			assert.match(render(), /FIRST_BODY/);
+			assert.match(render(), /SECOND_BODY/);
+			host.ui.setToolsExpanded(false);
+			assert.doesNotMatch(render(), /FIRST_BODY|SECOND_BODY/);
+		}
+		assert.deepEqual(host.history, [text, text]);
+		assert.deepEqual(message, before);
+		host.ui.chatContainer.clear();
+		host.ui.getMarkdownTransformers = () => [];
+		host.ui.addMessageToChat(message);
+		assert.match(
+			render(),
+			/SECOND_BODY/,
+			"unowned hosts keep native rendering",
+		);
+	} finally {
+		host.close();
+	}
+});
 
 // @lat: [[lat.md/proper-base/tests#Verification#Prompt display fixture]]
 test("handled and rejected template submissions cannot relabel later messages", async () => {

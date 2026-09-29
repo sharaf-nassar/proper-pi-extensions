@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+	initTheme,
+	SkillInvocationMessageComponent,
+} from "@earendil-works/pi-coding-agent";
+import {
 	Container,
 	Spacer,
 	stripTerminalSequences,
@@ -162,6 +166,81 @@ test("clicking a custom entry header expands that entry", () => {
 		/original prompt/,
 	);
 	controller.uninstall();
+});
+
+test("skill disclosures remain clickable in cleaned history and during a run", () => {
+	initTheme("dark", false);
+	const chat = new Container();
+	const document = new Container();
+	document.addChild(new Container());
+	document.addChild(new Container());
+	document.addChild(chat);
+	const listeners = new Set<(data: string) => any>();
+	const tui = {
+		children: [document],
+		inputListeners: listeners,
+		previousScreen: [] as string[],
+		requestRender() {},
+		addInputListener(listener: (data: string) => any) {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+	};
+	let idle = true;
+	let globalExpanded = false;
+	const ctx = {
+		isIdle: () => idle,
+		ui: {
+			getToolsExpanded: () => globalExpanded,
+			theme: {
+				fg: (_color: string, text: string) => text,
+				bold: (text: string) => text,
+			},
+		},
+	};
+	chat.addChild(new UserMessageComponent("earlier task"));
+	chat.addChild(new ToolExecutionComponent("earlier-tool"));
+	const controller = installTranscriptCleanup(tui as never, ctx as never);
+	assert.ok(controller);
+	try {
+		const render = () => {
+			tui.previousScreen = chat.render(80);
+			return tui.previousScreen.map(stripTerminalSequences).join("\n");
+		};
+		for (const running of [false, true]) {
+			idle = !running;
+			if (running) controller.start();
+			for (const name of ["one", "two"])
+				chat.addChild(
+					new SkillInvocationMessageComponent({
+						name: `${name}-${running}`,
+						location: `/skills/${name}`,
+						content: `BODY_${name}_${running}`,
+						userMessage: undefined,
+					}),
+				);
+			chat.addChild(new UserMessageComponent("visible request"));
+			assert.doesNotMatch(render(), /BODY_/);
+			for (const name of ["one", "two"]) {
+				const header = tui.previousScreen.findIndex((line) =>
+					stripTerminalSequences(line).includes(`[skill] ${name}-${running}`),
+				);
+				assert.ok(header >= 0);
+				const click = `\x1b[<0;3;${header + 1}M`;
+				assert.ok([...listeners].some((listener) => listener(click)?.consume));
+				assert.match(render(), new RegExp(`BODY_${name}_${running}`));
+				assert.ok([...listeners].some((listener) => listener(click)?.consume));
+				assert.doesNotMatch(render(), /BODY_/);
+			}
+		}
+		globalExpanded = true;
+		assert.match(render(), /BODY_one_true/);
+		assert.match(render(), /BODY_two_true/);
+		globalExpanded = false;
+		assert.doesNotMatch(render(), /BODY_/);
+	} finally {
+		controller.uninstall();
+	}
 });
 
 test("agent settlement restores the collapsed process-detail default", async () => {

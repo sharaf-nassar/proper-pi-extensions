@@ -12,8 +12,10 @@ import { type TestContext, test } from "node:test";
 import {
 	AgentSession,
 	ExtensionRunner,
+	initTheme,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { stripTerminalSequences } from "@earendil-works/pi-tui";
 import {
 	readSkillContextEnabled,
 	writeSkillContextEnabled,
@@ -180,6 +182,13 @@ function fixture(t: TestContext) {
 			});
 			return result;
 		},
+		renderResult(result: unknown, expanded: boolean) {
+			return tool.renderResult(
+				result,
+				{ expanded, isPartial: false },
+				{ fg: (_color: string, text: string) => text },
+			);
+		},
 		project() {
 			return controller.transform(
 				manager.buildSessionProjection().messages,
@@ -194,6 +203,37 @@ function fixture(t: TestContext) {
 		},
 	};
 }
+
+test("skill tool results disclose each body without truncating model content", async (t) => {
+	initTheme("dark", false);
+	const f = fixture(t);
+	f.add("one", "FIRST_BODY");
+	f.add("two", "SECOND_BODY");
+	const result = await f.use({ action: "load", names: ["one", "two"] });
+	const before = structuredClone(result);
+	const collapsed = f.renderResult(result, false);
+	const text = (component: any, width = 80) =>
+		component.render(width).map(stripTerminalSequences).join("\n");
+	assert.match(text(collapsed), /one/);
+	assert.match(text(collapsed), /two/);
+	assert.doesNotMatch(text(collapsed), /FIRST_BODY|SECOND_BODY|<skill/);
+	collapsed.children[1].setExpanded(true);
+	assert.match(text(collapsed), /SECOND_BODY/);
+	assert.doesNotMatch(text(collapsed), /FIRST_BODY/);
+	const expanded = f.renderResult(result, true);
+	assert.match(text(expanded), /FIRST_BODY/);
+	assert.match(text(expanded), /SECOND_BODY/);
+	assert.ok(text(expanded, 24).length);
+	assert.deepEqual(result, before);
+	assert.match(result.content[0].text, /FIRST_BODY/);
+	assert.match(result.content[0].text, /SECOND_BODY/);
+	const error = {
+		content: [{ type: "text", text: "Unknown skill: missing." }],
+	};
+	assert.match(text(f.renderResult(error, false)), /Unknown skill: missing/);
+	const listed = await f.use({ action: "list" });
+	assert.match(text(f.renderResult(listed, false)), /2 selected/);
+});
 
 // @lat: [[lat.md/proper-base/tests#Verification#Skill management fixture]]
 test("native prompt expansion loads a command chain once and preserves request and images", async (t) => {

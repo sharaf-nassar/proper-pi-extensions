@@ -11,9 +11,12 @@ import {
 	type ExtensionAPI,
 	type ExtensionContext,
 	type InputEvent,
+	parseSkillBlock,
 	type Skill,
+	SkillInvocationMessageComponent,
 	stripFrontmatter,
 } from "@earendil-works/pi-coding-agent";
+import { Container, Text } from "@earendil-works/pi-tui";
 import { installWrapper } from "./host-interop.ts";
 import { appendPromptSection } from "./prompt-sections.ts";
 import {
@@ -33,6 +36,7 @@ import {
 	type SkillSnapshot,
 	selectedSkills,
 	skillSnapshot,
+	splitSkillText,
 } from "./skill-context.ts";
 
 const INSTALLED = Symbol.for("proper-base.skill-context");
@@ -386,6 +390,23 @@ export function registerSkillContext(
 			additionalProperties: false,
 		} as const,
 		executionMode: "sequential",
+		renderResult(result, options) {
+			const text = result.content
+				.filter((part) => part.type === "text")
+				.map((part) => part.text)
+				.join("\n\n");
+			const { skills, request } = splitSkillText(text);
+			const container = new Container();
+			for (const skill of skills) {
+				const parsed = parseSkillBlock(skill.block);
+				if (!parsed) continue;
+				const component = new SkillInvocationMessageComponent(parsed);
+				component.setExpanded(options.expanded);
+				container.addChild(component);
+			}
+			if (request) container.addChild(new Text(request, 0, 0));
+			return container;
+		},
 		async execute(_id, params, signal, _update, ctx) {
 			requireEnabled(true);
 			signal?.throwIfAborted();

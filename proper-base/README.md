@@ -279,6 +279,11 @@ Pi autocomplete completes partial input to `/skill:name`; submitted `/name`,
 untouched. Other registered commands keep their own behavior. Pi's explicit
 expansion opt-out remains respected, including RPC and queued prompts.
 
+Each expanded skill appears as a collapsible section in terminal history,
+including skills loaded through `skill_context`. Use Pi's tool-expansion shortcut
+or click an individual section in fullscreen mode to view its instructions.
+The request stays visible; the model still receives the full skill bodies.
+
 Each selected skill retains a full snapshot and SHA-256 identity. Unchanged
 instructions appear once in outbound context; repeating a workflow command
 still submits its new request. Explicit reinvocation or refresh loads the current

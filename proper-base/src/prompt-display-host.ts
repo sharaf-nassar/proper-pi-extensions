@@ -7,6 +7,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { installWrapper, originalInput } from "./host-interop.ts";
 import type { PromptDisplayController } from "./prompt-display.ts";
+import { splitSkillText } from "./skill-context.ts";
 
 type Message = Parameters<SessionManager["appendMessage"]>[0];
 type Manager = Pick<SessionManager, "getBranch">;
@@ -103,6 +104,11 @@ export function installPromptDisplayHost(
 		session: AgentSession;
 		getUserMessageText(message: Message): string;
 		getMarkdownTransformers(): MarkdownTransformer[];
+		addMessageToChat(
+			message: Message,
+			options?: { populateHistory?: boolean },
+		): void;
+		editor: { addToHistory?(text: string): void };
 	};
 	const prototype = InteractiveMode.prototype as unknown as InteractiveHost;
 	const original = prototype.getUserMessageText;
@@ -117,6 +123,30 @@ export function installPromptDisplayHost(
 		return display.rawFor(message) ?? original.call(this, message);
 	};
 	restorers.push(installWrapper(prototype, "getUserMessageText", wrapped));
+
+	// Pi collapses only the first skill block, rendering the rest as user text.
+	// Feed each block through its native renderer without changing the message.
+	const addMessage = prototype.addMessageToChat;
+	const addSkills: typeof addMessage = function (
+		this: InteractiveHost,
+		message,
+		options,
+	) {
+		if (
+			!active ||
+			message.role !== "user" ||
+			!this.getMarkdownTransformers().includes(marker)
+		)
+			return addMessage.call(this, message, options);
+		const text = this.getUserMessageText(message);
+		const { skills, request } = splitSkillText(text);
+		if (skills.length < 2) return addMessage.call(this, message, options);
+		for (const skill of skills)
+			addMessage.call(this, { ...message, content: skill.block });
+		if (request) addMessage.call(this, { ...message, content: request });
+		if (options?.populateHistory) this.editor.addToHistory?.(text);
+	};
+	restorers.push(installWrapper(prototype, "addMessageToChat", addSkills));
 
 	const controller: Controller = {
 		activate(next) {
