@@ -6,6 +6,7 @@ import {
 	type InputEventResult,
 	InteractiveMode,
 	type MarkdownTransformer,
+	type PromptOptions,
 	type SessionManager,
 	UserMessageComponent,
 } from "@earendil-works/pi-coding-agent";
@@ -16,6 +17,9 @@ import {
 } from "./host-interop.ts";
 
 type Message = Parameters<SessionManager["appendMessage"]>[0];
+type PromptDisposition = Parameters<
+	NonNullable<PromptOptions["preflightResult"]>
+>[0];
 export type RewriteOrigin = { entryId: string; before: string };
 export type InputDecision = {
 	result: InputEventResult;
@@ -130,15 +134,17 @@ export function installHostHooks(hooks: PacifyHostHooks): {
 			release();
 		};
 		let preflightReported = false;
-		const report = (success: boolean) => {
+		// Pi reports how an accepted prompt was dispatched and stays silent on
+		// rejection, so errors only free admission.
+		const report = (disposition: PromptDisposition) => {
 			if (preflightReported) return;
 			preflightReported = true;
 			settle();
-			options?.preflightResult?.(success);
+			options?.preflightResult?.(disposition);
 		};
 		try {
 			if (!hooks.active) {
-				report(true);
+				report("handled");
 				return;
 			}
 			if (!command && this.isStreaming && !options?.streamingBehavior) {
@@ -155,7 +161,7 @@ export function installHostHooks(hooks: PacifyHostHooks): {
 				},
 			);
 			if (!hooks.active || decision.result.action === "handled") {
-				report(true);
+				report("handled");
 				return;
 			}
 			const result = decision.result;
@@ -178,7 +184,7 @@ export function installHostHooks(hooks: PacifyHostHooks): {
 					.finally(settle),
 			);
 		} catch (error) {
-			report(false);
+			settle();
 			throw error;
 		}
 	};
@@ -205,7 +211,8 @@ export function installHostHooks(hooks: PacifyHostHooks): {
 					...(images ? { images } : {}),
 				},
 			);
-			if (!hooks.active || decision.result.action === "handled") return;
+			if (!hooks.active || decision.result.action === "handled")
+				return "handled";
 			const result = decision.result;
 			const forwarded = {
 				...options,

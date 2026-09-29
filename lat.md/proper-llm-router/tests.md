@@ -112,7 +112,13 @@ The non-CPA fixture verifies provider-aware model resolution and one complete fi
 
 It checks that unqualified duplicate IDs prefer CPA when available, provider-qualified values resolve exactly, GitHub Copilot's dotted `claude-opus-5.5` serves the hyphenated default ID, and direct Anthropic/OpenAI Codex models handle judge selection, availability, pinned commands, and `pi.setModel()` while the judged fixture rejects every raw network request.
 
-It also verifies that the factory self-registers exactly one `llm-router` provider whose model list contains `auto` and whose base URL stays on the dead port-1 placeholder.
+It also verifies that the factory registers exactly one `llm-router/auto` virtual model whose router dispatches a stray request to the configured fallback at the selected thinking level, and fails with a named error when the fallback is not authenticated.
+
+## Legacy placeholder migration
+
+The migration fixture verifies that an upgrade removes the manual `llm-router/auto` entry from `models.json` without touching other providers, and defers registration until startup.
+
+Missing and commented files stay unchanged. After removal the factory registers nothing; `session_start` refreshes only the `llm-router` provider without network access, registers the virtual model once, reselects it from the stale physical selection, and reports the cleanup.
 
 ## Trivial input fixture
 
@@ -142,7 +148,7 @@ It disables routing from an armed session and requires the first menu entry to b
 
 ## Ultra compatibility fixtures
 
-`test/ultra-thinking.test.ts` exercises the reload-safe prototype helpers against fake classes without editing pi internals. Its payload check imports the Pi 0.87.1 runtime resolved in the package lock.
+`test/ultra-thinking.test.ts` exercises the reload-safe prototype helpers against fake classes without editing pi internals. Its payload check imports the Pi runtime resolved in the package lock, currently 0.99.1.
 
 It verifies the shared thinking-level list ends in `ultra`, model capability filtering requires a non-empty `thinkingLevelMap.ultra`, native available-level discovery appends `ultra` only for supported models, unsupported transitions clamp to the highest available level, repeated installation does not stack patches, and the editor border reuses pi's maximum-effort theme color. A resolution fixture asserts the module-load shim reached the pinned runtime's real `AgentSession` and `Theme` classes through the public package export — the global patch markers are present and reinstallation takes the idempotent no-op path. A second fixture captures Pi's bundled OpenAI Responses payload before network I/O and verifies the model mapping sends `reasoning.effort: "ultra"`.
 
@@ -162,7 +168,7 @@ The harness performs no provider call and owns no credential. Pi runtime integra
 
 Strict compiler, lint, and coverage checks prevent new dynamic-data shortcuts from weakening router guarantees.
 
-`npm run typecheck` enables strict mode, exact optional properties, unchecked-index diagnostics, unused checks, fallthrough checks, and no-emit compilation. Development dependencies follow latest coding-agent, pi-ai, and TUI releases, with tested resolutions recorded in the lockfile. Runtime installation uses peer instances supplied by Pi; coding-agent and pi-ai must be 0.87.1 or newer. Biome rejects explicit `any` in runtime source. `npm run test:coverage` requires at least 40% lines, 55% branches, and 52% functions from the focused unit fixtures. Package `prepack` runs `test:unit` plus type checking; the separate smoke is also deterministic and offline.
+`npm run typecheck` enables strict mode, exact optional properties, unchecked-index diagnostics, unused checks, fallthrough checks, and no-emit compilation. Development dependencies follow latest coding-agent, pi-ai, and TUI releases, with tested resolutions recorded in the lockfile. Runtime installation uses peer instances supplied by Pi; coding-agent and pi-ai must be 0.99.1 or newer. Biome rejects explicit `any` in runtime source. `npm run test:coverage` requires at least 40% lines, 55% branches, and 52% functions from the focused unit fixtures. Package `prepack` runs `test:unit` plus type checking; the separate smoke is also deterministic and offline.
 
 ## Current coverage gaps
 

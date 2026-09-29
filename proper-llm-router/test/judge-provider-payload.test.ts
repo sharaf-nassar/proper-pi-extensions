@@ -13,6 +13,7 @@ import { stream as openAIResponsesStream } from "@earendil-works/pi-ai/api/opena
 const originalHome = process.env.HOME;
 const testHome = mkdtempSync(join(tmpdir(), "proper-llm-router-payload-test-"));
 process.env.HOME = testHome;
+delete process.env.PI_CODING_AGENT_DIR; // keep models.json migration in the temp home
 // Clear inherited routing env overrides so they cannot disable routing during tests.
 const originalRouterOff = process.env.LLM_ROUTER_OFF;
 const originalRouterOn = process.env.LLM_ROUTER_ON;
@@ -57,6 +58,7 @@ async function judgePayload(model: any): Promise<unknown[]> {
 		on(name: string, handler: typeof inputHandler) {
 			if (name === "input") inputHandler = handler;
 		},
+		registerVirtualModel() {},
 		registerCommand() {},
 		async setModel() {
 			return true;

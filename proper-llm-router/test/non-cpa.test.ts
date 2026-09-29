@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -8,10 +14,12 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 const originalHome = process.env.HOME;
 const testHome = mkdtempSync(join(tmpdir(), "proper-llm-router-test-"));
 process.env.HOME = testHome;
+delete process.env.PI_CODING_AGENT_DIR; // keep models.json migration in the temp home
 const {
 	default: llmRouter,
 	isTrivialInput,
 	loadConfig,
+	removeLegacyPlaceholder,
 	resolveModelTarget,
 	saveConfig,
 } = await import("../llm-router.ts");
@@ -24,7 +32,7 @@ after(() => {
 const directModels = [
 	{
 		provider: "openai-codex",
-		id: "gpt-6-sol",
+		id: "gpt-6.1-sol",
 		api: "openai-codex-responses",
 	},
 	{
@@ -52,7 +60,10 @@ const directModels = [
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]
 test("model targets resolve across configured Pi providers", () => {
 	assert.equal(resolveModelTarget("", directModels), undefined);
-	assert.equal(resolveModelTarget("openai/gpt-6-sol", directModels), undefined);
+	assert.equal(
+		resolveModelTarget("openai/gpt-6.1-sol", directModels),
+		undefined,
+	);
 	assert.deepEqual(
 		resolveModelTarget("claude-opus-5-5", directModels),
 		directModels[3],
@@ -96,22 +107,100 @@ test("model targets resolve across configured Pi providers", () => {
 });
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]
-test("factory self-registers the llm-router/auto placeholder", () => {
-	const registered: Array<
-		[string, { baseUrl: string; models: { id: string }[] }]
-	> = [];
+test("virtual placeholder dispatches stray requests to the fallback", () => {
+	const registered: any[] = [];
 	llmRouter({
 		on() {},
-		registerCommand() {},
-		registerProvider(name: string, config: unknown) {
-			registered.push([name, config as (typeof registered)[0][1]]);
+		registerVirtualModel(model: unknown) {
+			registered.push(model);
 		},
+		registerCommand() {},
 	} as unknown as Parameters<typeof llmRouter>[0]);
 	assert.equal(registered.length, 1);
-	const [name, config] = registered[0] ?? [];
-	assert.equal(name, "llm-router");
-	assert.equal(config?.models[0]?.id, "auto");
-	assert.ok(config?.baseUrl.startsWith("http://127.0.0.1:1/"));
+	const [auto] = registered;
+	assert.equal(`${auto.provider}/${auto.id}`, "llm-router/auto");
+	const ctx = (models: typeof directModels) => ({
+		modelRegistry: {
+			getAvailable: () => models,
+			find: (provider: string, id: string) =>
+				models.find((m) => m.provider === provider && m.id === id),
+		},
+	});
+	const request = { thinkingLevel: "high", reason: "user" };
+	const route = auto.route(request, ctx(directModels));
+	assert.equal(
+		`${route.model.provider}/${route.model.id}`,
+		"openai-codex/gpt-6.1-sol",
+	);
+	assert.equal(route.thinkingLevel, "high");
+	assert.throws(() => auto.route(request, ctx([])), /fallback gpt-6\.1-sol/);
+});
+
+// @lat: [[lat.md/proper-llm-router/tests#Verification#Legacy placeholder migration]]
+test("legacy models.json placeholder is removed before registration", async () => {
+	const agentDir = join(testHome, ".pi", "agent");
+	const file = join(agentDir, "models.json");
+	mkdirSync(agentDir, { recursive: true });
+	assert.equal(removeLegacyPlaceholder(file), false); // missing file
+	writeFileSync(file, '{ // comment\n "providers": {} }');
+	assert.equal(removeLegacyPlaceholder(file), false); // JSONC left alone
+	writeFileSync(
+		file,
+		JSON.stringify({
+			providers: {
+				"llm-router": {
+					baseUrl: "http://127.0.0.1:1/v1",
+					models: [{ id: "auto" }],
+				},
+				other: { models: [{ id: "x" }] },
+			},
+		}),
+	);
+
+	const registered: unknown[] = [];
+	const handlers = new Map<string, (event: any, ctx: any) => Promise<void>>();
+	const switched: unknown[] = [];
+	llmRouter({
+		on(name: string, handler: (event: any, ctx: any) => Promise<void>) {
+			handlers.set(name, handler);
+		},
+		registerVirtualModel(model: unknown) {
+			registered.push(model);
+		},
+		registerCommand() {},
+		async setModel(model: unknown) {
+			switched.push(model);
+			return true;
+		},
+	} as unknown as Parameters<typeof llmRouter>[0]);
+	// Pi still holds the physical entry until the registry reloads.
+	assert.equal(registered.length, 0);
+	assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {
+		providers: { other: { models: [{ id: "x" }] } },
+	});
+
+	const virtual = { provider: "llm-router", id: "auto", api: "pi-virtual" };
+	const refreshes: unknown[] = [];
+	const notices: string[] = [];
+	await handlers.get("session_start")?.(
+		{ reason: "resume" },
+		{
+			model: { provider: "llm-router", id: "auto", api: "openai-completions" },
+			modelRegistry: {
+				refresh: async (options: unknown) => refreshes.push(options),
+				find: () => virtual,
+			},
+			sessionManager: { getBranch: () => [] },
+			ui: { notify: (message: string) => notices.push(message) },
+		},
+	);
+	assert.deepEqual(refreshes, [
+		{ providers: ["llm-router"], allowNetwork: false },
+	]);
+	assert.equal(registered.length, 1);
+	assert.deepEqual(switched, [virtual]);
+	assert.match(notices[0] ?? "", /removed the obsolete llm-router provider/);
+	rmSync(file);
 });
 
 // @lat: [[lat.md/proper-llm-router/tests#Verification#Non-CPA routing fixture]]
@@ -126,6 +215,7 @@ test("first input routes through Pi providers without CPA", async () => {
 		on(name: string, handler: typeof inputHandler) {
 			if (name === "input") inputHandler = handler;
 		},
+		registerVirtualModel() {},
 		registerCommand() {},
 		async setModel(model: unknown) {
 			switched = model;
@@ -214,6 +304,7 @@ test("trivial and image-only first inputs use the fallback without a judge call"
 		on(name: string, handler: typeof inputHandler) {
 			if (name === "input") inputHandler = handler;
 		},
+		registerVirtualModel() {},
 		registerCommand() {},
 		async setModel(model: unknown) {
 			switched = model;
@@ -238,7 +329,7 @@ test("trivial and image-only first inputs use the fallback without a judge call"
 	assert.deepEqual(await inputHandler({ text: "1A 2B", images: [] }, ctx), {
 		action: "continue",
 	});
-	assert.equal(switched?.id, "gpt-6-sol");
+	assert.equal(switched?.id, "gpt-6.1-sol");
 
 	// an unknown sentinel on a trivial reply is still stripped
 	switched = undefined;
@@ -246,7 +337,7 @@ test("trivial and image-only first inputs use the fallback without a judge call"
 		await inputHandler({ text: "[[llm-router: nope]] y", images: [] }, ctx),
 		{ action: "transform", text: "y", images: [] },
 	);
-	assert.equal(switched?.id, "gpt-6-sol");
+	assert.equal(switched?.id, "gpt-6.1-sol");
 
 	const images = [
 		{ type: "image", mimeType: "image/png", data: "fixture-image" },
@@ -257,7 +348,7 @@ test("trivial and image-only first inputs use the fallback without a judge call"
 			const event = { text, images, source };
 			const original = structuredClone(event);
 			assert.deepEqual(await inputHandler(event, ctx), { action: "continue" });
-			assert.equal(switched?.id, "gpt-6-sol");
+			assert.equal(switched?.id, "gpt-6.1-sol");
 			assert.deepEqual(event, original);
 			assert.equal(event.images, images);
 		}
@@ -281,6 +372,7 @@ test("pinned commands switch direct providers without CPA", async () => {
 		on(name: string, handler: typeof inputHandler) {
 			if (name === "input") inputHandler = handler;
 		},
+		registerVirtualModel() {},
 		registerCommand() {},
 		async setModel(model: unknown) {
 			switched = model;
@@ -313,6 +405,7 @@ test("config UI preselects values and wraps backward", async () => {
 	let configHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
 	llmRouter({
 		on() {},
+		registerVirtualModel() {},
 		registerCommand(name: string, command: { handler: typeof configHandler }) {
 			if (name === "llm-router-config") configHandler = command.handler;
 		},
@@ -391,7 +484,7 @@ test("config UI preselects values and wraps backward", async () => {
 		},
 	});
 	assert.deepEqual(picks.slice(0, 2), ["Judge", "Model"]);
-	assert.equal(picks[2]?.startsWith("openai-codex/gpt-6-sol"), true);
+	assert.equal(picks[2]?.startsWith("openai-codex/gpt-6.1-sol"), true);
 	assert.deepEqual(picks.slice(3, 5), ["Judge", "Fast"]);
 	assert.equal(picks[5]?.startsWith("off"), true);
 	assert.equal(picks[6], "Done");
@@ -402,6 +495,7 @@ test("config UI hides CPA-only controls and JSON fields without CPA", async () =
 	let configHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
 	llmRouter({
 		on() {},
+		registerVirtualModel() {},
 		registerCommand(name: string, command: { handler: typeof configHandler }) {
 			if (name === "llm-router-config") configHandler = command.handler;
 		},
@@ -453,6 +547,7 @@ test("startup preserves persisted conversations but arms new and stale sessions"
 		on(name: string, handler: typeof sessionStart) {
 			if (name === "session_start") sessionStart = handler;
 		},
+		registerVirtualModel() {},
 		registerCommand() {},
 		async setModel(model: { provider: string; id: string }) {
 			switches.push(`${model.provider}/${model.id}`);
@@ -543,6 +638,7 @@ test("routing switch disables globally and re-enables per session", async () => 
 			if (name === "session_start") sessionStart = handler;
 			if (name === "before_agent_start") agentStart = handler;
 		},
+		registerVirtualModel() {},
 		registerCommand(name: string, command: { handler: typeof configHandler }) {
 			if (name === "llm-router-config") configHandler = command.handler;
 		},
@@ -597,7 +693,7 @@ test("routing switch disables globally and re-enables per session", async () => 
 		assert.equal(menus[0]?.[0], "Disable routing (all sessions)");
 		assert.equal(menus[0]?.includes("Enable routing for this session"), false);
 		assert.equal(loadConfig(configPath).enabled, false);
-		assert.deepEqual(switches, ["openai-codex/gpt-6-sol"]);
+		assert.deepEqual(switches, ["openai-codex/gpt-6.1-sol"]);
 		assert.deepEqual(menus[1]?.slice(0, 2), [
 			"Enable routing (all sessions)",
 			"Enable routing for this session",
@@ -656,7 +752,7 @@ test("routing switch disables globally and re-enables per session", async () => 
 		assert.equal(process.env.LLM_ROUTER_ON, undefined);
 		assert.equal(loadConfig(configPath).enabled, true);
 		assert.deepEqual(switches.slice(3), [
-			"openai-codex/gpt-6-sol",
+			"openai-codex/gpt-6.1-sol",
 			"llm-router/auto",
 		]);
 		assert.equal(

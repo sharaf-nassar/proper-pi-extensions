@@ -48,8 +48,8 @@ A down verdict moves once to a fixed cross-lane target.
 | --- | --- |
 | `claude-fable-5-1` | `gpt-6-astra` |
 | `gpt-6-astra` | `claude-fable-5-1` |
-| `claude-opus-5-5` | `gpt-6-sol` |
-| `gpt-6-sol` | `claude-opus-5-5` |
+| `claude-opus-5-5` | `gpt-6-1-sol` |
+| `gpt-6-1-sol` | `claude-opus-5-5` |
 | `claude-sonnet-5` | `gpt-6-luna` |
 | `claude-haiku-4-5` | `gpt-6-luna` |
 | `gpt-6-luna` | `claude-haiku-4-5` |

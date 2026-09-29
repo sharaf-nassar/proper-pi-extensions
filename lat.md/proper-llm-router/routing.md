@@ -79,7 +79,7 @@ Input a judge cannot usefully rank uses `fallbackModel` without a judge call or 
 
 The check runs on the task text after sentinel stripping, so a trivial reply carrying an unknown marker still has the marker removed. Slash commands with arguments are ordinary task text unless a pin matches them, so `/review <scope>` stays eligible for routing while a command name alone never spends a judge call.
 
-This is the one path that fails silently. If the fallback model is missing from the registry the input continues unrouted and without a notice, which is the placeholder exposure described under `Placeholder safety` in `operations.md`.
+This is the one path that fails silently. If the fallback model is missing from the registry the input continues unrouted and without a notice; the resulting request then fails with the placeholder router's named error described under `Placeholder safety` in `operations.md`.
 
 ## Registry lookup
 
@@ -101,7 +101,7 @@ Cancellation depends on `ctx.ui.onTerminalInput`. On a pi build without it the h
 
 Any other judged-path failure selects `fallbackModel` and shows an error notice. This includes judge failure, invalid structured output, and both a verdict arm and its swap target being unavailable. Fallback selection uses authenticated registry lookup only; it does not re-run CPA checks for the fallback.
 
-The registry must contain a switchable target or fallback model. If neither can be found, the extension reports an error and remains on the placeholder provider; correct model authentication or configuration before retrying.
+The registry must contain a switchable target or fallback model. If neither can be found, the extension reports an error and remains on the placeholder, whose router cannot dispatch either; correct model authentication or configuration before retrying.
 
 ## Subagent behavior
 

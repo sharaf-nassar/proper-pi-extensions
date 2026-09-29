@@ -1,7 +1,7 @@
 # proper-compact
 
 [Pi](https://pi.dev) summarizes older conversation to make room for new work.
-In Pi 0.87.1, stock summarization clips each tool result to its first 2,000
+In Pi 0.99.1, stock summarization clips each tool result to its first 2,000
 characters. The final error or test outcome in a long log may never reach the
 summarizer.
 
@@ -205,7 +205,7 @@ npm run typecheck
 npm run test:coverage
 ```
 
-Tests use Pi 0.87.1 compaction/persistence and registry routing with mocked model
+Tests use Pi 0.99.1 compaction/persistence and registry routing with mocked model
 responses. They cover trailing/interior failures, chunk coverage, repeated
 compaction, continuation prompts, thinking exclusion, context-edit provenance,
 plain-text refusals, invalid output, cancellation,
@@ -219,7 +219,7 @@ trusted-publisher registration; no publication happens during development.
 
 ## Design evidence
 
-- [Pi compaction](https://github.com/earendil-works/pi/blob/v0.87.1/packages/coding-agent/docs/compaction.md): native lifecycle and structured checkpoints. Tested against released 0.87.1, not unreleased main.
+- [Pi compaction](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/compaction.md): native lifecycle and structured checkpoints. Tested against released 0.99.1, not unreleased main.
 - [Pi split-turn prompt fix](https://github.com/earendil-works/pi/pull/9908): continuation wording and conversation/instruction separation address reported Fable 5.1 refusals. Our offline tests check the prompt contract, not live-model refusal rates.
 - [Factory compression evaluation](https://factory.com/news/evaluating-compression): motivation for structured task state and artifact tracking; vendor-reported, not an independent ranking.
 - [The Complexity Trap](https://arxiv.org/abs/2508.21433): compare complete task cost, not context reduction alone.

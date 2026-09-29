@@ -14,7 +14,7 @@ const CORPUS = [
 		"claude-sonnet-5": 1,
 	}),
 	row("write a standalone quicksort implementation with unit tests", {
-		"gpt-6-sol": 0.5,
+		"gpt-6-1-sol": 0.5,
 	}),
 	row("investigate flaky websocket reconnect backoff timing", {
 		"claude-opus-5-5": 0,

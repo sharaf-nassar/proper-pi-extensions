@@ -1071,36 +1071,36 @@ test("shutdown releases waiting admissions even when the rewrite ignores abort",
 			finish = resolve;
 		});
 	};
-	const callbacks: boolean[] = [];
+	const callbacks: string[] = [];
 	const first = host.session.prompt("first pending rewrite task");
 	await started;
 	const waiting = host.session.prompt("second pending rewrite task", {
-		preflightResult: (accepted: boolean) => callbacks.push(accepted),
+		preflightResult: (disposition: string) => callbacks.push(disposition),
 	});
 	await host.shutdown();
 	await waiting;
 	assert.equal(completions, 1);
-	assert.deepEqual(callbacks, [true]);
+	assert.deepEqual(callbacks, ["handled"]);
 	finish(reply("late result ignored"));
 	await first;
 	assert.equal(host.sent.length, 0);
 });
 
-test("native rejection reports preflight once and frees admission", async () => {
+test("native rejection skips preflight and frees admission", async () => {
 	saveConfig({ ...DEFAULTS, model: "test/rewrite", auto: false });
 	const host = createHostFixture(properPacify);
 	await host.start();
 	try {
 		const model = host.agent.state.model;
 		host.agent.state.model = undefined;
-		const callbacks: boolean[] = [];
+		const callbacks: string[] = [];
 		await assert.rejects(
 			host.session.prompt("reject this missing model", {
-				preflightResult: (accepted: boolean) => callbacks.push(accepted),
+				preflightResult: (disposition: string) => callbacks.push(disposition),
 			}),
 			/model/i,
 		);
-		assert.deepEqual(callbacks, [false]);
+		assert.deepEqual(callbacks, []);
 		host.agent.state.model = model;
 		await host.session.prompt("accept after rejected preflight");
 		assert.equal(host.sent.length, 1);

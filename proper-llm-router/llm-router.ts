@@ -27,7 +27,7 @@
  *   "judge": { "model": "...",               // authenticated Pi model
  *              "effort": "medium" | null,
  *              "fast": false },              // priority service tier
- *   "fallbackModel": "gpt-6-sol",             // id or provider/id
+ *   "fallbackModel": "gpt-6.1-sol",           // id or provider/id
  *   "cpaBase": "http://127.0.0.1:8317",       // optional quota management API
  *   "exemplarsPath": ".../exemplars.jsonl",   // optional few-shot corpus
  *   "quotaMaxPct": null,                      // gate: exclude arms >= this % used
@@ -58,10 +58,10 @@
  * persists the last-set model as the default ("enabled": false or
  * LLM_ROUTER_OFF=1 disables; LLM_ROUTER_ON=1 re-enables one process tree —
  * the menu's "this session" switch sets it, spawned children inherit it).
- * The factory self-registers llm-router/auto via pi.registerProvider();
- * a manual ~/.pi/agent/models.json entry is optional and composes above
- * it. No request should ever reach the placeholder endpoint — routing
- * switches the session before the agent loop runs.
+ * The factory self-registers llm-router/auto via pi.registerVirtualModel();
+ * a manual ~/.pi/agent/models.json entry for it now conflicts and must be
+ * removed. Routing switches the session before the agent loop runs; any
+ * request that still reaches the placeholder is dispatched to the fallback.
  *
  * Env hooks kept from the python stack: JUDGE_EXEMPLARS=0 (skip few-shot),
  * CPA_MANAGEMENT_KEY (per-account usage checks),
@@ -83,7 +83,7 @@ import type {
 	ExtensionContext,
 	InputEventResult,
 } from "@earendil-works/pi-coding-agent";
-import { DynamicBorder } from "@earendil-works/pi-coding-agent";
+import { DynamicBorder, getAgentDir } from "@earendil-works/pi-coding-agent";
 import {
 	Container,
 	type SelectItem,
@@ -264,11 +264,11 @@ export interface Config {
 const DEFAULTS: Config = {
 	enabled: true,
 	judge: {
-		model: "gpt-6-sol",
+		model: "gpt-6.1-sol",
 		effort: "medium",
 		fast: false,
 	},
-	fallbackModel: "gpt-6-sol",
+	fallbackModel: "gpt-6.1-sol",
 	cpaBase: "http://127.0.0.1:8317",
 	exemplarsPath: path.join(EXTENSION_DIR, "exemplars.jsonl"),
 	quotaMaxPct: null,
@@ -280,7 +280,7 @@ const DEFAULTS: Config = {
 		triage: { model: "claude-fable-5-1", effort: "xhigh" },
 		spec: { model: "claude-fable-5-1", effort: "xhigh" },
 		refine: { model: "claude-fable-5-1", effort: "xhigh" },
-		"implement-ready": { model: "gpt-6-sol", effort: "xhigh" },
+		"implement-ready": { model: "gpt-6-1-sol", effort: "xhigh" },
 	},
 };
 
@@ -319,6 +319,38 @@ export function saveConfig(cfg: Config): void {
 	fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(cfg, null, 2)}\n`);
 }
 
+/** Remove the manual `llm-router/auto` entry that releases before the
+ * virtual placeholder documented for models.json; Pi refuses to register
+ * the virtual model over it. Files that are missing, commented, or invalid
+ * JSON are left alone. Returns whether the file changed. */
+// @lat: [[lat.md/proper-llm-router/operations#Installation contract]]
+export function removeLegacyPlaceholder(file: string): boolean {
+	let data: { providers?: Record<string, { models?: { id?: unknown }[] }> };
+	try {
+		data = JSON.parse(fs.readFileSync(file, "utf8"));
+	} catch (error) {
+		if (error instanceof SyntaxError) return false;
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		throw error;
+	}
+	const provider = data?.providers?.[PROVIDER];
+	const models = provider?.models;
+	if (
+		!provider ||
+		!Array.isArray(models) ||
+		!models.some((m) => m?.id === "auto")
+	)
+		return false;
+	const rest = models.filter((m) => m?.id !== "auto");
+	if (rest.length) provider.models = rest;
+	else delete data.providers?.[PROVIDER];
+	// Write-then-rename so a crash never leaves a truncated models.json.
+	const tmp = `${file}.llm-router-${process.pid}.tmp`;
+	fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`);
+	fs.renameSync(tmp, file);
+	return true;
+}
+
 // ---------------------------------------------------------------- arms
 const ARMS = {
 	"claude-haiku-4-5": { model: "claude-haiku-4-5" },
@@ -326,22 +358,24 @@ const ARMS = {
 	"claude-opus-5-5": { model: "claude-opus-5-5" },
 	"claude-fable-5-1": { model: "claude-fable-5-1" },
 	"gpt-6-luna": { model: "gpt-6-luna" },
-	"gpt-6-sol": { model: "gpt-6-sol" },
+	"gpt-6-1-sol": { model: "gpt-6.1-sol" },
 	"gpt-6-astra": { model: "gpt-6-astra" },
 } as const;
 type Arm = keyof typeof ARMS;
 
 // Arm keys retired by the September 2026 catalog update, mapped to the arm
 // that inherited each model's role, so existing overrides, pins, and
-// sentinels keep resolving. GPT-6 Sol matches GPT-5.6 Sol and costs less
-// than Terra, so both of their keys land on it.
+// sentinels keep resolving. GPT-6 Sol matched GPT-5.6 Sol and cost less
+// than Terra, so both of their keys landed on it; GPT-6.1 Sol, Pi's Codex
+// default since 0.99.1, then replaced GPT-6 Sol in the same slot.
 // @lat: [[models#Deterministic names]]
 const RETIRED_ARMS: Record<string, Arm> = {
 	"claude-opus-5": "claude-opus-5-5",
 	"claude-fable-5": "claude-fable-5-1",
 	"gpt-5-6-luna": "gpt-6-luna",
-	"gpt-5-6-terra": "gpt-6-sol",
-	"gpt-5-6-sol": "gpt-6-sol",
+	"gpt-5-6-terra": "gpt-6-1-sol",
+	"gpt-5-6-sol": "gpt-6-1-sol",
+	"gpt-6-sol": "gpt-6-1-sol",
 };
 
 export interface ModelTarget {
@@ -436,8 +470,8 @@ const CLAUDE_ARMS = new Set([
 const SWAP: Record<Arm, Arm> = {
 	"claude-fable-5-1": "gpt-6-astra",
 	"gpt-6-astra": "claude-fable-5-1",
-	"claude-opus-5-5": "gpt-6-sol",
-	"gpt-6-sol": "claude-opus-5-5",
+	"claude-opus-5-5": "gpt-6-1-sol",
+	"gpt-6-1-sol": "claude-opus-5-5",
 	"claude-sonnet-5": "gpt-6-luna",
 	"claude-haiku-4-5": "gpt-6-luna",
 	"gpt-6-luna": "claude-haiku-4-5",
@@ -594,12 +628,12 @@ escalate when scope is ambiguous or reasoning is deep.
     - claude-fable-5-1   (frontier: architecture, ambiguous scope)
   harness: codex (cheapest first) — self-contained/algorithmic lane
     - gpt-6-luna         (fast: trivial edits to code given in the prompt)
-    - gpt-6-sol          (balanced: implementing well-specified functions,
+    - gpt-6-1-sol        (balanced: implementing well-specified functions,
                           endpoints, or classes from a clear spec; hard
                           algorithmic work, performance optimization,
                           tricky single-file logic)
     - gpt-6-astra        (frontier: novel algorithms, proof- or
-                          math-heavy reasoning, work beyond gpt-6-sol)
+                          math-heavy reasoning, work beyond gpt-6-1-sol)
 
 Lane rule (measured, not stylistic): any task that requires working
 inside an existing repository or project (bug fix, feature, tests,
@@ -623,10 +657,10 @@ Tier boundaries (apply in order, first match wins):
    together -> claude-sonnet-5.
 4. Self-contained work that needs a novel algorithm, a proof, or a
    math-heavy derivation, or whose similar measured tasks show
-   gpt-6-sol failing -> gpt-6-astra.
+   gpt-6-1-sol failing -> gpt-6-astra.
 5. Self-contained single-file work where correctness is subtle
    (boundary conditions, complexity bounds, performance targets), or
-   an implementation that is fully specified -> gpt-6-sol (or
+   an implementation that is fully specified -> gpt-6-1-sol (or
    claude-sonnet-5 if it must integrate into a repo).
 6. Mechanical one-line/one-symbol edits: inside a repo
    -> claude-haiku-4-5; on pasted/standalone code -> gpt-6-luna.
@@ -1504,30 +1538,38 @@ async function directFinal(
 }
 
 export default function (pi: ExtensionAPI) {
-	// Self-register the llm-router/auto placeholder so `pi install` alone
-	// is enough — no manual models.json edit on install or update. The
-	// port-1 baseUrl is an intentional dead end; routing switches away
-	// before any request. Older hosts without registerProvider fall back
-	// to the documented manual models.json entry.
-	if (typeof pi.registerProvider === "function") {
-		pi.registerProvider(PROVIDER, {
-			name: "LLM Router",
-			baseUrl: "http://127.0.0.1:1/v1",
-			apiKey: "unused",
-			api: "openai-completions",
-			models: [
-				{
-					id: "auto",
-					name: "auto",
-					reasoning: false,
-					input: ["text", "image"],
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-					contextWindow: 128000,
-					maxTokens: 16384,
-				},
-			],
-		});
-	}
+	// Self-register llm-router/auto as a Pi virtual model so `pi install`
+	// alone is enough. Input routing switches the session to a real model
+	// before the agent loop; a request that still arrives here (an extension
+	// message with no input event, a compaction summary, or a routing path
+	// that found no model) runs on the fallback instead of failing.
+	// @lat: [[lat.md/proper-llm-router/operations#Placeholder safety]]
+	const placeholder: Parameters<ExtensionAPI["registerVirtualModel"]>[0] = {
+		provider: PROVIDER,
+		id: "auto",
+		name: "auto",
+		thinkingLevels: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+		route(request, ctx) {
+			const cfg = loadConfig();
+			const model = findConfiguredModel(
+				ctx,
+				cfg.fallbackModel,
+				availableModels(ctx),
+			);
+			if (!model) {
+				throw new Error(
+					`llm-router/auto only routes, and fallback ${cfg.fallbackModel} is not an authenticated Pi model`,
+				);
+			}
+			return { model, thinkingLevel: request.thinkingLevel };
+		},
+	};
+	// Pi loaded models.json before this factory ran, so a legacy entry
+	// removed now is still in memory; register after reloading at startup.
+	let legacyRemoved = removeLegacyPlaceholder(
+		path.join(getAgentDir(), "models.json"),
+	);
+	if (!legacyRemoved) pi.registerVirtualModel(placeholder);
 
 	function availableModels(ctx: ExtensionContext): RegistryModel[] {
 		return ctx.modelRegistry
@@ -1585,6 +1627,21 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	pi.on("session_start", async (event, ctx) => {
+		if (legacyRemoved) {
+			legacyRemoved = false;
+			await ctx.modelRegistry.refresh({
+				providers: [PROVIDER],
+				allowNetwork: false,
+			});
+			pi.registerVirtualModel(placeholder);
+			// A restored session may still hold the removed physical model.
+			const auto = ctx.modelRegistry.find(PROVIDER, "auto");
+			if (ctx.model?.provider === PROVIDER && auto) await pi.setModel(auto);
+			ctx.ui.notify(
+				"llm-router: removed the obsolete llm-router provider from models.json",
+				"info",
+			);
+		}
 		if (!routingEnabled(loadConfig())) return;
 		const hasConversation = ctx.sessionManager
 			.getBranch()
@@ -1621,7 +1678,7 @@ export default function (pi: ExtensionAPI) {
 		'task: "[[llm-router: claude-opus-5-5]] Fix the race in …". The marker is stripped ' +
 		"before the child sees it. Models, weakest to strongest: repo/agentic work — " +
 		"claude-haiku-4-5, claude-sonnet-5, claude-opus-5-5, claude-fable-5-1; self-contained/" +
-		"algorithmic work — gpt-6-luna, gpt-6-sol, gpt-6-astra.";
+		"algorithmic work — gpt-6-luna, gpt-6-1-sol, gpt-6-astra.";
 	pi.on("before_agent_start", (event) => {
 		if (!routingEnabled(loadConfig())) return;
 		if (

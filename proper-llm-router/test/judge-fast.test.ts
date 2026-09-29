@@ -7,6 +7,7 @@ import { after, test } from "node:test";
 const originalHome = process.env.HOME;
 const testHome = mkdtempSync(join(tmpdir(), "proper-llm-router-judge-test-"));
 process.env.HOME = testHome;
+delete process.env.PI_CODING_AGENT_DIR; // keep models.json migration in the temp home
 const {
 	default: llmRouter,
 	loadConfig,
@@ -24,7 +25,7 @@ const models = [
 	"claude-opus-5-5",
 	"claude-fable-5-1",
 	"gpt-6-luna",
-	"gpt-6-sol",
+	"gpt-6.1-sol",
 	"gpt-6-astra",
 ].map((id) => ({
 	provider: "cliproxyapi",
@@ -40,6 +41,7 @@ function inputHandler() {
 		on(name: string, candidate: typeof handler) {
 			if (name === "input") handler = candidate;
 		},
+		registerVirtualModel() {},
 		registerCommand() {},
 		async setModel() {
 			return true;
@@ -72,7 +74,7 @@ test("CPA judge uses Pi registry auth and forwards fast mode", async () => {
 
 	// both CPA- and OpenAI-flavoured Codex Responses ids must take the
 	// "required" toolChoice branch, so the judge entry's api varies per run
-	const judgeEntry = models.find((model) => model.id === "gpt-6-sol");
+	const judgeEntry = models.find((model) => model.id === "gpt-6.1-sol");
 	assert.ok(judgeEntry);
 	const run = async (
 		fast: boolean,
@@ -102,7 +104,7 @@ test("CPA judge uses Pi registry auth and forwards fast mode", async () => {
 									type: "toolCall",
 									name: "route_model",
 									arguments: {
-										model: "gpt-6-sol",
+										model: "gpt-6-1-sol",
 										rationale: "fixture",
 									},
 								},
@@ -126,7 +128,7 @@ test("CPA judge uses Pi registry auth and forwards fast mode", async () => {
 
 	assert.equal(captured.length, 4);
 	assert.equal(captured[0]?.model.provider, "cliproxyapi");
-	assert.equal(captured[0]?.model.id, "gpt-6-sol");
+	assert.equal(captured[0]?.model.id, "gpt-6.1-sol");
 	assert.equal(captured[0]?.options.serviceTier, "priority");
 	assert.equal(captured[0]?.options.toolChoice, "required");
 	assert.equal("serviceTier" in (captured[1]?.options ?? {}), false);

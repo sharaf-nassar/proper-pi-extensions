@@ -23,7 +23,7 @@ The runtime is intentionally small and local to pi.
 
 These rules define the behavior that other sections preserve.
 
-1. The `llm-router/auto` model is a placeholder. A routed input must switch to an authenticated Pi model before the agent loop sends a request.
+1. The `llm-router/auto` model is a placeholder, registered as a Pi virtual model. A routed input must switch to an authenticated Pi model before the agent loop sends a request; any request that still reaches the placeholder is dispatched to `fallbackModel`.
 2. Only the first eligible input is routed. Selecting `llm-router/auto` re-arms the session.
 3. The judge always chooses among seven stable semantic slots. Model overrides may replace a slot's prompt label and provider-qualified execution target, while availability and optional CPA quota still apply after judging.
 4. Repository work is judged in the Claude lane. A fixed post-verdict swap may still execute it on a Codex arm when the chosen Claude arm is unavailable.

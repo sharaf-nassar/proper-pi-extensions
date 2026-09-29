@@ -240,6 +240,7 @@ test("each OpenAI backend gets its own hardcoded maximum", async () => {
 		const eligible: [TokensModel, number][] = [
 			[model(CPA, "gpt-6-luna"), 922000],
 			[model("openai-codex", "gpt-6-astra"), 922000],
+			[model("openai-codex", "gpt-6.1-sol"), 922000],
 			[model("openai-codex", "gpt-5.6-terra"), 922000],
 			[model("openai", "gpt-6-astra"), 922000],
 			[model("openai", "gpt-5.5"), 922000],

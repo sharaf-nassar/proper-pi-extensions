@@ -64,7 +64,7 @@ are normal task text unless pinned.
 | `claude-sonnet-5` | Routine multi-file repository work and test suites. |
 | `claude-haiku-4-5` | Localized repository fixes and mechanical edits. |
 | `gpt-6-astra` | Novel algorithms, proofs, math-heavy reasoning, and standalone work beyond Sol. |
-| `gpt-6-sol` | Fully specified standalone code, plus subtle correctness, algorithms, and performance work. |
+| `gpt-6-1-sol` | Fully specified standalone code, plus subtle correctness, algorithms, and performance work. |
 | `gpt-6-luna` | Trivial or mechanical standalone edits. |
 
 Repository inspection and agentic tool use belong to the Claude lane.
@@ -77,10 +77,13 @@ Opus 5.5 replaced Opus 5 at a lower price, and Fable 5.1 replaced Fable 5 at
 the same price. GPT-6 Luna replaced GPT-5.6 Luna. GPT-6 Sol costs slightly
 less than GPT-5.6 Terra and scores about the same as GPT-5.6 Sol, so it takes
 over both of their roles, and GPT-6 Astra adds a stronger GPT tier above it.
-Sonnet 5 and Haiku 4.5 are still Anthropic's newest models in their tiers.
+GPT-6.1 Sol, Pi 0.99.1's OpenAI Codex default, then replaced GPT-6 Sol in
+the `gpt-6-1-sol` slot. Sonnet 5 and Haiku 4.5 are still Anthropic's newest
+models in their tiers.
 
 Names of the retired slots (`claude-opus-5`, `claude-fable-5`,
-`gpt-5-6-luna`, `gpt-5-6-terra`, `gpt-5-6-sol`, and their model IDs) still
+`gpt-5-6-luna`, `gpt-5-6-terra`, `gpt-5-6-sol`, `gpt-6-sol`, and their model
+IDs) still
 work in overrides, pins, and sentinels and select the slot that replaced them.
 The measured exemplars for the new slots come from the models they replaced,
 except `gpt-6-astra`, which has none yet.
@@ -146,7 +149,7 @@ runs.run("retry", {
 | `/triage` | `claude-fable-5-1` | `xhigh` |
 | `/spec` | `claude-fable-5-1` | `xhigh` |
 | `/refine` | `claude-fable-5-1` | `xhigh` |
-| `/implement-ready` | `gpt-6-sol` | `xhigh` |
+| `/implement-ready` | `gpt-6-1-sol` | `xhigh` |
 
 Existing `llm-router.json` files that replace `commandPins` must rename a
 custom `backlog` key to `refine`; custom maps are not merged with defaults.
@@ -191,9 +194,9 @@ modified.
 
 ## Install
 
-Use Node 22.19 or newer and Pi 0.87.1 or newer, the first release whose
-built-in catalog lists every default model. The extension and `ultra`
-compatibility layer are tested against Pi 0.87.1.
+Use Node 22.19 or newer and Pi 0.99.1 or newer, the first release with
+virtual models and a built-in catalog listing every default model. The
+extension and `ultra` compatibility layer are tested against Pi 0.99.1.
 
 Install the published package:
 
@@ -211,29 +214,20 @@ The package has no runtime dependencies and no build step, so a local
 install needs no `npm install`; that command only prepares the development
 checks below.
 
-The extension registers the `llm-router/auto` placeholder provider itself
-at load, so no `~/.pi/agent/models.json` edit is needed on install or
-update. An existing manual entry keeps working — Pi composes it with the
-registration — and remains the fallback for hosts without
-`pi.registerProvider()`:
+The extension registers `llm-router/auto` itself at load as a Pi virtual
+model, so no `~/.pi/agent/models.json` edit or credential is needed. Pi
+refuses to register a virtual model over a physical model with the same ID,
+so on the first launch after updating, the extension removes an older manual
+`llm-router/auto` entry from `models.json` and reports the cleanup. If
+`models.json` contains comments, it is left untouched; remove that entry by
+hand.
 
-```json
-{
-  "providers": {
-    "llm-router": {
-      "baseUrl": "http://127.0.0.1:1/v1",
-      "api": "openai-completions",
-      "apiKey": "unused",
-      "models": [{ "id": "auto" }]
-    }
-  }
-}
-```
-
-The placeholder appears in `/model`, but a healthy route switches away
-before any request reaches its dead port-1 URL. Missing execution or
-fallback registry models can leave the placeholder selected; fix the model
-registry before retrying.
+The placeholder appears in `/model`, and a healthy route switches away before
+the first request. A request that still reaches it, such as a compaction
+summary or an extension message sent without typed input, runs on
+`fallbackModel` at the selected thinking level. If the fallback is missing
+from the model registry, that request fails with a named error; fix the
+model registry before retrying.
 
 The seven execution model IDs, `fallbackModel`, and active override targets
 must resolve to authenticated models in Pi's registry. They may come from
@@ -250,7 +244,7 @@ available, or qualify ambiguous choices:
 ```json
 {
   "judge": {
-    "model": "openai-codex/gpt-6-sol"
+    "model": "openai-codex/gpt-6.1-sol"
   },
   "fallbackModel": "anthropic/claude-opus-5-5",
   "judgeModelOverrides": {
@@ -271,10 +265,10 @@ after the corpus has loaded, and quota data may remain cached for 60 seconds.
 | Field | Default | Behavior |
 | --- | --- | --- |
 | `enabled` | `true` | `false` stops automatic startup activation and sentinel help in every session. A session already on `llm-router/auto` can still route. |
-| `judge.model` | `gpt-6-sol` | Authenticated Pi model ID or `provider/model-id` used for the judge. |
+| `judge.model` | `gpt-6.1-sol` | Authenticated Pi model ID or `provider/model-id` used for the judge. |
 | `judge.effort` | `medium` | Judge `reasoning_effort`; `null` omits it. |
 | `judge.fast` | `false` | Sends `service_tier: "priority"` when enabled. |
-| `fallbackModel` | `gpt-6-sol` | Model ID or `provider/model-id` used after judged failure and for trivial input such as bare commands. |
+| `fallbackModel` | `gpt-6.1-sol` | Model ID or `provider/model-id` used after judged failure and for trivial input such as bare commands. |
 | `cpaBase` | `http://127.0.0.1:8317` | CPA base for optional quota-management requests. |
 | `exemplarsPath` | package `exemplars.jsonl` | Optional measured-outcome corpus. |
 | `quotaMaxPct` | `null` | Average lane usage threshold; `null` disables it. |

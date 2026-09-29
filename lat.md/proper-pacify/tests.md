@@ -48,11 +48,11 @@ It asserts that input beginning with either bypass command reaches dispatch untr
 
 ## Dispatch priority fixture
 
-The fixture invokes Pi 0.87.1's actual AgentSession prompt dispatch and ExtensionRunner, with a foreign extension registered first.
+The fixture invokes Pi 0.99.1's actual AgentSession prompt dispatch and ExtensionRunner, with a foreign extension registered first.
 
 Its partial host supplies image settings with auto-resizing disabled, keeping opaque-image identity assertions independent of Pi's image preprocessing.
 
-Registered commands and input handlers receive rewritten arguments exactly once. Images, bare commands and acknowledgements survive; explicit `/pacify` and `/unpacify` also work when their output invokes a registered foreign command. A concurrent idle RPC-prompt regression holds the first rewrite through native admission and proves the second rejects before a second completion or original-entry append. Registered foreign commands can synchronously submit nested prompts and remain callable during streaming. Native rejection reports one failed preflight and frees admission, while shutdown releases waiting callers without a second rewrite even if the first transport ignores abort.
+Registered commands and input handlers receive rewritten arguments exactly once. Images, bare commands and acknowledgements survive; explicit `/pacify` and `/unpacify` also work when their output invokes a registered foreign command. A concurrent idle RPC-prompt regression holds the first rewrite through native admission and proves the second rejects before a second completion or original-entry append. Registered foreign commands can synchronously submit nested prompts and remain callable during streaming. Native rejection frees admission without a preflight callback, while shutdown releases waiting callers with a `handled` disposition and no second rewrite, even if the first transport ignores abort.
 
 ## Extension flow
 

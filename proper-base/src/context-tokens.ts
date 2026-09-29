@@ -18,6 +18,7 @@ const GLOBAL_KEY = "contextTokens";
 const MAX_INPUT = 922_000;
 const CODEX_MODELS = new Set([
 	"gpt-6-astra",
+	"gpt-6.1-sol",
 	"gpt-6-sol",
 	"gpt-6-luna",
 	"gpt-5.6-sol",

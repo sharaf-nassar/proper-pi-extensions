@@ -1,14 +1,14 @@
 # Runtime operations
 
-Operating llm-router requires Pi registration, a placeholder provider, and authenticated judge and execution models; CPA quota management is optional.
+Operating llm-router requires Pi registration, a virtual placeholder model, and authenticated judge and execution models; CPA quota management is optional.
 
 ## Installation contract
 
 The repository directory and public npm package are both named `proper-llm-router`.
 
-Install the published package with `pi install npm:proper-llm-router`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-llm-router`. The manifest registers `llm-router.ts`, limits the tarball to runtime source, the exemplar corpus, user documentation, and required license notices, and declares Pi's coding-agent, pi-ai, and TUI APIs as host-supplied peers. Coding-agent and pi-ai require 0.87.1 or newer, the first release whose built-in catalog lists every default model in [[models#Arm catalog]].
+Install the published package with `pi install npm:proper-llm-router`, or install the checkout with `pi install /path/to/proper-pi-extensions/proper-llm-router`. The manifest registers `llm-router.ts`, limits the tarball to runtime source, the exemplar corpus, user documentation, and required license notices, and declares Pi's coding-agent, pi-ai, and TUI APIs as host-supplied peers. Coding-agent and pi-ai require 0.99.1 or newer, the first release with the virtual-model API and a built-in catalog listing every default model in [[models#Arm catalog]].
 
-Remove any former direct `extensions` entry for `llm-router.ts` so only one package source loads. The extension factory self-registers provider `llm-router` with model `auto` through `pi.registerProvider()`, including a dead port-1 base URL and dummy key, so installation needs no `~/.pi/agent/models.json` edit. Hosts without `registerProvider` fall back to a manual `models.json` placeholder entry with dummy authentication; an existing manual entry composes with the registration and stays harmless.
+Remove any former direct `extensions` entry for `llm-router.ts` so only one package source loads. The extension factory self-registers `llm-router/auto` through `pi.registerVirtualModel()`, so installation needs no `~/.pi/agent/models.json` edit and no credentials. Pi refuses a virtual model whose ID a physical model of the same provider already uses, so earlier installs' manual `llm-router/auto` entry in Pi's `models.json` would block registration. The factory therefore removes that model from the agent directory's `models.json`, dropping the `llm-router` provider when nothing else remains, with an atomic rename. Pi read the file before the factory ran, so after a removal registration waits for `session_start`, which reloads that provider from disk, registers the virtual model, reselects it when the session held the stale physical entry, and reports the cleanup once. A missing file is ignored, and a file with comments or invalid JSON is left untouched, so Pi's conflict error remains and the entry must be removed by hand.
 
 The model IDs named in [[models]], the configured fallback, and active override targets must resolve among Pi's authenticated models. Values may use unqualified IDs or explicit `provider/model-id`; CPA remains the preferred provider for duplicate unqualified IDs.
 
@@ -71,13 +71,15 @@ Routing state stays an infrastructure concern: when routing is inactive, a pinne
 
 ## Placeholder safety
 
-`llm-router/auto` must never handle an inference request in a healthy setup.
+`llm-router/auto` is a Pi virtual model that never reaches a provider; a request that still arrives there runs on `fallbackModel`.
 
-The extension switches before the agent loop on a pinned, forced, judged, or fallback path. Extension-origin messages from `sendUserMessage()` follow the same routing path, so command aliases cannot reach the placeholder. Missing authenticated targets can still break this guarantee.
+The extension switches the session to a real model before the agent loop on a pinned, forced, judged, or fallback path. Extension-origin messages from `sendUserMessage()` follow the same routing path, so command aliases leave the placeholder too. The session therefore normally never sends a request while `llm-router/auto` is selected.
 
-The judged path reports an error when neither the verdict's effective target nor the fallback resolves. Trivial input, including an unpinned bare command, returns silently instead, so a missing fallback entry leaves that prompt on the placeholder. The registry-lookup section in `routing.md` covers the dated-ID tolerance applied before declaring a model absent.
+Some requests have no input event to route: a custom message that triggers a turn, a compaction summary, or an extension's direct registry call. Pi then asks the virtual model's router, which returns the authenticated `fallbackModel` at the selected thinking level without switching the session. The placeholder offers every Pi thinking level through `max` so that level passes through; `ultra` is not offered because Pi builds virtual models from its own level list.
 
-Automatic startup activation also fails silently when `llm-router/auto` is absent: the session stays on its current model and no routing occurs. Self-registration makes this state reachable only on hosts without `pi.registerProvider()` and no manual entry. The `/llm-router` command performs the same lookup interactively and reports the missing placeholder.
+When the fallback does not resolve, the router throws and Pi ends that request with a named error response rather than contacting any endpoint. The judged path also reports an error when neither the verdict's effective target nor the fallback resolves; trivial input returns silently and its request meets the same named error. The registry-lookup section in `routing.md` covers the dated-ID tolerance applied before declaring a model absent.
+
+Automatic startup activation fails silently when `llm-router/auto` is absent: the session stays on its current model and no routing occurs. Self-registration makes this state reachable only when registration failed, for example against a conflicting manual entry. The `/llm-router` command performs the same lookup interactively and reports the missing placeholder.
 
 ## User notices
 

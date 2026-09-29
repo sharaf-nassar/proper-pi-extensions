@@ -12,7 +12,7 @@ The package uses public Pi 0.87.0 hooks and authenticated registry streaming, wi
 
 `compact.ts` owns configuration, prompt contracts, request planning, output validation, usage, and lifecycle hooks. `context.ts` owns public-text serialization and branch-scoped recall. Pi alone appends successful compaction and branch-summary entries. Ordinary `context` events are untouched.
 
-Stock Pi 0.87.1 limits serialized tool results to their first 2,000 characters. Supplying complete selected public text avoids that pre-summary clipping, while recall lets an agent check original evidence after a lossy summary. These mechanisms do not establish improved task success or lower cost.
+Stock Pi 0.99.1 limits serialized tool results to their first 2,000 characters. Supplying complete selected public text avoids that pre-summary clipping, while recall lets an agent check original evidence after a lossy summary. These mechanisms do not establish improved task success or lower cost.
 
 ## Evidence input
 

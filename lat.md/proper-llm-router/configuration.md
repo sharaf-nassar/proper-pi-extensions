@@ -9,10 +9,10 @@ Missing files and missing keys use built-in defaults.
 | Field | Default | Contract |
 | --- | --- | --- |
 | `enabled` | `true` | global routing switch; `false` stops automatic activation in every session |
-| `judge.model` | `gpt-6-sol` | authenticated Pi judge model ID or `provider/model-id` |
+| `judge.model` | `gpt-6.1-sol` | authenticated Pi judge model ID or `provider/model-id` |
 | `judge.effort` | `medium` | optional provider-specific thinking effort; `null` omits it |
 | `judge.fast` | `false` | `true` sends `service_tier: "priority"` on judge requests |
-| `fallbackModel` | `gpt-6-sol` | model ID or `provider/model-id` used after judged-path failure or for trivial input such as bare commands |
+| `fallbackModel` | `gpt-6.1-sol` | model ID or `provider/model-id` used after judged-path failure or for trivial input such as bare commands |
 | `cpaBase` | `http://127.0.0.1:8317` | CPA base for optional management requests |
 | `exemplarsPath` | `<extension>/exemplars.jsonl` | measured-outcome corpus path |
 | `quotaMaxPct` | `null` | threshold gate; `null` disables it |
@@ -77,9 +77,9 @@ The built-in map removes judge latency for commands with fixed model needs.
 | `/triage` | `claude-fable-5-1` | `xhigh` |
 | `/spec` | `claude-fable-5-1` | `xhigh` |
 | `/refine` | `claude-fable-5-1` | `xhigh` |
-| `/implement-ready` | `gpt-6-sol` | `xhigh` |
+| `/implement-ready` | `gpt-6-1-sol` | `xhigh` |
 
-The judge, fallback, and `/implement-ready` defaults moved from GPT-5.6 Terra and Sol to GPT-6 Sol, which inherited both slots. The planning pins moved from Fable 5 to Fable 5.1.
+The judge, fallback, and `/implement-ready` defaults moved from GPT-5.6 Terra and Sol to GPT-6 Sol, which inherited both slots, and then to GPT-6.1 Sol when Pi 0.99.1 made it the OpenAI Codex default. The planning pins moved from Fable 5 to Fable 5.1.
 
 Existing user maps that still pin `backlog` must rename that key to `refine`. The loader does not migrate custom command names because `commandPins` may contain unrelated user-defined commands.
 

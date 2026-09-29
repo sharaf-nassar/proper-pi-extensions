@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 // fixture runs under an empty home and sees built-in defaults only.
 const smokeHome = mkdtempSync(join(tmpdir(), "proper-llm-router-smoke-"));
 process.env.HOME = smokeHome;
+delete process.env.PI_CODING_AGENT_DIR; // keep models.json migration in the temp home
 process.on("exit", () => rmSync(smokeHome, { recursive: true, force: true }));
 const {
 	default: llmRouter,
@@ -50,9 +51,9 @@ const blocked = quotaBlockedArms(usages, 80);
 // fine; every codex arm blocked: the only codex acct is at 96
 assert.deepStrictEqual([...blocked].sort(), [
 	"claude-opus-5-5",
+	"gpt-6-1-sol",
 	"gpt-6-astra",
 	"gpt-6-luna",
-	"gpt-6-sol",
 ]);
 assert.strictEqual(quotaBlockedArms([], 80).size, 0); // no data: no blocking
 // averaging, not any-account-under: keys at 100 and 80 -> 90, so an 85%
@@ -74,7 +75,7 @@ const availWith = (dead: string[]) =>
 			"claude-opus-5-5",
 			"claude-fable-5-1",
 			"gpt-6-luna",
-			"gpt-6-sol",
+			"gpt-6-1-sol",
 			"gpt-6-astra",
 		].map((a) => [a, { available: !dead.includes(a) }]),
 	);
@@ -87,7 +88,7 @@ assert.deepStrictEqual(
 	{ final: "claude-fable-5-1", swapped: true },
 );
 assert.deepStrictEqual(
-	resolveVerdictModel("gpt-6-sol", availWith(["gpt-6-sol"])),
+	resolveVerdictModel("gpt-6-1-sol", availWith(["gpt-6-1-sol"])),
 	{ final: "claude-opus-5-5", swapped: true },
 );
 assert.deepStrictEqual(
@@ -123,8 +124,8 @@ assert.deepStrictEqual(parseSentinel("[[ LLM-Router : Sol ]] fix it"), {
 	stripped: "fix it",
 }); // case/space tolerant
 assert.strictEqual(resolveArm("claude-opus-5.5"), "claude-opus-5-5"); // dotted id
-assert.strictEqual(resolveArm("gpt-6-sol"), "gpt-6-sol"); // arm key
-assert.strictEqual(resolveArm("Sol"), "gpt-6-sol"); // unique fragment
+assert.strictEqual(resolveArm("gpt-6-1-sol"), "gpt-6-1-sol"); // arm key
+assert.strictEqual(resolveArm("Sol"), "gpt-6-1-sol"); // unique fragment
 assert.strictEqual(resolveArm("astra"), "gpt-6-astra");
 assert.strictEqual(resolveArm("haiku"), "claude-haiku-4-5");
 assert.strictEqual(resolveArm("claude-haiku-4-5-20251001"), "claude-haiku-4-5"); // dated id
@@ -135,8 +136,10 @@ assert.strictEqual(resolveArm("gpt-9"), null); // unknown
 assert.strictEqual(resolveArm("claude-fable-5"), "claude-fable-5-1");
 assert.strictEqual(resolveArm("claude-opus-5"), "claude-opus-5-5");
 assert.strictEqual(resolveArm("gpt-5.6-luna"), "gpt-6-luna");
-assert.strictEqual(resolveArm("gpt-5-6-terra"), "gpt-6-sol");
-assert.strictEqual(resolveArm("gpt-5.6-sol"), "gpt-6-sol");
+assert.strictEqual(resolveArm("gpt-5-6-terra"), "gpt-6-1-sol");
+assert.strictEqual(resolveArm("gpt-5.6-sol"), "gpt-6-1-sol");
+assert.strictEqual(resolveArm("gpt-6-sol"), "gpt-6-1-sol"); // retired GPT-6 Sol
+assert.strictEqual(resolveArm("gpt-6.1-sol"), "gpt-6-1-sol"); // dotted model ID
 
 // @lat: [[lat.md/proper-llm-router/tests#Judge override fixtures]]
 // pure-logic check: judge model overrides replace prompt labels without
@@ -153,18 +156,18 @@ const overrideCfg = {
 assert.strictEqual(
 	applyJudgeModelOverrides(
 		overrideCfg,
-		"claude-fable-5-1 / claude-opus-5-5 / gpt-6-sol",
+		"claude-fable-5-1 / claude-opus-5-5 / gpt-6-1-sol",
 	),
 	"Model overrides are active. Each actual model below inherits the use cases of its selection key. Return the selection key in JSON.\n\n" +
 		"claude-opus-5-5 [selection key: claude-fable-5-1] / " +
-		"custom-frontier-v2 [selection key: claude-opus-5-5] / gpt-6-sol",
+		"custom-frontier-v2 [selection key: claude-opus-5-5] / gpt-6-1-sol",
 );
 assert.strictEqual(
 	judgeModelName(overrideCfg, "claude-fable-5-1"),
 	"claude-opus-5-5",
 );
 assert.strictEqual(judgeModelName(overrideCfg, "gpt-6-luna"), "gpt-5.6-terra");
-assert.strictEqual(judgeModelName(overrideCfg, "gpt-6-sol"), "gpt-6-sol");
+assert.strictEqual(judgeModelName(overrideCfg, "gpt-6-1-sol"), "gpt-6.1-sol");
 
 // pure-logic check: pinned slash commands bypass the judge
 const pinCfg = {
@@ -184,7 +187,7 @@ assert.deepStrictEqual(commandPin(pinCfg, "/File"), {
 	effort: "xhigh",
 }); // bare + case
 assert.deepStrictEqual(commandPin(pinCfg, "/implement-ready"), {
-	arm: "gpt-6-sol",
+	arm: "gpt-6-1-sol",
 	effort: null,
 });
 assert.strictEqual(commandPin(pinCfg, "/bogus x"), null); // unknown model -> judge
@@ -203,6 +206,7 @@ llmRouter({
 	on(name: string, handler: typeof aliasInputHandler) {
 		if (name === "input") aliasInputHandler = handler;
 	},
+	registerVirtualModel() {},
 	registerCommand() {},
 	async setModel(model: unknown) {
 		aliasSwitches += 1;
@@ -212,7 +216,7 @@ llmRouter({
 } as unknown as Parameters<typeof llmRouter>[0]);
 const handleAliasInput = aliasInputHandler;
 assert.ok(handleAliasInput);
-const aliasModel = { provider: "cliproxyapi", id: "gpt-6-sol" };
+const aliasModel = { provider: "cliproxyapi", id: "gpt-6.1-sol" };
 aliasCtx = {
 	model: { provider: "llm-router", id: "auto" },
 	modelRegistry: {
@@ -239,6 +243,7 @@ assert.strictEqual(aliasSwitches, 1);
 let configHandler: ((args: string, ctx: any) => Promise<void>) | undefined;
 llmRouter({
 	on() {},
+	registerVirtualModel() {},
 	registerCommand(name: string, command: { handler: typeof configHandler }) {
 		if (name === "llm-router-config") configHandler = command.handler;
 	},
@@ -276,7 +281,7 @@ const models = [
 	"claude-opus-5-5",
 	"claude-fable-5-1",
 	"gpt-6-luna",
-	"gpt-6-sol",
+	"gpt-6.1-sol",
 	"gpt-6-astra",
 ].map((id) => ({ provider: "cliproxyapi", id }));
 const v = await route(defaults, task, undefined, {

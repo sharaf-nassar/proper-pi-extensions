@@ -12,7 +12,7 @@ const targets = {
 	"claude-opus-5-5": { provider: "cliproxyapi", id: "claude-opus-5-5" },
 	"claude-fable-5-1": { provider: "cliproxyapi", id: "claude-fable-5-1" },
 	"gpt-6-luna": { provider: "cliproxyapi", id: "gpt-6-luna" },
-	"gpt-6-sol": { provider: "cliproxyapi", id: "gpt-6-sol" },
+	"gpt-6-1-sol": { provider: "cliproxyapi", id: "gpt-6.1-sol" },
 	"gpt-6-astra": { provider: "cliproxyapi", id: "gpt-6-astra" },
 };
 
@@ -55,7 +55,7 @@ test("upstream usage 429 blocks that account's lane at the quota threshold", asy
 		const availability = await armAvailability(cfg, targets);
 		assert.equal(availability["claude-haiku-4-5"]?.available, false);
 		assert.equal(availability["claude-fable-5-1"]?.available, false);
-		assert.equal(availability["gpt-6-sol"]?.available, true);
+		assert.equal(availability["gpt-6-1-sol"]?.available, true);
 	} finally {
 		globalThis.fetch = originalFetch;
 	}

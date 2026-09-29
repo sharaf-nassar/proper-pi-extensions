@@ -80,12 +80,14 @@ publish-npm.yml --repo sharaf-nassar/proper-pi-extensions --env npm-release`.
   `${XDG_STATE_HOME:-~/.local/state}/bd-orchestrate`; prompt history:
   `~/.pi/agent/proper-history/`; router config:
   `~/.pi/agent/llm-router.json`.
-- Router self-registers the `llm-router/auto` placeholder at load; a
-  manual models.json entry is optional. Its port-1 URL is an intentional
-  dead placeholder, not a service.
-- Toolchain: Node 22.19+, Pi 0.87.1 compatibility (proper-llm-router and
-  proper-pacify require 0.87.1, whose catalog has their default models;
-  proper-compact and proper-model-prompts require 0.87.0), TypeScript 6.
+- Router self-registers `llm-router/auto` as a Pi virtual model at load
+  and deletes a legacy manual models.json entry for it (JSONC files are
+  left alone and need a manual edit). Stray
+  requests on the placeholder run on the router's `fallbackModel`.
+- Toolchain: Node 22.19+, Pi 0.99.1 tested (proper-llm-router requires
+  0.99.1 for virtual models and GPT-6.1 Sol; proper-pacify requires 0.99.0
+  for prompt preflight dispositions; proper-compact and
+  proper-model-prompts require 0.87.0), TypeScript 6.
 - proper-compact and proper-model-prompts are not published yet. Their first
   releases require maintainer authentication and subsequent npm
   trusted-publisher registration. No global installation or provider inference
