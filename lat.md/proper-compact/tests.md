@@ -10,6 +10,8 @@ Offline tests exercise real Pi compaction and session persistence, registry rout
 
 Configuration rejects invalid types, ambiguous models, unknown fields, and unsafe budgets. Malformed configuration is not overwritten. Checkpoints require complete bounded text, a valid envelope, and ordered nonempty sections.
 
+A configured ID naming the session model keeps the session's widened context window.
+
 ## Settings menu
 
 Menu fixtures exercise the registered command's native dialogs, covering all settings, current values, scoped models, automatic defaults, invalid input, cancellation, fresh-disk merging, shutdown, and headless JSON updates.

@@ -70,9 +70,8 @@ test("real Pi session discovers skills, validates the tool schema, and restores 
 					control.start(ctx);
 				});
 				pi.on("before_agent_start", (event) => control.prepare(event));
-				pi.on("input", (event, ctx) => control.input(event, ctx));
-				pi.on("context", (event, ctx) => ({
-					messages: control.transform(event.messages, ctx),
+				pi.on("context", async (event, ctx) => ({
+					messages: await control.transform(event.messages, ctx),
 				}));
 				pi.on("session_shutdown", () => {
 					control.stop();

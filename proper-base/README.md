@@ -268,7 +268,7 @@ Only complete `/skill:name` tokens matching Pi's discovered catalog activate
 skills. Matching is exact and case-sensitive; duplicate selections load once.
 The first unknown or malformed token starts the literal request, with all
 remaining text preserved. URLs, paths, queries, fragments, filename suffixes and
-punctuation do not partially match names. Ambiguous, unreadable or over-budget
+punctuation do not partially match names. Ambiguous, unreadable or malformed
 registered selections reject the whole request. Explicit `/skill-context load`
 and model-tool loads still report unknown names.
 
@@ -302,7 +302,7 @@ Manage the working set without starting a model turn:
 ```
 
 The list shows selected and removed snapshots, their version hashes, source
-paths, changes on disk, and the character budget. Selections follow the current
+paths, changes on disk, character count, and confirmation threshold. Selections follow the current
 session branch through resume, forks, context edits, and repeated compaction.
 New sessions start empty. There is no guessed task expiry: reference instructions
 apply only where relevant, and removal explicitly ends a selection. Removing a
@@ -316,10 +316,18 @@ Ordinary file reads remain available but do not automatically pin every skill
 file inspected. Supporting resources load on demand; their files are not
 snapshotted or version-pinned by this feature.
 
-Selected bodies must fit 64,000 characters, reduced to 0.4 times the current
-model's context-window tokens for smaller models. This is a bounded character
-allowance, not exact token accounting. Overflow stops the request with instructions
-to remove selections; it never silently truncates a skill or drops an older one.
+Selected instructions above 200,000 characters trigger a confirmation dialog.
+Continue to keep every skill, or cancel to leave new selections unloaded.
+Approval is remembered for the unchanged selection during the session, including
+compaction. Changing the selection or reloading can require another confirmation.
+There is no hard character cap or model-scaled limit; Pi and provider context
+limits still apply. This count includes skill markup and separators, not tokens.
+
+Restored selections are checked before reaching the model. Cancelling that check
+stops the run; use `/skill-context remove <name>` or `/skill-context clear` to
+reduce the selection, or retry and confirm. Runs without an interactive or RPC
+confirmation UI stop with an explanation. No skill is silently truncated or
+dropped.
 
 **Skill context management** in `/settings` enables or disables the feature.
 The preference is enabled by default and saved as `"skillContext"` in

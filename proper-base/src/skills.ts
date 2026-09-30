@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
 	closeSync,
 	fstatSync,
@@ -10,7 +11,6 @@ import {
 	type BeforeAgentStartEvent,
 	type ExtensionAPI,
 	type ExtensionContext,
-	type InputEvent,
 	parseSkillBlock,
 	type Skill,
 	SkillInvocationMessageComponent,
@@ -24,17 +24,17 @@ import {
 	writeSkillContextEnabled,
 } from "./settings.ts";
 import {
-	assertSkillBudget,
 	type ContextMessage,
 	pinSkillContext,
-	SKILL_CONTEXT_CHARS,
 	SKILL_CONTEXT_ENTRY,
 	SKILL_CONTEXT_TOOL,
+	SKILL_CONTEXT_WARNING_CHARS,
 	type SkillChange,
 	SkillContextError,
 	type SkillSelection,
 	type SkillSnapshot,
 	selectedSkills,
+	skillContextChars,
 	skillSnapshot,
 	splitSkillText,
 } from "./skill-context.ts";
@@ -76,10 +76,8 @@ export function loadSkillSnapshot(skill: Skill): SkillSnapshot {
 		const location = realpathSync(skill.filePath);
 		file = openSync(location, "r");
 		const stat = fstatSync(file);
-		if (!stat.isFile() || stat.size > SKILL_CONTEXT_CHARS * 4)
-			throw new SkillContextError(
-				`Skill ${skill.name} is not a regular file within the skill context budget.`,
-			);
+		if (!stat.isFile())
+			throw new SkillContextError(`Skill ${skill.name} is not a regular file.`);
 		const body = stripFrontmatter(readFileSync(file, "utf8")).trim();
 		const baseDir = skill.baseDir;
 		if (
@@ -135,13 +133,6 @@ function findSelection(
 	return matches[0] as SkillSelection;
 }
 
-function budget(ctx: ExtensionContext): number {
-	const window = ctx.model?.contextWindow;
-	return window && window > 0
-		? Math.min(SKILL_CONTEXT_CHARS, Math.floor(window * 0.4))
-		: SKILL_CONTEXT_CHARS;
-}
-
 function mergedSelection(
 	selections: SkillSelection[],
 	incoming: SkillSnapshot[],
@@ -167,6 +158,11 @@ export function registerSkillContext(
 	let context: ExtensionContext | undefined;
 	let disposed = false;
 	let runEnabled: boolean | undefined;
+	let approvedSelection: string | undefined;
+	const dispatch = new AsyncLocalStorage<{
+		expand: boolean;
+		prepared?: { text: string; expanded: string };
+	}>();
 	const enabled = () => !disposed && readSkillContextEnabled(agentDir);
 	const effective = () => !disposed && (runEnabled ?? enabled());
 	let toolHidden = false;
@@ -225,9 +221,39 @@ export function registerSkillContext(
 				automatic && existing ? existing : snapshot,
 			);
 		}
-		const result = [...loaded.values()];
-		assertSkillBudget(mergedSelection(selections, result), budget(ctx));
-		return result;
+		return [...loaded.values()];
+	};
+	const confirmSelection = async (
+		ctx: ExtensionContext,
+		incoming: SkillSnapshot[] = [],
+		signal = ctx.signal,
+	): Promise<boolean> => {
+		const skills = mergedSelection(state(ctx), incoming);
+		const chars = skillContextChars(skills);
+		if (chars <= SKILL_CONTEXT_WARNING_CHARS) return true;
+		const key = skills
+			.map((skill) => skill.hash)
+			.sort()
+			.join(":");
+		if (key === approvedSelection) return true;
+		if (!ctx.hasUI)
+			throw new SkillContextError(
+				`Selected skill instructions total ${chars} characters, above the ${SKILL_CONTEXT_WARNING_CHARS}-character warning threshold. Continuing requires confirmation through an interactive or RPC UI. No instructions were truncated.`,
+			);
+		const confirmed = await ctx.ui.confirm(
+			"Large skill selection",
+			`Selected skill instructions total ${chars} characters, above the ${SKILL_CONTEXT_WARNING_CHARS}-character warning threshold. This may leave less room for conversation and tool output. Continue with all selected skills?`,
+			signal ? { signal } : undefined,
+		);
+		signal?.throwIfAborted();
+		if (
+			!confirmed ||
+			disposed ||
+			context?.sessionManager !== ctx.sessionManager
+		)
+			return false;
+		approvedSelection = key;
+		return true;
 	};
 	const status = (ctx: ExtensionContext): string => {
 		const selections = state(ctx);
@@ -247,21 +273,19 @@ export function registerSkillContext(
 			return `${selection.selected ? "selected" : "removed"}: ${selection.name} [${selection.hash.slice(0, 12)}; ${version}; ${selection.source}]\n  ${selection.location}`;
 		});
 		const active = selections.filter((skill) => skill.selected);
-		const chars = active.reduce(
-			(sum, skill) => sum + skill.block.length + 2,
-			0,
-		);
-		return `Skill context management: ${enabled() ? "enabled" : "disabled"}\n${active.length} selected; ${chars}/${budget(ctx)} instruction characters.\n${rows.join("\n") || "No skill snapshots in this branch."}\n${USAGE}`;
+		const chars = skillContextChars(active);
+		return `Skill context management: ${enabled() ? "enabled" : "disabled"}\n${active.length} selected; ${chars} instruction characters; confirmation above ${SKILL_CONTEXT_WARNING_CHARS}.\n${rows.join("\n") || "No skill snapshots in this branch."}\n${USAGE}`;
 	};
 
-	// The input event lacks expandPromptTemplates. Wrap the actual expansion
-	// boundary so RPC opt-outs, queues and other input transforms remain native.
+	// Preflight after all input transforms, then expand the exact approved
+	// snapshot at Pi's synchronous boundary. Dispatch scope preserves opt-outs.
 	const prototype = AgentSession.prototype;
 	const owner = prototype as typeof prototype & { [INSTALLED]?: () => void };
 	owner[INSTALLED]?.();
 	const native = Reflect.get(prototype, "_expandSkillCommand");
+	const nativeInput = Reflect.get(prototype, "_runInputHandlers");
 	const remove =
-		typeof native === "function"
+		typeof native === "function" && typeof nativeInput === "function"
 			? installWrapper(
 					prototype,
 					"_expandSkillCommand",
@@ -274,6 +298,8 @@ export function registerSkillContext(
 							return Reflect.apply(native, this, [text]);
 						if (!text.startsWith("/skill:"))
 							return Reflect.apply(native, this, [text]);
+						const prepared = dispatch.getStore()?.prepared;
+						if (prepared?.text === text) return prepared.expanded;
 						const parsed = parseSkillCommands(
 							text,
 							new Set(catalog(context).map((skill) => skill.name)),
@@ -287,10 +313,76 @@ export function registerSkillContext(
 					},
 				)
 			: undefined;
+	const restorers = remove ? [remove] : [];
+	if (remove) {
+		for (const name of ["prompt", "steer", "followUp"] as const) {
+			const original = prototype[name];
+			restorers.push(
+				installWrapper(
+					prototype,
+					name,
+					function (this: AgentSession, ...args: unknown[]) {
+						if (disposed || this.sessionManager !== context?.sessionManager)
+							return Reflect.apply(original, this, args);
+						const options = args[1] as
+							| { expandPromptTemplates?: boolean }
+							| undefined;
+						return dispatch.run(
+							{
+								expand:
+									name !== "prompt" || options?.expandPromptTemplates !== false,
+							},
+							() => Reflect.apply(original, this, args),
+						);
+					},
+				),
+			);
+		}
+		restorers.push(
+			installWrapper(
+				prototype,
+				"_runInputHandlers",
+				async function (this: AgentSession, ...args: unknown[]) {
+					const input = (await Reflect.apply(nativeInput, this, args)) as
+						| { text: string }
+						| undefined;
+					const ctx = context;
+					const scope = dispatch.getStore();
+					if (
+						!input ||
+						!scope ||
+						!ctx ||
+						this.sessionManager !== ctx.sessionManager ||
+						!(this.isStreaming ? effective() : enabled())
+					)
+						return input;
+					let snapshots = splitSkillText(input.text).skills;
+					if (scope.expand && input.text.startsWith("/skill:")) {
+						const parsed = parseSkillCommands(
+							input.text,
+							new Set(catalog(ctx).map((skill) => skill.name)),
+						);
+						if (parsed) {
+							snapshots = load(ctx, parsed.names, false);
+							scope.prepared = {
+								text: input.text,
+								expanded: [
+									...snapshots.map((skill) => skill.block),
+									...(parsed.request ? [parsed.request] : []),
+								].join("\n\n"),
+							};
+						}
+					}
+					return (await confirmSelection(ctx, snapshots)) ? input : undefined;
+				},
+			),
+		);
+	}
 	const stop = () => {
 		disposed = true;
 		context = undefined;
-		remove?.();
+		for (const restore of restorers.reverse()) restore();
+		dispatch.disable();
 		if (owner[INSTALLED] === stop) delete owner[INSTALLED];
 	};
 	owner[INSTALLED] = stop;
@@ -354,6 +446,7 @@ export function registerSkillContext(
 							? names.map((name) => findSelection(state(ctx), name).name)
 							: names;
 					const snapshots = load(ctx, requested, false);
+					if (!(await confirmSelection(ctx, snapshots))) return;
 					save({
 						action: "load",
 						blocks: snapshots.map((skill) => skill.block),
@@ -425,6 +518,10 @@ export function registerSkillContext(
 					"Expected action load with an array of skill names.",
 				);
 			const snapshots = load(ctx, input.names, true);
+			if (!(await confirmSelection(ctx, snapshots, signal)))
+				throw new SkillContextError(
+					"Large skill selection cancelled by the user. No new skills were loaded.",
+				);
 			return {
 				content: [
 					{
@@ -447,10 +544,11 @@ export function registerSkillContext(
 		start(ctx: ExtensionContext) {
 			context = ctx;
 			runEnabled = undefined;
+			approvedSelection = undefined;
 			syncTool(enabled());
 			if (!remove && enabled())
 				ctx.ui.notify(
-					"This Pi version cannot expand multiple skills. Use /skill-context load or disable Skill context management.",
+					"This Pi version cannot preflight managed skill invocations. Use /skill-context load or disable Skill context management.",
 					"warning",
 				);
 		},
@@ -465,42 +563,22 @@ export function registerSkillContext(
 					GUIDANCE,
 				);
 		},
-		input(
-			event: InputEvent,
-			ctx: ExtensionContext,
-		): { action: "handled" } | undefined {
-			if (
-				!(ctx.isIdle() ? enabled() : effective()) ||
-				event.text.startsWith("/skill:")
-			)
-				return;
-			try {
-				assertSkillBudget(
-					state(ctx).filter((skill) => skill.selected),
-					budget(ctx),
-				);
-			} catch (error) {
-				if (!(error instanceof SkillContextError)) throw error;
-				ctx.ui.notify(error.message, "error");
-				return { action: "handled" };
-			}
-		},
-		transform<T extends ContextMessage>(
+		async transform<T extends ContextMessage>(
 			messages: T[],
 			ctx: ExtensionContext,
-		): T[] {
+		): Promise<T[]> {
 			if (!effective()) return messages;
 			try {
-				return pinSkillContext(
-					messages,
-					ctx.sessionManager.getBranch(),
-					budget(ctx),
-				);
+				if (!(await confirmSelection(ctx)))
+					throw new SkillContextError(
+						"Large skill selection cancelled by the user. Remove skills with /skill-context remove <name> or /skill-context clear, or retry to confirm.",
+					);
+				return pinSkillContext(messages, ctx.sessionManager.getBranch());
 			} catch (error) {
 				if (!(error instanceof SkillContextError)) throw error;
 				ctx.ui.notify(error.message, "error");
 				// Context handlers' exceptions alone are advisory in Pi. Abort the
-				// run as well, so a model switch cannot send partial instructions.
+				// run as well, so unconfirmed instructions cannot reach the model.
 				ctx.abort();
 				throw error;
 			}

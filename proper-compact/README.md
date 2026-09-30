@@ -143,12 +143,12 @@ and an update hint to stderr. JSON updates remain available for automation:
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `enabled` | `true` | Use custom summaries; false delegates to Pi. |
-| `model` | `null` | Current model, or an exact authenticated `provider/model` within session model scope. |
+| `model` | `null` | Current model, or an exact authenticated `provider/model` within session model scope. Naming the current model keeps its session limits, such as a `/tokens` window. |
 | `thinking` | `"low"` | Independent effort; null inherits the session; off disables explicit reasoning. |
 | `maxInputTokens` | `null` | Automatic request budget; explicit values further restrict it. |
 | `maxOutputTokens` | `8192` | Requested response ceiling, independent of Pi's trigger reserve. |
 | `maxCalls` | `4` | Maximum sequential summary requests per operation, no internal retries. |
-| `timeoutMs` | `120000` | Deadline for the complete summarization operation. |
+| `timeoutMs` | `300000` | Deadline for the complete summarization operation. |
 | `onError` | `"stock"` | Warn and use stock Pi, or cancel and retain original context. |
 
 Automatic input budgeting reserves output room, 4,096 tokens, and 10% additional

@@ -30,7 +30,7 @@ One request handles source that fits. Otherwise, sequential chunks cover every s
 
 The input estimate uses UTF-8 bytes divided by three. Automatic capacity leaves the selected output ceiling, 4,096 tokens, and 10% headroom; explicit input limits can only reduce it. Multi-call planning reserves the maximum accepted encoded checkpoint before choosing contiguous Unicode-safe chunks. Over-budget plans fail before inference rather than silently dropping source.
 
-The default output allowance is 8,192, thinking is low, the operation allows four calls, and its deadline is 120 seconds. These are configurable starting points, not measured optima. Pi's trigger `reserveTokens` and `keepRecentTokens` remain independent.
+The default output allowance is 8,192, thinking is low, the operation allows four calls, and its deadline is 300 seconds. These are configurable starting points, not measured optima. The deadline leaves room for sequential calls over million-token windows, since a timeout falls back to stock summarization. Pi's trigger `reserveTokens` and `keepRecentTokens` remain independent.
 
 Pi's provider-neutral stream maps reasoning. A request-local model descriptor limits additive Anthropic/Bedrock thinking room. Codex-style transport can omit a wire cap, so requested output size is not a universal billing ceiling. Checkpoint validation additionally bounds encoded bytes; timeouts bound local waiting, not remote charges.
 
@@ -42,7 +42,9 @@ Required sections cover goals, constraints, progress, decisions, next steps, cri
 
 ## Provider routing and usage
 
-Model selection uses the current model or an exact authenticated provider/model within session scope. Requests use the host registry's provider-aware stream, never extracted credentials or a separate HTTP client.
+Model selection uses the current model or an exact authenticated provider/model within session scope.
+
+A configured ID naming the current model uses the session's copy, so session-adjusted limits such as proper-base `/tokens` windows still bound request planning. Requests use the host registry's provider-aware stream, never extracted credentials or a separate HTTP client.
 
 Each request gets a fresh routing session ID, disables retries, and requests no cache retention. Runtime auth retains endpoint, headers, environment, and provider routing. Successful response usage is aggregated across chunks and returned to Pi with the checkpoint.
 

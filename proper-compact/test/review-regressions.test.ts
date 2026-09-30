@@ -215,6 +215,11 @@ test("configuration command validates updates and model selection respects scope
 		await command.handler(patch, ctx);
 	assert.equal((await loadConfig(f.configPath)).maxCalls, 2);
 	assert.equal(resolveModel(ctx, `${model.provider}/${model.id}`).id, model.id);
+	const widened = { ...model, contextWindow: model.contextWindow * 4 };
+	assert.equal(
+		resolveModel({ ...ctx, model: widened }, `${model.provider}/${model.id}`),
+		widened,
+	);
 	assert.throws(() => resolveModel(ctx, "missing/model"), /unavailable/);
 	assert.throws(
 		() => resolveModel({ ...ctx, model: undefined }, null),

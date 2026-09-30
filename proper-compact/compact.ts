@@ -32,7 +32,7 @@ export const DEFAULTS: Config = {
 	maxInputTokens: null,
 	maxOutputTokens: 8192,
 	maxCalls: 4,
-	timeoutMs: 120000,
+	timeoutMs: 300000,
 	onError: "stock",
 };
 const THINKING_LEVELS = [
@@ -288,9 +288,12 @@ export function resolveModel(
 	ctx: ExtensionContext,
 	configured: string | null,
 ): Model {
+	const current = ctx.model;
+	// The session copy keeps session-adjusted limits, such as proper-base /tokens.
 	const model =
-		configured === null
-			? ctx.model
+		configured === null ||
+		(current && `${current.provider}/${current.id}` === configured)
+			? current
 			: ctx.modelRegistry
 					.getAvailable()
 					.find(

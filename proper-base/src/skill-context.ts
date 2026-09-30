@@ -6,8 +6,8 @@ import {
 
 export const SKILL_CONTEXT_ENTRY = "proper-base-skill-context";
 export const SKILL_CONTEXT_TOOL = "skill_context";
-/** Full instruction bodies only. Overflow requires explicit deselection. */
-export const SKILL_CONTEXT_CHARS = 64_000;
+/** Full instruction bodies above this threshold require user confirmation. */
+export const SKILL_CONTEXT_WARNING_CHARS = 200_000;
 const RESTORE_START = "<proper_base_skill_context>\n";
 const RESTORE_END = "\n</proper_base_skill_context>\n\n";
 
@@ -174,15 +174,8 @@ export function selectedSkills(branch: SkillBranchEntry[]): SkillSelection[] {
 	return [...state.values()];
 }
 
-export function assertSkillBudget(
-	skills: SkillSnapshot[],
-	maxChars = SKILL_CONTEXT_CHARS,
-): void {
-	const total = skills.reduce((sum, skill) => sum + skill.block.length + 2, 0);
-	if (total > maxChars)
-		throw new SkillContextError(
-			`Selected skill instructions need ${total} characters; limit is ${maxChars}. No instructions were truncated. Use /skill-context remove <name> or /skill-context clear before continuing.`,
-		);
+export function skillContextChars(skills: SkillSnapshot[]): number {
+	return skills.reduce((sum, skill) => sum + skill.block.length + 2, 0);
 }
 
 function stripRestore(text: string): string {
@@ -203,11 +196,9 @@ function stripRestore(text: string): string {
 export function pinSkillContext<T extends ContextMessage>(
 	messages: T[],
 	branch: SkillBranchEntry[],
-	maxChars = SKILL_CONTEXT_CHARS,
 ): T[] {
 	const selections = selectedSkills(branch);
 	const active = selections.filter((skill) => skill.selected);
-	assertSkillBudget(active, maxChars);
 	const state = new Map(selections.map((skill) => [skill.location, skill]));
 	const present = new Set<string>();
 	const next = messages.map((original) => {

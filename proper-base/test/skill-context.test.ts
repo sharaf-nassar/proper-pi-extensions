@@ -7,7 +7,6 @@ import {
 	pinSkillContext,
 	SKILL_CONTEXT_ENTRY,
 	SKILL_CONTEXT_TOOL,
-	SkillContextError,
 	selectedSkills,
 } from "../src/skill-context.ts";
 
@@ -270,7 +269,7 @@ test("missing selected snapshots are restored without replaying their requests",
 	assert.match(textOf(next[0]), /unrelated follow up$/);
 });
 
-test("oversized selected context fails visibly without truncating or dropping instructions", () => {
+test("large selected context retains every instruction without truncation", () => {
 	const huge = "x".repeat(40000);
 	const dropped = [
 		user(skillText("first", huge, "a")),
@@ -282,16 +281,15 @@ test("oversized selected context fails visibly without truncating or dropping in
 		user("keep going"),
 	];
 
-	assert.throws(
-		() => pinSkillContext(messages, [...dropped, ...messages].map(entry)),
-		(error) =>
-			error instanceof SkillContextError &&
-			/No instructions were truncated/.test(error.message),
+	const restored = textOf(
+		pinSkillContext(messages, [...dropped, ...messages].map(entry))[1],
 	);
+	for (const name of ["first", "second", "third"])
+		assert.ok(restored.includes(skillText(name, huge)));
 	assert.equal(textOf(messages[1]), "keep going");
 });
 
-test("restoration retains complete latest versions and enforces the aggregate budget", () => {
+test("restoration retains complete latest versions regardless of aggregate size", () => {
 	const messages: Message[] = [
 		{ role: "compactionSummary", content: [] },
 		user("keep going"),
@@ -307,10 +305,6 @@ test("restoration retains complete latest versions and enforces the aggregate bu
 	assert.doesNotMatch(restored, /old a|truncated/);
 	assert.match(restored, /new a/);
 	assert.match(restored, /keep going$/);
-	assert.throws(
-		() => pinSkillContext(messages, branch, 24_000),
-		SkillContextError,
-	);
 
 	const exact = textOf(
 		pinSkillContext(messages, [

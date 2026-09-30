@@ -544,9 +544,7 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.on("input", (event, ctx) => {
-		const blocked = skills.input(event, ctx);
-		if (blocked) return blocked;
+	pi.on("input", (event) => {
 		if (event.source === "interactive") {
 			// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Pinned transcript scrolling]]
 			if (event.text.trim()) activeTui?.scrollToBottom?.();
@@ -596,8 +594,11 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// @lat: [[lat.md/proper-base/lifecycle#Prompt history lifecycle#Model image context]]
-	pi.on("context", (event, ctx) => {
-		const messages = skills.transform(omitPriorTurnImages(event.messages), ctx);
+	pi.on("context", async (event, ctx) => {
+		const messages = await skills.transform(
+			omitPriorTurnImages(event.messages),
+			ctx,
+		);
 		if (messages !== event.messages) return { messages };
 	});
 

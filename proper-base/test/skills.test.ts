@@ -32,6 +32,8 @@ function fixture(t: TestContext) {
 	const manager = SessionManager.inMemory(dir);
 	const catalog: any[] = [];
 	const notices: string[] = [];
+	const confirmations: string[] = [];
+	let consent = false;
 	const commands = new Map<string, any>();
 	let tool: any;
 	let aborted = false;
@@ -48,7 +50,13 @@ function fixture(t: TestContext) {
 		abort: () => {
 			aborted = true;
 		},
-		ui: { notify: (text: string) => notices.push(text) },
+		ui: {
+			notify: (text: string) => notices.push(text),
+			confirm: async (_title: string, message: string) => {
+				confirmations.push(message);
+				return consent;
+			},
+		},
 	};
 	const pi: any = {
 		registerCommand: (name: string, command: any) =>
@@ -79,7 +87,6 @@ function fixture(t: TestContext) {
 		path: "test",
 		commands: new Map(),
 		handlers: new Map([
-			["input", [(event: any) => controller.input(event, ctx)]],
 			["before_agent_start", [(event: any) => controller.prepare(event)]],
 		]),
 	};
@@ -135,6 +142,10 @@ function fixture(t: TestContext) {
 		sent,
 		queued,
 		notices,
+		confirmations,
+		answer(value: boolean) {
+			consent = value;
+		},
 		get controller() {
 			return controller;
 		},
@@ -257,7 +268,7 @@ test("native prompt expansion loads a command chain once and preserves request a
 	);
 	const original = structuredClone(f.manager.getEntries());
 	await f.session.prompt("/skill:audit inspect another file");
-	const projected = JSON.stringify(f.project());
+	const projected = JSON.stringify(await f.project());
 	assert.equal(projected.split("Audit instructions.").length - 1, 1);
 	assert.match(projected, /inspect another file/);
 	assert.deepEqual(f.manager.getEntries().slice(0, original.length), original);
@@ -398,17 +409,17 @@ test("snapshots survive compaction and reload; changed files require explicit re
 		timestamp: Date.now(),
 	});
 	f.reload();
-	let projected = JSON.stringify(f.project());
+	let projected = JSON.stringify(await f.project());
 	assert.match(projected, /ORIGINAL_INSTRUCTIONS/);
 	assert.doesNotMatch(projected, /CHANGED_INSTRUCTIONS|completed review/);
 	assert.match(projected, /Do not repeat completed actions/);
 	await f.command("list");
 	assert.match(f.notices.at(-1) ?? "", /changed on disk; refresh explicitly/);
 	await f.command("refresh audit");
-	projected = JSON.stringify(f.project());
+	projected = JSON.stringify(await f.project());
 	assert.match(projected, /CHANGED_INSTRUCTIONS/);
 	assert.doesNotMatch(projected, /ORIGINAL_INSTRUCTIONS/);
-	assert.equal(JSON.stringify(f.project()), projected);
+	assert.equal(JSON.stringify(await f.project()), projected);
 });
 
 test("remove and clear affect only the current branch and remove earlier instruction bodies", async (t) => {
@@ -419,17 +430,20 @@ test("remove and clear affect only the current branch and remove earlier instruc
 	const leaf = f.manager.getLeafId();
 	assert.ok(leaf);
 	await f.command("remove audit");
-	assert.doesNotMatch(JSON.stringify(f.project()), /AUDIT_BODY/);
-	assert.match(JSON.stringify(f.project()), /TEST_BODY/);
+	assert.doesNotMatch(JSON.stringify(await f.project()), /AUDIT_BODY/);
+	assert.match(JSON.stringify(await f.project()), /TEST_BODY/);
 	await f.command("clear");
 	assert.equal(
 		selectedSkills(f.manager.getBranch()).filter((skill) => skill.selected)
 			.length,
 		0,
 	);
-	assert.doesNotMatch(JSON.stringify(f.project()), /AUDIT_BODY|TEST_BODY/);
+	assert.doesNotMatch(
+		JSON.stringify(await f.project()),
+		/AUDIT_BODY|TEST_BODY/,
+	);
 	f.manager.branch(leaf);
-	assert.match(JSON.stringify(f.project()), /AUDIT_BODY/);
+	assert.match(JSON.stringify(await f.project()), /AUDIT_BODY/);
 	assert.equal(selectedSkills(SessionManager.inMemory().getBranch()).length, 0);
 });
 
@@ -446,37 +460,120 @@ test("model activation uses the same registry and cannot load explicit-only skil
 	assert.equal(selectedSkills(f.manager.getBranch())[0]?.source, "model");
 	writeFileSync(path, "UNREQUESTED_NEW_VERSION");
 	await f.use({ action: "load", names: ["audit"] });
-	assert.match(JSON.stringify(f.project()), /AUTOMATIC_BODY/);
-	assert.doesNotMatch(JSON.stringify(f.project()), /UNREQUESTED_NEW_VERSION/);
+	assert.match(JSON.stringify(await f.project()), /AUTOMATIC_BODY/);
+	assert.doesNotMatch(
+		JSON.stringify(await f.project()),
+		/UNREQUESTED_NEW_VERSION/,
+	);
 	await f.session.prompt("/skill:deploy deploy the change");
-	assert.match(JSON.stringify(f.project()), /DEPLOY_BODY/);
+	assert.match(JSON.stringify(await f.project()), /DEPLOY_BODY/);
 });
 
-test("budget failures are atomic, full-body and recoverable through deselection", async (t) => {
+test("confirmation starts strictly above 200000 characters regardless of model window", async (t) => {
 	const f = fixture(t);
-	f.add("large", "x".repeat(40_000));
-	f.add("second", "y".repeat(40_000));
+	f.ctx.model.contextWindow = 10_000;
+	const prefix = '<skill name="exact" location="/exact/SKILL.md">\n';
+	const suffix = "\n</skill>";
+	const body = "x".repeat(200_000 - prefix.length - suffix.length - 2);
+	await f.session.prompt(prefix + body + suffix);
+	assert.equal(f.confirmations.length, 0);
+	assert.equal(f.sent.length, 1);
+	await f.session.prompt(`${prefix}${body}x${suffix}`);
+	assert.equal(f.confirmations.length, 1);
+	assert.equal(f.sent.length, 1);
+	assert.match(f.confirmations[0] ?? "", /200001/);
+});
+
+test("large skill selection asks before admission and remembers exact consent", async (t) => {
+	const f = fixture(t);
+	f.add("large", "x".repeat(100_000));
+	const path = f.add("second", "y".repeat(100_000));
+	await f.session.prompt("/skill:large /skill:second task");
+	assert.equal(f.confirmations.length, 1);
+	assert.match(f.confirmations[0] ?? "", /200000/);
+	assert.equal(f.sent.length, 0);
+	assert.equal(selectedSkills(f.manager.getBranch()).length, 0);
+	f.answer(true);
+	await f.session.prompt("/skill:large /skill:second task");
+	assert.equal(f.confirmations.length, 2);
+	assert.ok(f.sent[0].content[0].text.includes("x".repeat(100_000)));
+	assert.ok(f.sent[0].content[0].text.includes("y".repeat(100_000)));
+	await f.session.prompt("continue");
+	await f.project();
+	assert.equal(f.confirmations.length, 2);
+	f.ctx.model.contextWindow = 10_000;
+	await f.project();
+	assert.equal(f.aborted, false);
+	writeFileSync(path, "changed".repeat(20_000));
+	f.answer(false);
+	await f.command("refresh second");
+	assert.equal(f.confirmations.length, 3);
+	assert.doesNotMatch(JSON.stringify(await f.project()), /changedchanged/);
+	f.answer(true);
+	await f.command("refresh second");
+	assert.match(JSON.stringify(await f.project()), /changedchanged/);
+	assert.equal(f.confirmations.length, 4);
+});
+
+test("accepted invocation uses the snapshot shown before confirmation", async (t) => {
+	const f = fixture(t);
+	const body = "x".repeat(210_000);
+	const path = f.add("large", body);
+	f.ctx.ui.confirm = async () => {
+		writeFileSync(path, "CHANGED_DURING_CONFIRMATION");
+		return true;
+	};
+	await f.session.prompt("/skill:large task");
+	assert.ok(f.sent[0].content[0].text.includes(body));
+	assert.doesNotMatch(f.sent[0].content[0].text, /CHANGED_DURING_CONFIRMATION/);
+});
+
+test("commands, tools and queues respect cancellation and expansion opt-outs", async (t) => {
+	const f = fixture(t);
+	f.add("large", "x".repeat(210_000));
+	await f.session.prompt("/skill:large literal", {
+		expandPromptTemplates: false,
+	});
+	assert.equal(f.confirmations.length, 0);
+	await f.command("load large");
 	await assert.rejects(
-		f.session.prompt("/skill:large /skill:second task"),
-		/No instructions were truncated/,
+		f.use({ action: "load", names: ["large"] }),
+		/cancelled/,
 	);
 	assert.equal(selectedSkills(f.manager.getBranch()).length, 0);
-	await f.session.prompt("/skill:large task");
-	await f.command("load second");
-	assert.equal(selectedSkills(f.manager.getBranch()).length, 1);
-	assert.match(f.notices.at(-1) ?? "", /No instructions were truncated/);
-	f.ctx.model.contextWindow = 10_000;
-	assert.throws(() => f.project(), /No instructions were truncated/);
+	f.session._isAgentRunActive = true;
+	await f.session.steer("/skill:large queued");
+	await f.session.followUp("/skill:large queued");
+	assert.equal(f.queued.length, 0);
+	f.answer(true);
+	await f.session.followUp("/skill:large accepted");
+	assert.equal(f.queued.length, 1);
+	assert.ok(f.queued[0].content[0].text.includes("x".repeat(210_000)));
+	assert.equal(selectedSkills(f.manager.getBranch()).length, 0);
+});
+
+test("restored large selections require consent again after reload and cannot bypass it without a UI", async (t) => {
+	const f = fixture(t);
+	f.add("large", "x".repeat(300_000));
+	f.answer(true);
+	await f.use({ action: "load", names: ["large"] });
+	f.manager.appendCompaction("Earlier work completed", null, 1000);
+	f.manager.appendMessage({
+		role: "user",
+		content: "continue",
+		timestamp: Date.now(),
+	});
+	f.reload();
+	f.ctx.hasUI = false;
+	await assert.rejects(f.project(), /confirmation.*UI/);
 	assert.equal(f.aborted, true);
-	assert.deepEqual(
-		f.controller.input(
-			{ type: "input", text: "continue", source: "interactive" },
-			f.ctx,
-		),
-		{ action: "handled" },
-	);
-	await f.command("remove large");
-	assert.doesNotThrow(() => f.project());
+	f.ctx.hasUI = true;
+	f.answer(false);
+	await assert.rejects(f.project(), /cancelled/);
+	f.answer(true);
+	assert.ok(JSON.stringify(await f.project()).includes("x".repeat(300_000)));
+	await f.project();
+	assert.equal(f.confirmations.length, 3);
 });
 
 test("persistent disable restores native expansion and context behavior, with no duplicate wrappers", async (t) => {
@@ -490,7 +587,7 @@ test("persistent disable restores native expansion and context behavior, with no
 	assert.match(f.sent.at(-1).content[0].text, /\/skill:tests task$/);
 	assert.doesNotMatch(f.sent.at(-1).content[0].text, /TEST_BODY/);
 	const messages = f.manager.buildSessionProjection().messages;
-	assert.equal(f.controller.transform(messages, f.ctx), messages);
+	assert.equal(await f.controller.transform(messages, f.ctx), messages);
 	await assert.rejects(f.use({ action: "load", names: ["tests"] }), /disabled/);
 	await f.command("on");
 	await f.session.prompt("/skill:audit /skill:tests next");
@@ -517,9 +614,9 @@ test("settings changes apply on the next run and selection commands reject activ
 		content: "continue",
 		timestamp: Date.now(),
 	});
-	assert.match(JSON.stringify(f.project()), /AUDIT_BODY/);
+	assert.match(JSON.stringify(await f.project()), /AUDIT_BODY/);
 	f.controller.prepare({ systemPromptOptions: { sections: {} } } as any);
-	assert.doesNotMatch(JSON.stringify(f.project()), /AUDIT_BODY/);
+	assert.doesNotMatch(JSON.stringify(await f.project()), /AUDIT_BODY/);
 });
 
 test("control commands preserve unrelated config and leave malformed files intact", async (t) => {
