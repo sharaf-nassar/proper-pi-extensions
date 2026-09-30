@@ -609,7 +609,8 @@ export default function (pi: ExtensionAPI) {
 			event.systemPromptOptions?.selectedTools ?? pi.getActiveTools?.() ?? [];
 		applyProactiveDelegation(
 			event.systemPromptOptions,
-			tools.includes("subagent"),
+			// pi-subagents 0.71+ starts sessions with only its loader active.
+			tools.includes("subagent") || tools.includes("subagents_enable"),
 			ctx.scopedModels.map((scoped) => scoped.model),
 		);
 	});

@@ -365,18 +365,18 @@ setting to turn the guard off.
 
 ### Proactive delegation
 
-When pi-subagents' `subagent` tool is active, proper-base replaces its rule to
-delegate only when needed with a proactive multi-agent mode. The agent hands
-independent work that is large enough to justify a fresh context to subagents
-without waiting to be asked. It keeps sequential steps, small tasks, and edits
+When pi-subagents' `subagent` tool or its `subagents_enable` loader is active,
+proper-base replaces its rule to delegate only when needed with a proactive
+multi-agent mode. The agent hands independent work that is large enough to
+justify a fresh context to subagents without waiting to be asked. It keeps sequential steps, small tasks, and edits
 to the same area in the main session, and writes the final answer itself. Your
 own instructions still take priority.
 
 If the session has scoped models (from `--models`, `enabledModels`, or
 `/scoped-models`), the prompt names them as the only models subagents may use
 and asks the agent to pick one per task by difficulty and cost. The
-`llm-router/auto` placeholder is left out. Sessions without the `subagent`
-tool keep their system prompt unchanged. Set `"proactiveDelegation": false` in
+`llm-router/auto` placeholder is left out. Sessions without either tool keep
+their system prompt unchanged. Set `"proactiveDelegation": false` in
 `~/.pi/agent/proper-base.json` to keep pi-subagents' ask-first policy.
 
 ### Footer

@@ -91,6 +91,24 @@ test("scoped choices defer to advertised routing overrides without load-order de
 	assert.doesNotMatch(text, /llm-router\/auto/);
 });
 
+test("a loader-only session rewrites the loader's ask-first tool line", () => {
+	const snippet =
+		"pi-subagents is installed. For authorized specialist, independent-review, or parallel work, call subagents_enable, then subagent. Authorization must come from the current request or applicable instructions; complexity alone is not authorization.";
+	const state = normalizeBuildSystemPromptOptions({
+		cwd: "/project",
+		selectedTools: ["subagents_enable"],
+		toolSnippets: { subagents_enable: snippet },
+	});
+	applyProactiveDelegation(state, true);
+	const prompt = buildSystemPrompt(state);
+	assert.match(
+		prompt,
+		/- subagents_enable: pi-subagents is installed\. To delegate, call subagents_enable, then subagent; see Multi-agent mode below\./,
+	);
+	assert.doesNotMatch(prompt, /not authorization/);
+	assert.ok(prompt.includes(PROACTIVE_DELEGATION_TEXT));
+});
+
 test("no subagent tool is inert and repeated application is idempotent", () => {
 	const state = options();
 	const original = structuredClone(state);

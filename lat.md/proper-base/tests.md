@@ -246,9 +246,9 @@ It submits through the wrapped editor, captures the accepted user entry, and pre
 
 ## Proactive delegation fixture
 
-The proactive-delegation fixture verifies the policy rewrite touches only the two explicit-only sentences and stays inert where it does not apply.
+The proactive-delegation fixture verifies the policy rewrite touches only the explicit-only sentences and stays inert where it does not apply.
 
-Pi's actual `ExtensionRunner` chains the policy handler before a foreign section/tool contributor and the title helper. All contributions survive without setting `forceSystemPrompt`; both explicit-only sentences change while the catalog preflight remains. Scoped choices deduplicate and omit the placeholder, and explicitly defer to an active router's advertised task-text override without detecting load order. No subagent tool is a no-op, repeated application is idempotent, and an existing opaque replacement retains its exclusions while accepting the new instructions. Config disabling and missing or damaged config defaults remain covered.
+Pi's actual `ExtensionRunner` chains the policy handler before a foreign section/tool contributor and the title helper. All contributions survive without setting `forceSystemPrompt`; both explicit-only sentences change while the catalog preflight remains. A session with only the `subagents_enable` loader gets the section and its tool-list line rewritten. Scoped choices deduplicate and omit the placeholder, and explicitly defer to an active router's advertised task-text override without detecting load order. No subagent tool is a no-op, repeated application is idempotent, and an existing opaque replacement retains its exclusions while accepting the new instructions. Config disabling and missing or damaged config defaults remain covered.
 
 ## Questionnaire cancellation fixture
 
