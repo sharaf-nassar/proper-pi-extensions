@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { stream as streamOpenAIResponses } from "@earendil-works/pi-ai/api/openai-responses";
 import {
 	installUltraThemePrototype,
 	installUltraThinkingPrototype,
@@ -11,7 +12,6 @@ import {
 	AgentSession,
 	Theme,
 } from "../node_modules/@earendil-works/pi-coding-agent/dist/index.js";
-import { stream as streamOpenAIResponses } from "../node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js";
 
 class FakeSession {
 	model?: { thinkingLevelMap?: Record<string, string | null> };

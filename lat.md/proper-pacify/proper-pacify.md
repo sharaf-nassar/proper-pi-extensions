@@ -6,7 +6,7 @@ proper-pacify is a Pi package whose extension rewrites user prompt tone before t
 
 The package uses Pi's extension API and authenticated model registry without a service, runtime dependency, or build step.
 
-`pacify.ts` owns configuration, model completion, commands, cancellation, and transcript links. `host.ts` isolates reversible Pi adapters tested against 0.99.1 for pre-command dispatch and message-aware rendering. The published `host-interop.ts` carries the shared submission and wrapper-ownership protocol; it is source-shipped so each package remains independently installable. `test/` includes real-host offline regressions. The package is registered in `.release-me.json` and the npm publishing workflow, so it releases through the same path as every other package; see [[proper-pacify#Installation status]] for the first-publish constraint.
+`pacify.ts` owns configuration, model completion, commands, cancellation, and transcript links. `host.ts` isolates reversible Pi adapters tested against 1.0.1 for pre-command dispatch and message-aware rendering. The published `host-interop.ts` carries the shared submission and wrapper-ownership protocol; it is source-shipped so each package remains independently installable. `test/` includes real-host offline regressions. The package is registered in `.release-me.json` and the npm publishing workflow, so it releases through the same path as every other package; see [[proper-pacify#Installation status]] for the first-publish constraint.
 
 ## Tone-only contract
 
@@ -64,7 +64,7 @@ Automatic mode reattaches the prompt's images to the transformed result, so the 
 
 Pacification runs before registered command handlers and the input-handler chain for prompts submitted through Pi's `AgentSession.prompt`, `steer`, or `followUp`.
 
-Pi 0.99.1 still executes registered commands before `emitInput`, and has no pre-command extension hook. An input-runner patch cannot provide this ordering. `installHostHooks` therefore wraps all three public `AgentSession` submission boundaries and calls the original only after rewriting. Pi supplies the actual host classes through its virtual coding-agent module, without private filesystem imports.
+Pi 1.0.1 still executes registered commands before `emitInput`, and has no pre-command extension hook. An input-runner patch cannot provide this ordering. `installHostHooks` therefore wraps all three public `AgentSession` submission boundaries and calls the original only after rewriting. Pi supplies the actual host classes through its virtual coding-agent module, without private filesystem imports.
 
 The adapter checks the owning session manager, preserves images and prompt preflight callbacks, which report Pi 0.99's `handled`, `queued`, or `started` disposition only for accepted prompts, and leaves Pi responsible for dispatch, expansion, queueing, authentication, and agent execution. An idle-prompt admission reservation covers preparation only until Pi accepts or rejects its native preflight. A competing idle prompt then fails before it can spend a rewrite call or append an original; the reservation never covers an agent turn. All registered commands bypass that reservation because their handlers may synchronously submit a nested prompt; they still pass through preparation and retain Pi's command-before-busy-check behavior. Cancellation releases the reservation, and unload releases both current and waiting reservations even if a rewrite transport ignores abort. A resumed waiter checks ownership before touching context or starting work. Preflight callbacks report at most once, and never for a rejected prompt; queued steer and follow-up wrappers return `handled` when a rewrite consumes the input. No foreign package is named and installation order does not determine priority.
 
@@ -74,7 +74,7 @@ An `AsyncLocalStorage` scope marks one prepared dispatch. The ordinary input han
 
 Each runtime owns its adapters. Shutdown aborts pending rewrites, clears message/bypass state and stale context references, and restores methods only while it still owns them. Restoration skips inactive participating wrappers underneath it and reinstates the original property descriptor or inheritance, so load-order shutdown cannot reintroduce dead callbacks on repeated reloads. A later foreign wrapper is never overwritten; an inactive wrapper becomes pass-through. Reload installs fresh code and carries only the session override, checked against the continuing manager. Disabling the extension leaves no active rewrite callback. Migration from older releases clears their global runtime so their historical unremovable input wrapper becomes inert.
 
-Remove the dispatch adapter when Pi exposes a public pre-command input hook with ordering guarantees. Real-host tests pin this compatibility boundary to the lockfile's resolved Pi version, currently 0.99.1. Development dependencies follow latest Pi releases.
+Remove the dispatch adapter when Pi exposes a public pre-command input hook with ordering guarantees. Real-host tests pin this compatibility boundary to the lockfile's resolved Pi version, currently 1.0.1. Development dependencies follow latest Pi releases.
 
 ## Automatic mode
 

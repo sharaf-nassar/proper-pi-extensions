@@ -196,7 +196,7 @@ modified.
 
 Use Node 22.19 or newer and Pi 0.99.1 or newer, the first release with
 virtual models and a built-in catalog listing every default model. The
-extension and `ultra` compatibility layer are tested against Pi 0.99.1.
+extension and `ultra` compatibility layer are tested against Pi 1.0.1.
 
 Install the published package:
 
