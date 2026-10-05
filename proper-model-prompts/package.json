@@ -1,6 +1,6 @@
 {
   "name": "proper-model-prompts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Per-model system prompt text for Pi, with built-in prompts for Claude and GPT models",
   "keywords": [
     "pi-package",
