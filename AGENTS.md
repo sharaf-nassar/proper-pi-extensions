@@ -61,11 +61,13 @@ exists anywhere.
 Package releases use `.release-me.json` and package-scoped tags. Run
 `./tools/release-me/release.sh bump <part> <package>` from the repo root. The
 GitHub release workflow verifies and packs without OIDC, then publishes the
-exact artifact from a protected `npm-release` environment. `proper-pacify` had
-its maintainer-authenticated first publish, but no trusted publisher is
-registered for it on npm yet, so workflow publishes fail with `ENEEDAUTH`
-until a maintainer runs `npm trust github proper-pacify --file
-publish-npm.yml --repo sharaf-nassar/proper-pi-extensions --env npm-release`.
+exact artifact from a protected `npm-release` environment. Every package
+has its npm trusted publisher registered and a matching `<package>-v*` tag
+policy on that environment. A brand-new package needs one
+maintainer-authenticated first publish, then `npm trust github <package>
+--file publish-npm.yml --repo sharaf-nassar/proper-pi-extensions --env
+npm-release --allow-publish` (interactive 2FA) and a tag policy before the
+workflow can publish it.
 
 - Router smoke (`npm run test:smoke` in proper-llm-router/) is offline and
   credential-free; it injects the model snapshot and judge runner Pi would
@@ -88,9 +90,7 @@ publish-npm.yml --repo sharaf-nassar/proper-pi-extensions --env npm-release`.
   0.99.1 for virtual models and GPT-6.1 Sol; proper-pacify requires 0.99.0
   for prompt preflight dispositions; proper-compact and
   proper-model-prompts require 0.87.0), TypeScript 6.
-- proper-compact and proper-model-prompts are not published yet. Their first
-  releases require maintainer authentication and subsequent npm
-  trusted-publisher registration. No global installation or provider inference
-  belongs in their offline test gates.
+- No global installation or provider inference belongs in the proper-compact
+  or proper-model-prompts offline test gates.
 - `npm run test:subagents` in proper-model-prompts/ is an opt-in smoke run of
   the installed `pi` and pi-subagents with a fake provider; it is not gated.

@@ -134,4 +134,4 @@ A busy lock, a list that is not an array of paths, or an unreadable file ends in
 
 proper-model-prompts is an independently installable source package with offline tests, strict typechecking, bundled-loader coverage, an opt-in subagent smoke test, and repository release and gate integration.
 
-It is not published yet. Initial publication, trusted-publisher registration, and release-environment tag policy remain maintainer actions.
+It is published with the workflow trusted publisher and release-environment tag policy in place.
