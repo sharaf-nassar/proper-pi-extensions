@@ -1,7 +1,7 @@
 # proper-compact
 
 [Pi](https://pi.dev) summarizes older conversation to make room for new work.
-In Pi 1.2.0, stock summarization clips each tool result to its first 2,000
+In Pi 1.3.0, stock summarization clips each tool result to its first 2,000
 characters. The final error or test outcome in a long log may never reach the
 summarizer.
 
@@ -205,7 +205,7 @@ npm run typecheck
 npm run test:coverage
 ```
 
-Tests use Pi 1.2.0 compaction/persistence and registry routing with mocked model
+Tests use Pi 1.3.0 compaction/persistence and registry routing with mocked model
 responses. They cover trailing/interior failures, chunk coverage, repeated
 compaction, continuation prompts, thinking exclusion, context-edit provenance,
 plain-text refusals, invalid output, cancellation,

@@ -168,7 +168,7 @@ command, a choice such as `A` or `1B 2C`, `yes`, `no`, an alias, a URL, or
 any prompt of at most two words.
 
 Pacification happens before registered command handlers and the input-handler
-chain, regardless of package installation order. Pi 1.2.0 still has no public
+chain, regardless of package installation order. Pi 1.3.0 still has no public
 pre-command hook, so a small compatibility adapter wraps the host's
 `AgentSession.prompt`. Pi still handles dispatch, expansion and queueing.
 Shutdown restores owned adapters and aborts outstanding rewrites; reload
@@ -261,7 +261,7 @@ below. Remove any stale direct-file registration so Pi loads one copy.
 ## Development
 
 Use Node 22.19 or newer and Pi 0.99.0 or newer, the first release whose
-prompt preflight reports a dispatch disposition. Tested against Pi 1.2.0;
+prompt preflight reports a dispatch disposition. Tested against Pi 1.3.0;
 development dependencies follow latest Pi releases.
 
 ```bash
