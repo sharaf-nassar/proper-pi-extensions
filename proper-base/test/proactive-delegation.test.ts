@@ -56,8 +56,7 @@ test("rewrites policy fields without freezing later prompt composition", async (
 		{} as any,
 	);
 	const result = await runner.emitBeforeAgentStart(
-		"task",
-		undefined,
+		{ messageType: "user", prompt: "task" },
 		options(),
 	);
 	const prompt = buildSystemPrompt(result.systemPromptOptions);

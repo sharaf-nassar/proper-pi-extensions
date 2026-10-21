@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { Editor } from "@earendil-works/pi-tui";
+import { Editor, renderFakeCursor } from "@earendil-works/pi-tui";
 import { KeybindingsManager } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
 import {
 	installEditorNavigation,
@@ -180,7 +180,9 @@ test("active image marker highlights and backspace deletes it", () => {
 	editor.setText("a [image 12] b");
 	const markerStart = editor.getText().indexOf("[image 12]");
 	mutable.setCursorCol(markerStart);
-	assert.ok(editor.render(40).join("\n").includes("\x1b[7m[image 12]\x1b[0m"));
+	assert.ok(
+		editor.render(40).join("\n").includes(renderFakeCursor("[image 12]")),
+	);
 
 	editor.handleInput("\x7f");
 	assert.equal(editor.getText(), "a  b");
@@ -188,7 +190,9 @@ test("active image marker highlights and backspace deletes it", () => {
 
 	editor.setText("a [image 0] b");
 	mutable.setCursorCol(editor.getText().indexOf("[image 0]"));
-	assert.ok(!editor.render(40).join("\n").includes("\x1b[7m[image 0]\x1b[0m"));
+	assert.ok(
+		!editor.render(40).join("\n").includes(renderFakeCursor("[image 0]")),
+	);
 });
 
 test("reverse search keeps pi-tui paste markers in the draft expandable", () => {

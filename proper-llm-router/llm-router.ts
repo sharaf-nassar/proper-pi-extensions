@@ -421,13 +421,7 @@ export function resolveModelTarget<T extends ModelTarget>(
 				"github-copilot",
 			]
 		: family.includes("gpt")
-			? [
-					CPA_PROVIDER,
-					"openai-codex",
-					"openai",
-					"azure-openai-responses",
-					"github-copilot",
-				]
+			? [CPA_PROVIDER, "openai-codex", "openai", "azure", "github-copilot"]
 			: [CPA_PROVIDER];
 	return models
 		.filter(

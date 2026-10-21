@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { TuiInputListener } from "@earendil-works/pi-tui";
-import { installOverlayScroll, parseWheel } from "../src/overlay-scroll.ts";
+import { installOverlayScroll } from "../src/overlay-scroll.ts";
 
 // @lat: [[lat.md/proper-base/tests#Verification#Overlay scroll fixture]]
 
@@ -11,7 +11,6 @@ function harness() {
 	const calls: string[] = [];
 	const tui = {
 		overlayFocused: false,
-		wheelScrollLines: 3,
 		isOverlayFocused() {
 			return this.overlayFocused;
 		},
@@ -27,19 +26,17 @@ function harness() {
 		scrollToBottom() {
 			calls.push("bottom");
 		},
-		routeWheel(event: { direction: number }) {
-			calls.push(`wheel:${event.direction}`);
-		},
 		addInputListener(listener: TuiInputListener) {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		},
 	};
-	// Pi's viewport listener runs first and consumes scroll input unless an
-	// overlay is focused, in which case it declines.
+	// Pi's viewport listener runs first. Wheel reports are always consumed
+	// (Pi 1.2.0 scrolls behind overlays itself); scroll keys are consumed
+	// unless an overlay is focused, in which case it declines.
 	listeners.add((data: string) => {
-		if (tui.overlayFocused) return undefined;
-		if (parseWheel(data) || data === "\x1b[5~") {
+		const wheel = data.startsWith("\x1b[<64;");
+		if (wheel || (!tui.overlayFocused && data === "\x1b[5~")) {
 			calls.push("native");
 			return { consume: true };
 		}
@@ -54,39 +51,28 @@ function harness() {
 	return { tui, listeners, calls, send };
 }
 
-test("wheel parsing mirrors the renderer", () => {
-	assert.deepEqual(parseWheel("\x1b[<64;5;6M"), {
-		direction: -1,
-		x: 4,
-		y: 5,
-		button: 64,
-	});
-	assert.equal(parseWheel("\x1b[<65;1;1M")?.direction, 1);
-	assert.equal(parseWheel("\x1b[<0;1;1M"), undefined);
-	assert.equal(parseWheel("a"), undefined);
-});
-
-test("scroll input reaches the viewport only while an overlay is focused", () => {
+test("scroll keys reach the viewport only while an overlay is focused", () => {
 	const app = harness();
 	const dispose = installOverlayScroll(app.tui as never);
 	assert.notEqual(dispose, undefined);
 
 	// Without an overlay the renderer keeps ownership.
-	assert.equal(app.send("\x1b[<64;5;6M"), true);
+	assert.equal(app.send("\x1b[5~"), true);
 	assert.deepEqual(app.calls, ["native"]);
 	app.calls.length = 0;
 
 	app.tui.overlayFocused = true;
-	assert.equal(app.send("\x1b[<64;5;6M"), true);
+	assert.equal(app.send("\x1b[<64;5;6M"), true); // wheel stays native
 	assert.equal(app.send("\x1b[5~"), true); // pageUp default
 	assert.equal(app.send("\x1b[6~"), true); // pageDown default
-	assert.equal(app.send("\x1b[H"), true); // home
-	assert.equal(app.send("\x1b[F"), true); // end
-	assert.deepEqual(app.calls, ["wheel:-1", "by:-16", "by:16", "top", "bottom"]);
+	assert.equal(app.send("\x1b[1;5H"), true); // ctrl+home
+	assert.equal(app.send("\x1b[1;5F"), true); // ctrl+end
+	assert.deepEqual(app.calls, ["native", "by:-16", "by:16", "top", "bottom"]);
 
-	// Typing and unrelated keys stay with the overlay.
+	// Typing, plain Home/End and unrelated keys stay with the overlay.
 	assert.equal(app.send("a"), false);
 	assert.equal(app.send("\x1b[A"), false);
+	assert.equal(app.send("\x1b[H"), false);
 	assert.equal(app.calls.length, 5);
 
 	dispose?.();

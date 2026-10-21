@@ -26,7 +26,7 @@ Separate outgoing and replacement extension instances prove that no stale API is
 
 ## Sticky defaults fixture
 
-A Pi 1.0.1 host fixture creates a real `AgentSession`, `SettingsManager`, `ModelRuntime`, resource loader, and extension lifecycle around the compatibility adapter.
+A Pi 1.2.0 host fixture creates a real `AgentSession`, `SettingsManager`, `ModelRuntime`, resource loader, and extension lifecycle around the compatibility adapter.
 
 It proves an explicit thinking choice updates the live settings cache and the next model-switch resolver reads it; an automatic switch to a non-reasoning model clamps the session to `off` without redefining the global preference; an explicit `off` persists even when Pi emits no event; a per-model level remains model-local; and selecting `llm-router/auto` persists neither its model identity nor its forced `off`. It also exercises `session_start` activation and `session_shutdown` restoration. A focused config case proves `"stickyDefaults": false` remains independent of sibling proper-base choices.
 
@@ -158,7 +158,7 @@ The fixture builds Pi's document/dock shape under a layout root, installs the wr
 
 ## Base keybinding fixture
 
-A session integration fixture applies the real Pi 1.0.1 `KeybindingsManager` to the installed editor factory.
+A session integration fixture applies the real Pi 1.2.0 `KeybindingsManager` to the installed editor factory.
 
 It verifies Ctrl+V and Ctrl+Shift+V both match Pi's clipboard paste action without removing an existing Alt+V alias. Alt+Enter matches prompt newline and no longer matches follow-up queueing, a user's own newline alias survives beside it, and proper-base adds no Shift+Enter of its own; under a user override that chord stops matching, while Pi's untouched defaults keep both Shift+Enter and Ctrl+J. Fullscreen transcript actions claim Ctrl+Shift+Home, Ctrl+Shift+End, Ctrl+Shift+PageUp, and Ctrl+Shift+PageDown instead of unmodified or Shift-only keys; the editor retains its native unmodified bindings; and modern modifier sequences match the intended actions. Navigation fixtures verify a recalled prompt ends at line 0, column 0; Home first reaches a soft-wrapped visible-row start and then the full prompt start, including across a hard newline; and End reaches the logical-line end and then the full prompt end. Reload cases prove native reload reapplies current bindings without losing unrelated user values, fresh code takes over the reload wrapper, a stale disposer cannot remove it, and shutdown restores the exact prior reload method and user bindings.
 
@@ -170,9 +170,9 @@ Resolution returns 3 for an absent, empty, non-numeric, zero, or negative `PROPE
 
 ## Overlay scroll fixture
 
-A fake fullscreen renderer with a consuming viewport listener verifies scroll input reaches the transcript only while an overlay is focused.
+A fake fullscreen renderer with a consuming viewport listener verifies scroll keys reach the transcript only while an overlay is focused.
 
-Wheel parsing mirrors the renderer's SGR decoding for both directions and rejects non-wheel buttons and plain text. Without a focused overlay the renderer's earlier listener keeps every wheel and page key; once an overlay is focused a wheel report reaches the renderer's wheel router, PageUp and PageDown scroll by the viewport height minus pi's overlap, Home and End reach the top and bottom, and each is consumed, while typing and arrow keys stay unconsumed for the overlay. A shape without the public scroll methods installs nothing and disposal removes the listener.
+Without a focused overlay the renderer's earlier listener keeps every page key; once an overlay is focused a wheel report is still consumed by the renderer, PageUp and PageDown scroll by the viewport height minus pi's overlap, Ctrl+Home and Ctrl+End reach the top and bottom, and each key is consumed, while typing, arrow keys and plain Home stay unconsumed for the overlay. A shape without the public scroll methods installs nothing and disposal removes the listener.
 
 ## Smart selection fixture
 
@@ -294,7 +294,7 @@ Strict compiler and coverage gates keep test fixtures from hiding unsafe assumpt
 
 ## Coverage boundary
 
-Host-boundary fixtures instantiate Pi 1.0.1's real session, settings, model, selector, manager, extension-runner, and editor surfaces.
+Host-boundary fixtures instantiate Pi 1.2.0's real session, settings, model, selector, manager, extension-runner, and editor surfaces.
 
 The sticky-default fixture uses `AgentSession`, `SettingsManager`, `ModelRuntime`, the resource loader, and extension runner. Session search uses Pi's selector and manager, while image history uses pi-tui's `Editor`. These cover settings-cache resolution, lifecycle teardown, selector refiltering, native history state, and Up handling. Session-title, history-seeding, autocomplete, early-cancellation, fullscreen-keybinding, and footer fixtures run the extension's complete lifecycle callbacks against minimal fake API and component trees, and the questionnaire fixture calls its registered `tool_result` handler directly.
 

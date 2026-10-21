@@ -126,7 +126,13 @@ function fixture(t: TestContext) {
 		_flushPendingBashMessages() {},
 		_flushPendingCustomMessages() {},
 		_findLastAssistantMessage: () => undefined,
-		_runAgentPrompt: (messages: any[]) => agent.prompt(messages),
+		// Pi 1.2.0 starts runs through _startRun; keep only prompt preparation
+		// and skip the post-run loop the fake agent cannot drive.
+		async _startRun(trigger: unknown, onStarted?: () => void) {
+			const messages = await session._prepareRun(trigger);
+			onStarted?.();
+			await agent.prompt(messages);
+		},
 	});
 	controller.start(ctx);
 	t.after(() => {
