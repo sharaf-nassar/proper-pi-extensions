@@ -20,7 +20,7 @@ export interface Config {
 	model: string | null;
 	thinking: Thinking | null;
 	maxInputTokens: number | null;
-	maxOutputTokens: number;
+	maxOutputTokens: number | null;
 	maxCalls: number;
 	timeoutMs: number;
 	onError: "stock" | "cancel";
@@ -30,7 +30,7 @@ export const DEFAULTS: Config = {
 	model: null,
 	thinking: "low",
 	maxInputTokens: null,
-	maxOutputTokens: 8192,
+	maxOutputTokens: null,
 	maxCalls: 4,
 	timeoutMs: 300000,
 	onError: "stock",
@@ -113,7 +113,8 @@ export function parseConfig(value: unknown): Config {
 		["timeoutMs", 1000, 600000],
 	] as const) {
 		const number = config[key];
-		if (key === "maxInputTokens" && number === null) continue;
+		if (key.startsWith("max") && key.endsWith("Tokens") && number === null)
+			continue;
 		if (
 			typeof number !== "number" ||
 			!Number.isSafeInteger(number) ||
@@ -253,7 +254,7 @@ async function settingsMenu(
 			value = choices.find(([name]) => name === selected)?.[1];
 		} else {
 			const input = await ctx.ui.input(
-				key === "maxInputTokens"
+				key === "maxInputTokens" || key === "maxOutputTokens"
 					? `${label} (blank or auto = automatic)`
 					: label,
 				String(current[key] ?? "auto"),
@@ -262,7 +263,8 @@ async function settingsMenu(
 			if (input !== undefined) {
 				const text = input.trim();
 				value =
-					key === "maxInputTokens" && (!text || text.toLowerCase() === "auto")
+					(key === "maxInputTokens" || key === "maxOutputTokens") &&
+					(!text || text.toLowerCase() === "auto")
 						? null
 						: Number(text);
 			}
@@ -525,7 +527,12 @@ export async function summarize(
 	attempt: Attempt,
 ): Promise<string> {
 	const selected = resolveModel(ctx, config.model);
-	const outputTokens = Math.min(config.maxOutputTokens, selected.maxTokens);
+	// Automatic output follows Pi 1.4.0's own summaries: the model's output
+	// limit, held to half the window so the input budget stays usable.
+	const outputTokens = Math.min(
+		config.maxOutputTokens ?? Math.floor(selected.contextWindow / 2),
+		selected.maxTokens,
+	);
 	// The clone constrains Pi's additive Anthropic/Bedrock thinking budget.
 	// Codex transports may still omit a wire cap; validation bounds the checkpoint.
 	const model = { ...selected, maxTokens: outputTokens };

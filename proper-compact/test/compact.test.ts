@@ -41,6 +41,7 @@ test("configuration rejects ambiguous models, invalid budgets and unknown settin
 	]) {
 		assert.throws(() => parseConfig(patch));
 	}
+	assert.equal(parseConfig({ maxOutputTokens: null }).maxOutputTokens, null);
 	await saveConfig(f.configPath, {
 		...DEFAULTS,
 		model: "provider/models/summary",
@@ -144,8 +145,9 @@ test("native AgentSession persists custom summary, boundary and usage without re
 		JSON.stringify(f.calls[0][1]).includes("INTERIOR_OR_TRAILING_FAILURE"),
 	);
 	assert.ok(JSON.stringify(f.calls[0][1]).includes("FOCUS_SENTINEL"));
-	assert.equal(f.calls[0][2].maxTokens, DEFAULTS.maxOutputTokens);
-	assert.equal(f.calls[0][0].maxTokens, DEFAULTS.maxOutputTokens);
+	// Automatic output: the fixture's 128,000 limit is under half its window.
+	assert.equal(f.calls[0][2].maxTokens, model.maxTokens);
+	assert.equal(f.calls[0][0].maxTokens, model.maxTokens);
 	assert.equal(f.calls[0][2].reasoning, "low");
 	assert.equal(f.calls[0][2].cacheRetention, "none");
 	assert.equal(f.calls[0][2].maxRetries, 0);
@@ -397,7 +399,7 @@ test("real registry runtime forwards request-time endpoint, headers and environm
 	await f.session.compact();
 	assert.equal(seen.length, 1);
 	assert.equal(seen[0][0].baseUrl, "http://127.0.0.1:2");
-	assert.equal(seen[0][0].maxTokens, DEFAULTS.maxOutputTokens);
+	assert.equal(seen[0][0].maxTokens, model.maxTokens);
 	assert.equal(seen[0][2].headers["X-Fixture"], "yes");
 	assert.equal(seen[0][2].env.FIXTURE_ENV, "yes");
 	assert.equal(seen[0][1].messages[0].role, "system");

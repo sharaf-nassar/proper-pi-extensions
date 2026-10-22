@@ -30,7 +30,7 @@ One request handles source that fits. Otherwise, sequential chunks cover every s
 
 The input estimate uses UTF-8 bytes divided by three. Automatic capacity leaves the selected output ceiling, 4,096 tokens, and 10% headroom; explicit input limits can only reduce it. Multi-call planning reserves the maximum accepted encoded checkpoint before choosing contiguous Unicode-safe chunks. Over-budget plans fail before inference rather than silently dropping source.
 
-The default output allowance is 8,192, thinking is low, the operation allows four calls, and its deadline is 300 seconds. These are configurable starting points, not measured optima. The deadline leaves room for sequential calls over million-token windows, since a timeout falls back to stock summarization. Pi's trigger `reserveTokens` and `keepRecentTokens` remain independent.
+The default output allowance is automatic: the summarizer's own output limit, held to half its context window so the input budget stays usable, as Pi 1.4.0's stock summaries use the model's output limit rather than a fixed cap that reasoning could exhaust. Thinking is low, the operation allows four calls, and its deadline is 300 seconds. These are configurable starting points, not measured optima. The deadline leaves room for sequential calls over million-token windows, since a timeout falls back to stock summarization. Pi's trigger `reserveTokens` and `keepRecentTokens` remain independent.
 
 Pi's provider-neutral stream maps reasoning. A request-local model descriptor limits additive Anthropic/Bedrock thinking room. Codex-style transport can omit a wire cap, so requested output size is not a universal billing ceiling. Checkpoint validation additionally bounds encoded bytes; timeouts bound local waiting, not remote charges.
 
@@ -78,7 +78,7 @@ Configuration controls enablement, exact model, thinking, independent input/outp
 
 The no-argument command uses native Pi select and input dialogs for every setting. Rows show current values, accepted edits save immediately, and Done or Escape closes the menu.
 
-Model choices are authenticated and session-scoped, with an option to follow the current model. Thinking can inherit session effort. The input limit accepts blank or auto for automatic budgeting; other numeric inputs use existing bounds. Cancelled dialogs do not save; invalid input warns and returns to the menu. Unexpected errors still surface.
+Model choices are authenticated and session-scoped, with an option to follow the current model. Thinking can inherit session effort. The input and output limits accept blank or auto for automatic budgeting; other numeric inputs use existing bounds. Cancelled dialogs do not save; invalid input warns and returns to the menu. Unexpected errors still surface.
 
 Each edit rereads disk settings before merging its selected field, preserving unrelated changes made while a dialog was open. This does not provide cross-process locking. Dialogs receive the extension lifetime signal; late replies after shutdown or session replacement cannot save. Active summaries retain captured settings.
 

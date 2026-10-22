@@ -1,7 +1,7 @@
 # proper-compact
 
 [Pi](https://pi.dev) summarizes older conversation to make room for new work.
-In Pi 1.3.0, stock summarization clips each tool result to its first 2,000
+In Pi 1.4.0, stock summarization clips each tool result to its first 2,000
 characters. The final error or test outcome in a long log may never reach the
 summarizer.
 
@@ -124,8 +124,9 @@ press Escape to close. Cancelling a submenu or input leaves that setting alone;
 invalid limits show a warning and return to the menu.
 
 The model picker lists authenticated models within the session scope and offers
-Current session model. Thinking offers Inherit session. For the input token
-limit, enter `auto` or leave the input blank to restore automatic budgeting.
+Current session model. Thinking offers Inherit session. For the input or
+output token limit, enter `auto` or leave the input blank to restore automatic
+budgeting.
 Numeric inputs use tokens, calls, and milliseconds as labelled.
 
 Settings live in `~/.pi/agent/proper-compact.json` (or the corresponding
@@ -146,7 +147,7 @@ and an update hint to stderr. JSON updates remain available for automation:
 | `model` | `null` | Current model, or an exact authenticated `provider/model` within session model scope. Naming the current model keeps its session limits, such as a `/tokens` window. |
 | `thinking` | `"low"` | Independent effort; null inherits the session; off disables explicit reasoning. |
 | `maxInputTokens` | `null` | Automatic request budget; explicit values further restrict it. |
-| `maxOutputTokens` | `8192` | Requested response ceiling, independent of Pi's trigger reserve. |
+| `maxOutputTokens` | `null` | Requested response ceiling, independent of Pi's trigger reserve. Automatic uses the model's output limit, capped at half its context window, so long reasoning does not hit the cap. |
 | `maxCalls` | `4` | Maximum sequential summary requests per operation, no internal retries. |
 | `timeoutMs` | `300000` | Deadline for the complete summarization operation. |
 | `onError` | `"stock"` | Warn and use stock Pi, or cancel and retain original context. |
@@ -205,7 +206,7 @@ npm run typecheck
 npm run test:coverage
 ```
 
-Tests use Pi 1.3.0 compaction/persistence and registry routing with mocked model
+Tests use Pi 1.4.0 compaction/persistence and registry routing with mocked model
 responses. They cover trailing/interior failures, chunk coverage, repeated
 compaction, continuation prompts, thinking exclusion, context-edit provenance,
 plain-text refusals, invalid output, cancellation,

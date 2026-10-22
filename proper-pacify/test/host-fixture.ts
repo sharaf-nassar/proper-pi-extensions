@@ -117,7 +117,7 @@ export function createHostFixture(register: (pi: ExtensionAPI) => void) {
 		_flushPendingBashMessages() {},
 		_flushPendingCustomMessages() {},
 		_findLastAssistantMessage: () => undefined,
-		// Pi 1.3.0 starts runs through _startRun; keep only prompt preparation
+		// Pi 1.4.0 starts runs through _startRun; keep only prompt preparation
 		// and skip the post-run loop the fake agent cannot drive.
 		async _startRun(trigger: unknown, onStarted?: () => void) {
 			const messages = await session._prepareRun(trigger);
