@@ -147,16 +147,20 @@ and an update hint to stderr. JSON updates remain available for automation:
 | `model` | `null` | Current model, or an exact authenticated `provider/model` within session model scope. Naming the current model keeps its session limits, such as a `/tokens` window. |
 | `thinking` | `"low"` | Independent effort; null inherits the session; off disables explicit reasoning. |
 | `maxInputTokens` | `null` | Automatic request budget; explicit values further restrict it. |
-| `maxOutputTokens` | `null` | Requested response ceiling, independent of Pi's trigger reserve. Automatic uses the model's output limit, capped at half its context window, so long reasoning does not hit the cap. |
+| `maxOutputTokens` | `null` | Requested generation ceiling, including reasoning, independent of Pi's trigger reserve. Automatic uses the model's output limit, capped at half its context window. Retained checkpoint text has a separate byte limit. |
 | `maxCalls` | `4` | Maximum sequential summary requests per operation, no internal retries. |
 | `timeoutMs` | `300000` | Deadline for the complete summarization operation. |
 | `onError` | `"stock"` | Warn and use stock Pi, or cancel and retain original context. |
 
 Automatic input budgeting reserves output room, 4,096 tokens, and 10% additional
 headroom. UTF-8 bytes divided by three estimate input size; this is not an exact
-provider tokenizer. Later chunks reserve the maximum accepted JSON-encoded
-checkpoint size. Choose a larger-context summarizer, increase an explicit input
-budget/call ceiling, or reduce the output budget when preflight cannot fit.
+provider tokenizer. Retained checkpoint text is limited to 32 KiB of JSON-encoded
+UTF-8, reduced to half the estimated input byte budget or four bytes per allowed
+output token when either is smaller. Reasoning does not count toward that text
+limit. Each request states the limit, and later chunks reserve it separately
+from generation room. Oversized checkpoints fail rather than being truncated.
+Choose a larger-context summarizer, increase an explicit input budget/call
+ceiling, or reduce the output budget when preflight cannot fit.
 
 ### Budget and provider limits
 

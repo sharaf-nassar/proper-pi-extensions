@@ -149,7 +149,7 @@ flow: `survey` is a rail command YOU run directly between pool events.)
    individually-green siblings that break each other semantically.
 
 2. Orchestrate as a ROLLING POOL LOOP that YOU drive with the pi-subagents
-   `subagent` and `subagent_wait` tools (this command authorizes both). Keep
+   `subagent` tool (this command authorizes delegation). Keep
    these explicit maps in your run state:
 
    - `ACTIVE`: task id → async worker run id, attempt, and worktree.
@@ -163,11 +163,11 @@ flow: `survey` is a rail command YOU run directly between pool events.)
    for retry/stuck handling. This prevents duplicate workers and keeps overlap
    accounting honest.
 
-   Do NOT encode the whole pool lifecycle in one workflowScript. Scripts can
+   Do NOT encode the whole pool lifecycle in one workflow script. Scripts can
    run agents but cannot run the rail, bd, or git; claims and worktrees must
    exist parent-side before launch, and newly unblocked beads appear only after
    YOU integrate and close a task. The parent loop therefore owns survey,
-   integration, and refill. Each refill batch uses one short workflowScript
+   integration, and refill. Each refill batch uses one short workflow script
    only to launch async workers and return their run ids.
 
    Pool loop:
@@ -193,32 +193,53 @@ flow: `survey` is a rail command YOU run directly between pool events.)
      worktree; details below), then add its id to `LAUNCHING_TASKS`. A retry
      reuses its preserved worktree after passing step 4's retry gate rather
      than claiming or creating it again.
-   - Dispatch the refill batch with ONE top-level `subagent` call using
-     `async: true`. Its workflowScript contains one `runs.all` item per task,
-     with a stable key derived from task id + attempt, `agent: "worker"`,
-     `context: "fresh"`, the task string below, and child `async: true`. Return
-     only `{key, ok, runId, error}` launch receipts. Child async is essential:
-     the short workflow finishes after starting workers instead of waiting for
-     the slowest worker, leaving the parent free to integrate and refill.
-   - Wait for that short launch workflow by exact id with
-     `subagent_wait({ id: <launch-workflow-id> })`, then inspect its status and
-     receipt. Move every successful task with an exact child run id from
-     `LAUNCHING_TASKS` to `ACTIVE`. For any missing or failed receipt, inspect
-     the workflow's nested status before acting; never relaunch a task while an
-     unaccounted child may exist. Once absence is proven, record a synthetic
-     failed attempt through rail `result` with a stable launch
-     `error_signature`, then route it through step 4.
-   - Monitor without polling. Inspect ACTIVE once after each launch/refill to
-     catch instant completion. If no ACTIVE run is terminal, call
-     `subagent_wait({ stopOnAttention: false })`, never `all: true`; this wakes
-     on the next completion while still-running siblings continue. Supervisor
-     requests still surface. Ignore unrelated run completions and keep waiting
-     for an ACTIVE id.
-   - On each wake, inspect exact ACTIVE statuses and collect every worker now
-     terminal. A terminal worker must provide the JSON result described below;
-     retrieve it from the run result or saved output, then process terminal
-     tasks sequentially through the rail. Successful work follows result →
-     verify-worker → prepare → your commit → verify-integration --gates →
+   - Dispatch the refill batch with ONE top-level
+     `subagent({ workflow: true, async: true })` call.
+     Write one `js workflow` fenced script block in the same reply. Build
+     `items` as a JSON literal inside that script, replacing the example below
+     with the preassigned `{key, task, cwd}` records. Each key is stable for
+     task id + attempt, each task is the complete brief below, and each `cwd`
+     is that task's rail-created worktree. Keep full briefs out of `args`,
+     whose entire JSON payload is limited to 16 KiB. The script launches one
+     child per item and returns ordered launch receipts:
+
+     ```js workflow
+     const items = [
+       { key: "task-id-attempt-1", task: "<complete worker brief>", cwd: "<rail-created worktree>" }
+     ];
+     const receipts = await runs.all(items.map(({ key, task, cwd }) => ({
+       key, agent: "worker", task, cwd, context: "fresh", async: true
+     })));
+     return receipts.map(({ key, state, runId, error }) =>
+       ({ key, state, runId, error }));
+     ```
+
+     Explicit child `async: true` lets the short workflow finish after dispatch.
+     A running receipt has `state: "running"`, a `runId`, and `ok: false` because
+     the child has not completed; `ok` is NOT a launch-success check.
+   - Keep `LAUNCHING_TASKS` reserved while the launch workflow runs. Yield for
+     its native completion notice, then inspect
+     `subagent({ action: "status", id: <launch-workflow-id> })` and its returned
+     receipts. Move each task with a `state: "running"` receipt and exact child
+     `runId` from `LAUNCHING_TASKS` to `ACTIVE`. For any missing or failed
+     receipt, inspect the workflow's exact status and nested child statuses
+     before acting; never relaunch a task while an unaccounted child may exist.
+     If a child exists, track its exact id and reconcile its result. Once
+     absence is proven, record a synthetic failed attempt through rail
+     `result` with a stable launch `error_signature`, then route it through
+     step 4.
+   - Inspect exact ACTIVE statuses once after each launch/refill to catch
+     instant completion. If none is terminal, yield control; ordinary async
+     children wake the parent natively on completion or supervisor attention.
+     Do not sleep, poll, or use `bg_wait` for these children. Ignore unrelated
+     completion notices and retain every ACTIVE id until its own result settles.
+   - On each native completion or supervisor wake, inspect exact ACTIVE run ids
+     with `subagent({ action: "status", id: <child-run-id> })` and collect every
+     worker now terminal. A terminal worker must provide the JSON result
+     described below; retrieve it from that run's result or saved output, then
+     process terminal tasks sequentially through the rail. Successful work
+     follows result → verify-worker → prepare → your commit →
+     verify-integration --gates →
      `bd close` → cleanup → unlock. Failed work follows result → step 4.
      Remove a task from ACTIVE only after that reconciliation.
    - After processing all currently terminal workers, immediately survey and

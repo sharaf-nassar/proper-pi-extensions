@@ -57,6 +57,9 @@
     "@types/node": "25.9.5",
     "typescript": "6.0.2"
   },
+  "overrides": {
+    "undici@8.10.2": "8.12.3"
+  },
   "pi": {
     "extensions": [
       "./llm-router.ts"

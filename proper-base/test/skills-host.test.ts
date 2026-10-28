@@ -81,7 +81,7 @@ test("real Pi session discovers skills, validates the tool schema, and restores 
 		],
 	});
 	await loader.reload();
-	const { session } = await createAgentSession({
+	let { session } = await createAgentSession({
 		cwd: dir,
 		agentDir: dir,
 		model,
@@ -103,7 +103,11 @@ test("real Pi session discovers skills, validates the tool schema, and restores 
 	});
 	const contexts: any[] = [];
 	let activate = true;
-	session.agent.streamFunction = (_model, context, options) => {
+	const streamFunction: typeof session.agent.streamFunction = (
+		_model,
+		context,
+		options,
+	) => {
 		assert.equal(options?.signal?.aborted, false);
 		contexts.push(structuredClone(context));
 		const content = activate
@@ -141,6 +145,7 @@ test("real Pi session discovers skills, validates the tool schema, and restores 
 			result: async () => message,
 		} as any;
 	};
+	session.agent.streamFunction = streamFunction;
 	await session.prompt("/skill:one perform a task", { source: "rpc" });
 	assert.equal(contexts.length, 2);
 	assert.match(JSON.stringify(contexts[0]), /ONE_INSTRUCTIONS/);
@@ -162,6 +167,28 @@ test("real Pi session discovers skills, validates the tool schema, and restores 
 
 	await session.prompt("/skill-context off");
 	await session.prompt("ordinary request");
+	assert.ok(!session.getActiveToolNames().includes(SKILL_CONTEXT_TOOL));
+	await session.extensionRunner.emit({
+		type: "session_shutdown",
+		reason: "quit",
+	});
+	session.dispose();
+	await loader.reload();
+	({ session } = await createAgentSession({
+		cwd: dir,
+		agentDir: dir,
+		model,
+		modelRuntime: runtime,
+		settingsManager: settings,
+		sessionManager: manager,
+		resourceLoader: loader,
+	}));
+	session.agent.streamFunction = streamFunction;
+	assert.ok(!session.getActiveToolNames().includes(SKILL_CONTEXT_TOOL));
+	await session.extensionRunner.emit({
+		type: "session_start",
+		reason: "startup",
+	});
 	assert.ok(!session.getActiveToolNames().includes(SKILL_CONTEXT_TOOL));
 	await session.prompt("/skill-context on");
 	await session.prompt("continue");

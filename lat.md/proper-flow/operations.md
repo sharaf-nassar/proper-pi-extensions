@@ -56,7 +56,7 @@ Backlog mode may add a P4 from Speckit's live closure after the baseline; the pa
 
 `/implement-ready` accepts an epic id, a task id or unique title, or `all`. Task titles resolve through Beads search. Single-task mode initializes the descendant-oriented rail with `all`, then filters every survey, dispatch, and report to the resolved task id.
 
-The command defaults to a rolling pool of 12 workers and never exceeds 12. Refill batches launch async pi-subagents children, while the parent waits for individual completions, integrates terminal work through the rail, surveys newly unblocked tasks, and fills open slots without draining active siblings.
+The command defaults to a rolling pool of 12 workers and never exceeds 12. Refill batches launch async pi-subagents children through short `workflow: true` scripts; the parent reserves assigned tasks until exact child run ids are known. Complete worker briefs live as JSON literals in the script rather than in the 16 KiB workflow argument object. Running launch receipts are not successful child results. Native completion notices wake the parent, which retrieves exact terminal results, integrates work through the rail, surveys newly unblocked tasks, and fills open slots without draining active siblings. `/refine` uses the same native-wake and exact-id reconciliation for reconnaissance and cluster pools while the parent owns its Beads lock, source set, and human gates.
 
 ## Validation
 

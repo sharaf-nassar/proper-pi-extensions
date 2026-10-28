@@ -166,14 +166,16 @@ export function registerSkillContext(
 	const enabled = () => !disposed && readSkillContextEnabled(agentDir);
 	const effective = () => !disposed && (runEnabled ?? enabled());
 	let toolHidden = false;
-	const syncTool = (active: boolean) => {
+	const syncTool = (active: boolean, explicit = false) => {
 		const tools = pi.getActiveTools?.();
 		if (!tools || !pi.setActiveTools) return;
-		if (!active && tools.includes(SKILL_CONTEXT_TOOL)) {
-			pi.setActiveTools(tools.filter((name) => name !== SKILL_CONTEXT_TOOL));
+		if (!active) {
+			if (tools.includes(SKILL_CONTEXT_TOOL))
+				pi.setActiveTools(tools.filter((name) => name !== SKILL_CONTEXT_TOOL));
 			toolHidden = true;
-		} else if (active && toolHidden) {
-			pi.setActiveTools([...new Set([...tools, SKILL_CONTEXT_TOOL])]);
+		} else if (toolHidden || explicit) {
+			if (!tools.includes(SKILL_CONTEXT_TOOL))
+				pi.setActiveTools([...tools, SKILL_CONTEXT_TOOL]);
 			toolHidden = false;
 		}
 	};
@@ -420,7 +422,7 @@ export function registerSkillContext(
 					);
 				if ((action === "on" || action === "off") && !names.length) {
 					writeSkillContextEnabled(agentDir, action === "on");
-					syncTool(action === "on");
+					syncTool(action === "on", action === "on");
 					ctx.ui.notify(
 						`Skill context management ${action === "on" ? "enabled" : "disabled"}. Applies to the next run; native skills remain available.`,
 						"info",

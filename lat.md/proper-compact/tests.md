@@ -26,9 +26,9 @@ Native custom-message, branch-summary, and compaction projections retain provena
 
 ## Native compaction lifecycle
 
-Pi 0.99.1 AgentSession compaction methods persist hook summaries, native cut boundaries, and usage while preserving original entries.
+Pi 1.4.0 AgentSession compaction methods persist hook summaries, native cut boundaries, and usage while preserving original entries.
 
-The offline prototype fixture supplies the host's message-provenance map. Split focus and previous state survive three cycles; outgoing prompts separate conversation data from continuation instructions, include public progress, and exclude private thinking, signatures, and retained later messages. Chunk usage is summed across calls.
+The offline prototype fixture supplies the host's message-provenance map. Split focus and previous state survive three cycles; outgoing prompts separate conversation data from continuation instructions, include public progress, and exclude private thinking, signatures, and retained later messages. Chunk usage is summed across calls. Automatic-budget regressions cover complete multi-call source coverage in both ordinary and branch summaries, including a session-reduced context window. Large reasoning output remains separate from the bounded checkpoint text; oversized checkpoints fall back visibly.
 
 ## Failure and cancellation
 

@@ -118,7 +118,7 @@ test("serialization preserves interior and trailing evidence, status, and distin
 		"split-turn",
 		"keep evidence",
 		6000,
-		1024,
+		4096,
 		16,
 	);
 	assert.ok(chunks.length > 1);
@@ -126,7 +126,7 @@ test("serialization preserves interior and trailing evidence, status, and distin
 	for (const chunk of chunks) assert.ok(!/[\uD800-\uDBFF]$/.test(chunk));
 	assert.throws(
 		() =>
-			planChunks(serialized.repeat(100), "old", "history", "", 6000, 1024, 1),
+			planChunks(serialized.repeat(100), "old", "history", "", 6000, 4096, 1),
 		/maxCalls/,
 	);
 });

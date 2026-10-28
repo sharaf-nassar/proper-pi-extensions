@@ -30,11 +30,15 @@ The fixture requires `/implement-ready` to create each P4 debt bead with deferre
 
 ## Refinement orchestration contract
 
-The fixture protects `/refine` card resolution, no-argument P4 fallback, selected-source isolation, locking, distinct-epic serialization, bounded async refinement, exact human gates, and final audit absorption.
+The fixture protects `/refine` scope, locking, bounded async refinement, human gates, and audit absorption.
+
+Shared prompt assertions require both rolling pools to use supported workflow launches and native completion wakes, reconcile exact launch and terminal run ids, and omit obsolete wait calls. Selected-source isolation and distinct-epic serialization remain protected.
 
 ## Rolling pool contract
 
-The fixture requires `/implement-ready` to default to 12 workers, enforce the hard maximum, launch async children, wait for the next completion rather than the whole pool, and refill without waiting for active siblings.
+The fixture requires `/implement-ready` to default to 12 workers, enforce the hard maximum, and refill on individual native completions without waiting for active siblings.
+
+It protects task reservations during async launch and requires running `ok: false` receipts to be treated as pending work, not failed work. An offline execution of each launch example supplies twelve complete briefs totaling more than 16 KiB and checks every child and ordered receipt through a fake launcher, without workflow arguments or live agents.
 
 ## Integration recovery contract
 

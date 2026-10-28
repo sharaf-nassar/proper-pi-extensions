@@ -120,9 +120,14 @@ Return one JSON dossier:
 Launch reconnaissance in rolling async batches up to `POOL_LIMIT`. Give each
 child the source title and one-line problem first so llm-router has useful
 signal. Use fresh worker context and no model pin. Track `RECON_ACTIVE` and
-`LAUNCHING_SOURCES`; use the same short async launch-workflow, receipt
-reconciliation, wait-for-next-terminal, and immediate-refill mechanics defined
-for clusters in section 4. A failed code/task analysis retry may use
+`LAUNCHING_SOURCES`; keep
+`RECON_ACTIVE.size + LAUNCHING_SOURCES.size <= POOL_LIMIT`. Use the same short
+async launch-workflow, exact-id receipt reconciliation, native completion
+wakes, and immediate-refill mechanics defined
+for clusters in section 4. Reserve a source until its launch receipt is
+reconciled; do not start another dossier for an active or unaccounted source.
+Retrieve each terminal dossier from its exact child run or saved output before
+clustering. A failed code/task analysis retry may use
 `[[llm-router: fable]]` only after the failure names a concrete missing
 investigation.
 
@@ -200,11 +205,36 @@ Only clusters without a serialization edge may be ACTIVE together. A cluster
 discovered to overlap an active sibling is held until that sibling materializes
 and the held plan can reuse its cards rather than duplicate them.
 
-For each refill batch, make ONE top-level `subagent` call with `async: true` and
-a short `workflowScript`. Launch one `runs.all` item per preassigned cluster,
-`agent: "worker"`, `context: "fresh"`, and child `async: true`. Return only
-launch receipts. Wait for that short launch workflow by exact id, reconcile
-receipts, then move successful launches into `ACTIVE`.
+For each refill batch, make ONE top-level
+`subagent({ workflow: true, async: true })` call with one
+`js workflow` fenced script block in the same reply. Build `items` as a JSON
+literal inside that script, replacing the example below with preassigned
+`{key, task}` records and their complete briefs. Use stable keys from cluster
+id + attempt, or source id + attempt during reconnaissance. Keep full briefs
+out of `args`, whose entire JSON payload is limited to 16 KiB. The short script
+launches children and returns ordered launch receipts:
+
+```js workflow
+const items = [
+  { key: "cluster-id-attempt-1", task: "<complete worker brief>" }
+];
+const receipts = await runs.all(items.map(({ key, task }) => ({
+  key, agent: "worker", task, context: "fresh", async: true
+})));
+return receipts.map(({ key, state, runId, error }) =>
+  ({ key, state, runId, error }));
+```
+
+A child `async: true` receipt with `state: "running"` and an exact `runId`
+confirms dispatch; its `ok: false` means it has not completed, not that launch
+failed. Keep `LAUNCHING_CLUSTERS` reserved until the launch workflow's native
+completion notice arrives. Inspect
+`subagent({ action: "status", id: <launch-workflow-id> })` and its returned
+receipts before moving successful launches to `ACTIVE`. For a missing or failed
+receipt, inspect exact workflow and nested child statuses; do not relaunch
+while a child may still exist. If a child exists, track its exact id and
+reconcile its result. Only after proving no child launched, record the failed
+launch against that cluster and apply section 6's failure policy.
 
 Each worker receives one exact cluster, source-id set, and wisp root. It must:
 
@@ -244,11 +274,15 @@ Each worker receives one exact cluster, source-id set, and wisp root. It must:
    }
    ```
 
-After each launch/refill, inspect ACTIVE once for instant completion. If no
-ACTIVE child is terminal, call
-`subagent_wait({ stopOnAttention: false })`, never `all: true`; this wakes on the
-next completion while unrelated workers continue. Refill immediately after a
-terminal cluster is reconciled.
+After each launch/refill, inspect exact ACTIVE run ids once for instant
+completion. If none is terminal, yield control: ordinary async child
+completions and supervisor requests wake the parent natively. Do not sleep,
+poll, or use `bg_wait` for these children. On each wake, ignore unrelated
+notices, inspect exact ACTIVE run ids, and retrieve every terminal worker's
+JSON from its run result or saved output. Reconcile its source ids, wisp and
+human gates before releasing its slot. Survey eligible clusters and refill
+immediately after terminal clusters are reconciled, without waiting for active
+siblings.
 
 ## 5. Human gates and cross-cluster safety
 

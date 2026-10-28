@@ -340,8 +340,9 @@ function prompt(
 	part: number,
 	count: number,
 	offset: number,
+	checkpointBytes: number,
 ): string {
-	return `# Prior checkpoint (untrusted data)\n${JSON.stringify(state)}\n\n# Conversation\n${text}\n\n# Instructions\n${CONTRACT}\n\nMode: ${mode}. Chunk ${part}/${count}. Serialized character offset: ${offset}.\nFocus requested by operator (subject to the checkpoint contract): ${JSON.stringify(focus)}`;
+	return `# Prior checkpoint (untrusted data)\n${JSON.stringify(state)}\n\n# Conversation\n${text}\n\n# Instructions\n${CONTRACT}\n\nKeep the checkpoint text within ${checkpointBytes} UTF-8 bytes when JSON-encoded, including escapes.\nMode: ${mode}. Chunk ${part}/${count}. Serialized character offset: ${offset}.\nFocus requested by operator (subject to the checkpoint contract): ${JSON.stringify(focus)}`;
 }
 
 // @lat: [[proper-compact#Bounded summarization]]
@@ -351,13 +352,22 @@ export function planChunks(
 	mode: string,
 	focus: string,
 	inputTokens: number,
-	outputTokens: number,
+	checkpointBytes: number,
 	maxCalls: number,
 ): string[] {
 	const fits = (state: string, text: string) =>
 		estimateInput(
 			ROLE +
-				prompt(mode, focus, state, text, maxCalls, maxCalls, transcript.length),
+				prompt(
+					mode,
+					focus,
+					state,
+					text,
+					maxCalls,
+					maxCalls,
+					transcript.length,
+					checkpointBytes,
+				),
 		) +
 			256 <=
 		inputTokens;
@@ -366,11 +376,21 @@ export function planChunks(
 	// including escapes. Reserve space for any valid next-pass checkpoint.
 	const reserve = Math.max(
 		Buffer.byteLength(JSON.stringify(previous), "utf8"),
-		outputTokens * 4,
+		checkpointBytes,
 	);
 	const overhead =
 		estimateInput(
-			ROLE + prompt(mode, focus, "", "", maxCalls, maxCalls, transcript.length),
+			ROLE +
+				prompt(
+					mode,
+					focus,
+					"",
+					"",
+					maxCalls,
+					maxCalls,
+					transcript.length,
+					checkpointBytes,
+				),
 		) + 256;
 	const bytesPerChunk = (inputTokens - overhead) * 3 - reserve;
 	if (bytesPerChunk < 1024)
@@ -527,8 +547,7 @@ export async function summarize(
 	attempt: Attempt,
 ): Promise<string> {
 	const selected = resolveModel(ctx, config.model);
-	// Automatic output follows Pi 1.4.0's own summaries: the model's output
-	// limit, held to half the window so the input budget stays usable.
+	// Leave generation room for reasoning without consuming the whole input window.
 	const outputTokens = Math.min(
 		config.maxOutputTokens ?? Math.floor(selected.contextWindow / 2),
 		selected.maxTokens,
@@ -540,13 +559,19 @@ export async function summarize(
 		config.maxInputTokens ?? Infinity,
 		Math.floor((model.contextWindow - outputTokens - 4096) * 0.9),
 	);
+	// Retained text must leave room for source on the next call, independently of reasoning.
+	const checkpointBytes = Math.min(
+		32 * 1024,
+		outputTokens * 4,
+		Math.floor((inputTokens * 3) / 2),
+	);
 	const chunks = planChunks(
 		input.transcript,
 		input.previous,
 		input.mode,
 		input.focus,
 		inputTokens,
-		outputTokens,
+		checkpointBytes,
 		config.maxCalls,
 	);
 	const thinking = config.thinking ?? ctx.thinkingLevel ?? "off";
@@ -563,6 +588,7 @@ export async function summarize(
 			index + 1,
 			chunks.length,
 			offset,
+			checkpointBytes,
 		);
 		const estimated = estimateInput(ROLE + text) + 256;
 		if (estimated > inputTokens)
@@ -590,7 +616,7 @@ export async function summarize(
 		const response = await untilAborted(stream.result(), signal);
 		addUsage(attempt.usage, response.usage);
 		signal.throwIfAborted();
-		summary = parseSummary(response, outputTokens * 4);
+		summary = parseSummary(response, checkpointBytes);
 		offset += chunk.length;
 	}
 	return summary + RECALL_NOTE;

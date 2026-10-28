@@ -27,9 +27,14 @@ import {
 } from "../src/skill-context.ts";
 import { parseSkillCommands, registerSkillContext } from "../src/skills.ts";
 
-function fixture(t: TestContext) {
+function fixture(
+	t: TestContext,
+	options: { enabled?: boolean; activeTools?: string[] } = {},
+) {
 	const dir = mkdtempSync(join(tmpdir(), "proper-base-skills-"));
+	if (options.enabled === false) writeSkillContextEnabled(dir, false);
 	const manager = SessionManager.inMemory(dir);
+	let activeTools = options.activeTools ?? ["read", SKILL_CONTEXT_TOOL];
 	const catalog: any[] = [];
 	const notices: string[] = [];
 	const confirmations: string[] = [];
@@ -59,6 +64,10 @@ function fixture(t: TestContext) {
 		},
 	};
 	const pi: any = {
+		getActiveTools: () => [...activeTools],
+		setActiveTools: (names: string[]) => {
+			activeTools = [...names];
+		},
 		registerCommand: (name: string, command: any) =>
 			commands.set(name, command),
 		registerTool: (definition: any) => {
@@ -149,6 +158,9 @@ function fixture(t: TestContext) {
 		queued,
 		notices,
 		confirmations,
+		get activeTools() {
+			return activeTools;
+		},
 		answer(value: boolean) {
 			consent = value;
 		},
@@ -604,6 +616,48 @@ test("persistent disable restores native expansion and context behavior, with no
 			.skillContext,
 		true,
 	);
+});
+
+test("explicit on restores a recorded tool removal after a disabled restart", async (t) => {
+	const f = fixture(t, { enabled: false, activeTools: ["read"] });
+	assert.deepEqual(f.activeTools, ["read"]);
+	f.reload();
+	assert.deepEqual(f.activeTools, ["read"]);
+	await f.command("on");
+	assert.deepEqual(f.activeTools, ["read", SKILL_CONTEXT_TOOL]);
+	await f.command("on");
+	assert.deepEqual(f.activeTools, ["read", SKILL_CONTEXT_TOOL]);
+	await f.command("off");
+	assert.deepEqual(f.activeTools, ["read"]);
+	f.reload();
+	await f.command("on");
+	assert.deepEqual(f.activeTools, ["read", SKILL_CONTEXT_TOOL]);
+});
+
+test("settings enable restores a recorded removal on the next run", (t) => {
+	const f = fixture(t, { enabled: false, activeTools: ["read"] });
+	f.reload();
+	const disabledPrompt = { systemPromptOptions: { sections: {} } } as any;
+	f.controller.prepare(disabledPrompt);
+	assert.deepEqual(f.activeTools, ["read"]);
+	writeSkillContextEnabled(f.dir, true);
+	const enabledPrompt = { systemPromptOptions: { sections: {} } } as any;
+	f.controller.prepare(enabledPrompt);
+	assert.deepEqual(f.activeTools, ["read", SKILL_CONTEXT_TOOL]);
+	assert.ok(enabledPrompt.systemPromptOptions.sections.proper_base_skills);
+	f.controller.prepare({ systemPromptOptions: { sections: {} } } as any);
+	assert.deepEqual(f.activeTools, ["read", SKILL_CONTEXT_TOOL]);
+});
+
+test("ordinary startup preserves excluded tools until explicit on", async (t) => {
+	const f = fixture(t, { activeTools: ["read"] });
+	assert.deepEqual(f.activeTools, ["read"]);
+	f.controller.prepare({ systemPromptOptions: { sections: {} } } as any);
+	assert.deepEqual(f.activeTools, ["read"]);
+	f.reload();
+	assert.deepEqual(f.activeTools, ["read"]);
+	await f.command("on");
+	assert.deepEqual(f.activeTools, ["read", SKILL_CONTEXT_TOOL]);
 });
 
 test("settings changes apply on the next run and selection commands reject active work", async (t) => {
