@@ -320,6 +320,7 @@ test("built-in prompts target Claude and GPT families across provider id forms",
 	const opus5 = [...core, "response_length"];
 	const fable = [...core, "decisiveness", "acting_on_requests"];
 	const fable51 = [...fable, "progress_updates"];
+	const claude55 = [...core, "carry_through"];
 	const gpt6 = ["initiative"];
 	const gpt5 = ["autonomy"];
 	const expected: Record<string, string[]> = {
@@ -338,6 +339,11 @@ test("built-in prompts target Claude and GPT families across provider id forms",
 		"openrouter/~openai/gpt-sol-latest": [],
 		"anthropic/claude-sonnet-5": core,
 		"cliproxyapi/claude-haiku-4-5": core,
+		"anthropic/claude-sonnet-5-5": claude55,
+		"github-copilot/claude-sonnet-5.5": claude55,
+		"amazon-bedrock/global.anthropic.claude-sonnet-5-5": claude55,
+		"cliproxyapi/claude-haiku-5-5": claude55,
+		"openrouter/anthropic/claude-haiku-5.5:batch": claude55,
 		"anthropic/claude-fable-5": fable,
 		"openrouter/anthropic/claude-fable-5:batch": fable,
 		"anthropic/claude-fable-5-1": fable51,
@@ -346,6 +352,7 @@ test("built-in prompts target Claude and GPT families across provider id forms",
 		"anthropic/claude-mythos-5-1": fable51,
 		"cliproxyapi/gpt-6-astra": gpt6,
 		"openai/gpt-6-sol": gpt6,
+		"openai-codex/gpt-6.1-sol": gpt6,
 		"github-copilot/gpt-6-luna": gpt6,
 		"amazon-bedrock/global.openai.gpt-6-astra": gpt6,
 		"openrouter/openai/gpt-6-luna-pro:batch": gpt6,
@@ -375,6 +382,10 @@ test("built-in prompts target Claude and GPT families across provider id forms",
 		unattended,
 	);
 	assert.deepEqual(defaultTags("cliproxyapi/claude-sonnet-5", "rpc"), core);
+	assert.deepEqual(defaultTags("anthropic/claude-haiku-5-5", "print"), [
+		...claude55,
+		"autonomous_run",
+	]);
 
 	// Opus 5.5 gets its own guide's unattended paragraph instead of the general one.
 	const own = /^A standing instruction from the user/m;

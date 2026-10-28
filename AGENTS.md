@@ -87,7 +87,7 @@ workflow can publish it.
   left alone and need a manual edit). Stray
   requests on the placeholder run on the router's `fallbackModel`.
 - Toolchain: Node 22.19+, Pi 1.4.0 tested (proper-llm-router requires
-  0.99.1 for virtual models and GPT-6.1 Sol; proper-pacify requires 0.99.0
+  1.1.0 for Claude Haiku 5.5 in the built-in catalog; proper-pacify requires 0.99.0
   for prompt preflight dispositions; proper-compact and
   proper-model-prompts require 0.87.0), TypeScript 6.
 - No global installation or provider inference belongs in the proper-compact

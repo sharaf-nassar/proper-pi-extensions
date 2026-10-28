@@ -2,7 +2,8 @@ import type { ModelPrompt } from "./model-prompts.ts";
 
 // Adapted from Anthropic's prompting guides (platform.claude.com, prompt
 // engineering section) and from OpenAI's GPT-6 and GPT-5.6 guides and Codex's
-// per-model instructions, all read 2026-09-23. Text the vendors measured or
+// per-model instructions, all read 2026-09-23; the Sonnet 5.5 and Haiku 5.5
+// guides were read 2026-10-22. Text the vendors measured or
 // published as a starting prompt is kept close to its wording. Every block
 // appends: a prepend makes Pi resend the whole system prompt, which costs the
 // prompt cache and earlier thinking.
@@ -70,6 +71,24 @@ Tokens spent editing files are best minimized, all else being equal, so when it 
 <plain_writing>
 Say what you mean in literal terms. Mannered prose swaps direct statement for metaphor and flourish ("a dial worth turning" instead of "a parameter worth varying"), which makes the reader work harder and drags in connotations you didn't choose. When a literal phrase is available, use it.
 </plain_writing>`;
+
+// Anthropic's Sonnet 5.5 and Haiku 5.5 guides both measured these two
+// paragraphs. At Pi's default medium effort, Sonnet 5.5 checks in before a
+// coding task is done and Haiku 5.5 stops early under a long system prompt and
+// reports changes without running a check; at xhigh and max, Sonnet 5.5
+// starts its own review rounds and reviewer subagents. The first paragraph
+// joins the guides' carry-through sentence with the xhigh/max stop rule, which
+// cut session cost by about a third in Anthropic's testing. The second is the
+// verification paragraph both guides share. Neither guide asks for them on
+// Sonnet 5 or Haiku 4.5.
+// @lat: [[proper-model-prompts#Built-in Claude prompts]]
+const CLAUDE_5_5 = `<carry_through>
+Keep working until everything the user asked for is done, and only stop to ask when you can't go on without the user or before a risky step. When the work the user asked for is done and its checks pass, stop and report. Don't start extra rounds of review or hardening on your own, and don't launch reviewer sub-agents unless the user asked for a review. If you think a deeper review is worth doing, say so at the end.
+</carry_through>
+
+<real_checks>
+When you change code that can be run, built, or type-checked, run a real check that exercises the change before reporting it done: the project's tests, type-checker, or build, or the changed command itself. A syntax-only check, or a check command that failed to start, does not count; if all that is missing is the project's declared dependencies, install them with its own package manager and lockfile (e.g. npm install, pip install -r requirements.txt), never via sudo or the system package manager, unless told not to. Only if no real check can run here, say which one you did not run and why instead of reporting the change as done.
+</real_checks>`;
 
 // Only for runs nobody watches: Anthropic says to leave this out of apps
 // where a person answers, so it is limited to print and JSON modes. GPT models
@@ -192,6 +211,16 @@ export const DEFAULT_PROMPTS: readonly ModelPrompt[] = [
 		],
 		position: "append",
 		text: FABLE_5_1,
+	},
+	{
+		models: [
+			"*claude-sonnet-5-5*",
+			"*claude-sonnet-5.5*",
+			"*claude-haiku-5-5*",
+			"*claude-haiku-5.5*",
+		],
+		position: "append",
+		text: CLAUDE_5_5,
 	},
 	{
 		models: ["*claude*", "!*claude-opus-5-5*", "!*claude-opus-5.5*"],

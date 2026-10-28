@@ -8,8 +8,8 @@ Arm keys are internal routing names; default identifiers may resolve under CPA o
 
 | Arm key | Default model ID | Lane | Intended tier |
 | --- | --- | --- | --- |
-| `claude-haiku-4-5` | `claude-haiku-4-5` | repository and agentic | narrow fixes and mechanical edits |
-| `claude-sonnet-5` | `claude-sonnet-5` | repository and agentic | routine multi-file work and test suites |
+| `claude-haiku-5-5` | `claude-haiku-5-5` | repository and agentic | narrow fixes and mechanical edits |
+| `claude-sonnet-5-5` | `claude-sonnet-5-5` | repository and agentic | routine multi-file work and test suites |
 | `claude-opus-5-5` | `claude-opus-5-5` | repository and agentic | cross-component diagnosis and high-impact changes |
 | `claude-fable-5-1` | `claude-fable-5-1` | repository and agentic | ambiguous architecture and protocol-level work |
 | `gpt-6-luna` | `gpt-6-luna` | self-contained | trivial or mechanical standalone edits |
@@ -22,11 +22,13 @@ Arm keys are internal routing names; default identifiers may resolve under CPA o
 
 The September 2026 catalog moved each slot to the newest model in its tier, following the vendors' own tier guidance and published benchmarks.
 
-Claude Opus 5.5 replaced Opus 5: Anthropic reports Fable 5.1-level results on most work at 40% lower cost than Opus 5. Fable 5.1 replaced Fable 5 at the same price, and Anthropic still recommends Fable over Opus for demanding reasoning and long-horizon work. Sonnet 5 and Haiku 4.5 remain the newest models in their tiers.
+Claude Opus 5.5 replaced Opus 5: Anthropic reports Fable 5.1-level results on most work at 40% lower cost than Opus 5. Fable 5.1 replaced Fable 5 at the same price, and Anthropic still recommends Fable over Opus for demanding reasoning and long-horizon work.
+
+The October 2026 update completed the Claude 5.5 family. Sonnet 5.5 (released September 28) replaced Sonnet 5 at the same $2/$10 price with faster output, cheaper cache reads, and a 1M context window; Anthropic names it the replacement for the retiring Sonnet 4.5. Haiku 5.5 (released October 7) replaced Haiku 4.5 at $0.10/$0.50, a tenth of Haiku 4.5's price, also with a 1M context window, and Anthropic now lists Haiku 4.5 as legacy with its earliest retirement floor already passed. Opus 5.5 and Fable 5.1 remain the newest models in their tiers. OpenAI has released nothing newer than GPT-6 Astra, GPT-6.1 Sol, and GPT-6 Luna, so the Codex slots are unchanged; the GPT-5.6 models OpenAI still serves stay retired here because GPT-6 Luna and GPT-6.1 Sol cost less and score at or above them.
 
 GPT-6 Luna replaced GPT-5.6 Luna at about half its price. GPT-6 Sol costs slightly less than GPT-5.6 Terra and lands level with GPT-5.6 Sol on independent indexes, so one slot inherits both roles and Terra retires. GPT-6.1 Sol, which Pi 0.99.1 made its OpenAI Codex default, then replaced GPT-6 Sol in that slot under the key `gpt-6-1-sol`. GPT-6 Astra, OpenAI's strongest model at Fable's price, fills the new top Codex tier. The lane rule and the rubric's measured percentages still come from the previous generation, as described in [[exemplars#Corpus snapshot]].
 
-The package requires Pi 0.99.1, the first release whose built-in catalog lists GPT-6.1 Sol alongside Opus 5.5 and GPT-6 Luna, and whose virtual-model API backs the placeholder described in [[lat.md/proper-llm-router/operations#Placeholder safety]], so every default resolves on a direct provider without extra configuration.
+The package requires Pi 1.1.0, the first release whose built-in catalog lists Claude Haiku 5.5 alongside Sonnet 5.5, Opus 5.5, Fable 5.1, GPT-6.1 Sol, GPT-6 Astra, and GPT-6 Luna, so every default resolves on a direct provider without extra configuration. The virtual-model API that backs the placeholder described in [[lat.md/proper-llm-router/operations#Placeholder safety]] arrived earlier, in Pi 0.99.1.
 
 ## Lane decision
 
@@ -42,8 +44,8 @@ The judge chooses the cheapest tier expected to finish without quality loss.
 
 - Concurrency, distributed correctness, protocol or migration design, and unclear scope route to `claude-fable-5-1`.
 - Cross-component diagnosis, authentication, data-loss risk, and hot-path changes route to `claude-opus-5-5`.
-- Routine multi-file repository work routes to `claude-sonnet-5`.
-- Localized, well-reproduced repository work routes to `claude-haiku-4-5`.
+- Routine multi-file repository work routes to `claude-sonnet-5-5`.
+- Localized, well-reproduced repository work routes to `claude-haiku-5-5`.
 - Standalone work needing a novel algorithm, a proof, or a math-heavy derivation routes to `gpt-6-astra`, as does work whose similar measured tasks show `gpt-6-1-sol` failing.
 - Subtle standalone correctness, performance work, and fully specified standalone implementation route to `gpt-6-1-sol`.
 - Trivial standalone edits route to `gpt-6-luna`.
@@ -58,7 +60,7 @@ Overrides use the same arm resolver as the judge output checks.
 
 The resolver normalizes dots and spaces to hyphens. It also accepts dated CPA IDs when they contain one complete arm key. Broad fragments such as `claude` or `gpt-6` remain invalid because they match several arms.
 
-Retired arm keys and their model IDs resolve to the slot that inherited their role: `claude-opus-5` to `claude-opus-5-5`, `claude-fable-5` to `claude-fable-5-1`, `gpt-5-6-luna` to `gpt-6-luna`, and `gpt-5-6-terra`, `gpt-5-6-sol`, and `gpt-6-sol` to `gpt-6-1-sol`. Saved overrides, pins, and subagent sentinels written for the previous catalog therefore keep working. The mapping is exact; a bare `terra` fragment matches nothing.
+Retired arm keys and their model IDs resolve to the slot that inherited their role: `claude-opus-5` to `claude-opus-5-5`, `claude-fable-5` to `claude-fable-5-1`, `claude-sonnet-5` to `claude-sonnet-5-5`, `claude-haiku-4-5` to `claude-haiku-5-5`, `gpt-5-6-luna` to `gpt-6-luna`, and `gpt-5-6-terra`, `gpt-5-6-sol`, and `gpt-6-sol` to `gpt-6-1-sol`. Saved overrides, pins, and subagent sentinels written for the previous catalog therefore keep working. The mapping is exact; a bare `terra` fragment matches nothing.
 
 ## Judge model overrides
 

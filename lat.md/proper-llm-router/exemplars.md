@@ -22,17 +22,17 @@ The current file contains 112 unique task IDs and 112 unique prompts.
 | Arm | Pass | Flaky | Fail |
 | --- | ---: | ---: | ---: |
 | `claude-fable-5-1` | 55 | 1 | 2 |
-| `claude-haiku-4-5` | 34 | 7 | 17 |
+| `claude-haiku-5-5` | 34 | 7 | 17 |
 | `claude-opus-5-5` | 51 | 2 | 5 |
-| `claude-sonnet-5` | 43 | 7 | 8 |
+| `claude-sonnet-5-5` | 43 | 7 | 8 |
 | `gpt-6-luna` | 4 | 23 | 53 |
 | `gpt-6-1-sol` | 13 | 31 | 36 |
 
 These columns are not all measured on the same tasks: only 26 rows compare all six rated arms directly. The corpus-wide totals must not be read as a head-to-head ranking; the rubric's lane rule comes from the repository-task subset. These are routing evidence, not live health or quota data.
 
-The rows were measured on the previous catalog. Haiku 4.5 and Sonnet 5 rates are their own. The `claude-opus-5-5`, `claude-fable-5-1`, `gpt-6-luna`, and `gpt-6-1-sol` rates were measured on Opus 5, Fable 5, GPT-5.6 Luna, and GPT-5.6 Sol and moved to the slot that replaced each model; the Sol rates moved again, unchanged, when GPT-6.1 Sol replaced GPT-6 Sol. GPT-5.6 Terra's rates were dropped because GPT-6 Sol outscores it, so its failures would understate that slot.
+The rows were measured on the previous catalog. The `claude-haiku-5-5` and `claude-sonnet-5-5` rates were measured on Haiku 4.5 and Sonnet 5 and moved unchanged to their successors in the October 2026 update. The `claude-opus-5-5`, `claude-fable-5-1`, `gpt-6-luna`, and `gpt-6-1-sol` rates were measured on Opus 5, Fable 5, GPT-5.6 Luna, and GPT-5.6 Sol and moved to the slot that replaced each model; the Sol rates moved again, unchanged, when GPT-6.1 Sol replaced GPT-6 Sol. GPT-5.6 Terra's rates were dropped because GPT-6 Sol outscores it, so its failures would understate that slot.
 
-The vendors report each successor at or above its predecessor, except that GPT-6 Sol trails GPT-5.6 Sol on DeepSWE while independent indexes put the two level. The moved rates therefore approximate the current slots rather than measure them.
+The vendors report each successor at or above its predecessor, except that GPT-6 Sol trails GPT-5.6 Sol on DeepSWE while independent indexes put the two level. Anthropic reports Sonnet 5.5 well above Sonnet 5 on agentic coding and Haiku 5.5 above Haiku 4.5 across domains, so the moved Claude rates likely understate the lower slots. The moved rates therefore approximate the current slots rather than measure them.
 
 ## Snapshot maintenance
 

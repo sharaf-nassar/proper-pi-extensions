@@ -50,9 +50,9 @@ A down verdict moves once to a fixed cross-lane target.
 | `gpt-6-astra` | `claude-fable-5-1` |
 | `claude-opus-5-5` | `gpt-6-1-sol` |
 | `gpt-6-1-sol` | `claude-opus-5-5` |
-| `claude-sonnet-5` | `gpt-6-luna` |
-| `claude-haiku-4-5` | `gpt-6-luna` |
-| `gpt-6-luna` | `claude-haiku-4-5` |
+| `claude-sonnet-5-5` | `gpt-6-luna` |
+| `claude-haiku-5-5` | `gpt-6-luna` |
+| `gpt-6-luna` | `claude-haiku-5-5` |
 
 The graph is intentionally asymmetric at the lower tiers. Luna returns to Haiku, while both Haiku and Sonnet can fall to Luna.
 

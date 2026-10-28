@@ -4,11 +4,11 @@ import { test } from "node:test";
 import { armAvailability, loadConfig } from "../llm-router.ts";
 
 const targets = {
-	"claude-haiku-4-5": {
+	"claude-haiku-5-5": {
 		provider: "cliproxyapi",
-		id: "claude-haiku-4-5-20251001",
+		id: "claude-haiku-5-5",
 	},
-	"claude-sonnet-5": { provider: "cliproxyapi", id: "claude-sonnet-5" },
+	"claude-sonnet-5-5": { provider: "cliproxyapi", id: "claude-sonnet-5-5" },
 	"claude-opus-5-5": { provider: "cliproxyapi", id: "claude-opus-5-5" },
 	"claude-fable-5-1": { provider: "cliproxyapi", id: "claude-fable-5-1" },
 	"gpt-6-luna": { provider: "cliproxyapi", id: "gpt-6-luna" },
@@ -53,7 +53,7 @@ test("upstream usage 429 blocks that account's lane at the quota threshold", asy
 
 	try {
 		const availability = await armAvailability(cfg, targets);
-		assert.equal(availability["claude-haiku-4-5"]?.available, false);
+		assert.equal(availability["claude-haiku-5-5"]?.available, false);
 		assert.equal(availability["claude-fable-5-1"]?.available, false);
 		assert.equal(availability["gpt-6-1-sol"]?.available, true);
 	} finally {

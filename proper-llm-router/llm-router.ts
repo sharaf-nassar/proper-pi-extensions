@@ -353,8 +353,8 @@ export function removeLegacyPlaceholder(file: string): boolean {
 
 // ---------------------------------------------------------------- arms
 const ARMS = {
-	"claude-haiku-4-5": { model: "claude-haiku-4-5" },
-	"claude-sonnet-5": { model: "claude-sonnet-5" },
+	"claude-haiku-5-5": { model: "claude-haiku-5-5" },
+	"claude-sonnet-5-5": { model: "claude-sonnet-5-5" },
 	"claude-opus-5-5": { model: "claude-opus-5-5" },
 	"claude-fable-5-1": { model: "claude-fable-5-1" },
 	"gpt-6-luna": { model: "gpt-6-luna" },
@@ -363,15 +363,18 @@ const ARMS = {
 } as const;
 type Arm = keyof typeof ARMS;
 
-// Arm keys retired by the September 2026 catalog update, mapped to the arm
-// that inherited each model's role, so existing overrides, pins, and
-// sentinels keep resolving. GPT-6 Sol matched GPT-5.6 Sol and cost less
-// than Terra, so both of their keys landed on it; GPT-6.1 Sol, Pi's Codex
-// default since 0.99.1, then replaced GPT-6 Sol in the same slot.
+// Arm keys retired by the September and October 2026 catalog updates,
+// mapped to the arm that inherited each model's role, so existing
+// overrides, pins, and sentinels keep resolving. GPT-6 Sol matched GPT-5.6
+// Sol and cost less than Terra, so both of their keys landed on it; GPT-6.1
+// Sol, Pi's Codex default since 0.99.1, then replaced GPT-6 Sol in the same
+// slot. Sonnet 5.5 and Haiku 5.5 took over the Sonnet 5 and Haiku 4.5 slots.
 // @lat: [[models#Deterministic names]]
 const RETIRED_ARMS: Record<string, Arm> = {
 	"claude-opus-5": "claude-opus-5-5",
 	"claude-fable-5": "claude-fable-5-1",
+	"claude-sonnet-5": "claude-sonnet-5-5",
+	"claude-haiku-4-5": "claude-haiku-5-5",
 	"gpt-5-6-luna": "gpt-6-luna",
 	"gpt-5-6-terra": "gpt-6-1-sol",
 	"gpt-5-6-sol": "gpt-6-1-sol",
@@ -453,8 +456,8 @@ function isArm(value: string): value is Arm {
 	return value in ARMS;
 }
 const CLAUDE_ARMS = new Set([
-	"claude-haiku-4-5",
-	"claude-sonnet-5",
+	"claude-haiku-5-5",
+	"claude-sonnet-5-5",
 	"claude-opus-5-5",
 	"claude-fable-5-1",
 ]);
@@ -466,9 +469,9 @@ const SWAP: Record<Arm, Arm> = {
 	"gpt-6-astra": "claude-fable-5-1",
 	"claude-opus-5-5": "gpt-6-1-sol",
 	"gpt-6-1-sol": "claude-opus-5-5",
-	"claude-sonnet-5": "gpt-6-luna",
-	"claude-haiku-4-5": "gpt-6-luna",
-	"gpt-6-luna": "claude-haiku-4-5",
+	"claude-sonnet-5-5": "gpt-6-luna",
+	"claude-haiku-5-5": "gpt-6-luna",
+	"gpt-6-luna": "claude-haiku-5-5",
 };
 
 // ---------------------------------------------------- sentinel override
@@ -614,9 +617,9 @@ Pick the cheapest model that fully handles the task WITHOUT quality loss;
 escalate when scope is ambiguous or reasoning is deep.
 
   harness: claude (cheapest first) — repo/agentic lane
-    - claude-haiku-4-5   (fast: narrow, well-reproduced repo fixes and
+    - claude-haiku-5-5   (fast: narrow, well-reproduced repo fixes and
                           mechanical in-repo edits)
-    - claude-sonnet-5    (balanced: routine multi-file work, test suites)
+    - claude-sonnet-5-5  (balanced: routine multi-file work, test suites)
     - claude-opus-5-5    (powerful: cross-component diagnosis, high
                           blast-radius refactors)
     - claude-fable-5-1   (frontier: architecture, ambiguous scope)
@@ -643,21 +646,21 @@ Tier boundaries (apply in order, first match wins):
 2. Diagnosing behavior across components/services, or changes with high
    blast radius (auth, data loss, hot paths) -> claude-opus-5-5. Routine
    multi-file work with clear scope does NOT need opus (sonnet measured
-   reliable on 82% of opus-passing tasks) -> claude-sonnet-5.
+   reliable on 82% of opus-passing tasks) -> claude-sonnet-5-5.
 3. Repo bug fix or small feature with a clear reproduction/description
-   and a localized likely cause -> claude-haiku-4-5 (measured reliable
+   and a localized likely cause -> claude-haiku-5-5 (measured reliable
    on 59% of agentic repo fixes, covering 77% of what sonnet passes).
    Vague report, several suspect areas, or touches tests+docs+code
-   together -> claude-sonnet-5.
+   together -> claude-sonnet-5-5.
 4. Self-contained work that needs a novel algorithm, a proof, or a
    math-heavy derivation, or whose similar measured tasks show
    gpt-6-1-sol failing -> gpt-6-astra.
 5. Self-contained single-file work where correctness is subtle
    (boundary conditions, complexity bounds, performance targets), or
    an implementation that is fully specified -> gpt-6-1-sol (or
-   claude-sonnet-5 if it must integrate into a repo).
+   claude-sonnet-5-5 if it must integrate into a repo).
 6. Mechanical one-line/one-symbol edits: inside a repo
-   -> claude-haiku-4-5; on pasted/standalone code -> gpt-6-luna.
+   -> claude-haiku-5-5; on pasted/standalone code -> gpt-6-luna.
 
 Tie-break: when torn between two adjacent tiers, ALWAYS pick the higher
 tier (quality-first).
@@ -812,7 +815,7 @@ async function fetchJson<T = unknown>(
 // the management panel's percent meters directly).
 const CLAUDE_WINDOW_ARMS: Record<string, string> = {
 	seven_day_opus: "claude-opus-5-5",
-	seven_day_sonnet: "claude-sonnet-5",
+	seven_day_sonnet: "claude-sonnet-5-5",
 	iguana_necktie: "claude-fable-5-1", // CPA panel maps this key to "seven-day-fable"
 };
 // The window objects above are often null; the authoritative per-model
@@ -821,8 +824,8 @@ const CLAUDE_WINDOW_ARMS: Record<string, string> = {
 const CLAUDE_MODEL_ARMS: Record<string, string> = {
 	fable: "claude-fable-5-1",
 	opus: "claude-opus-5-5",
-	sonnet: "claude-sonnet-5",
-	haiku: "claude-haiku-4-5",
+	sonnet: "claude-sonnet-5-5",
+	haiku: "claude-haiku-5-5",
 };
 
 export interface AccountUsage {
@@ -1671,7 +1674,7 @@ export default function (pi: ExtensionAPI) {
 		'a stronger model), prefix that task string with "[[llm-router: <model>]]", e.g. ' +
 		'task: "[[llm-router: claude-opus-5-5]] Fix the race in …". The marker is stripped ' +
 		"before the child sees it. Models, weakest to strongest: repo/agentic work — " +
-		"claude-haiku-4-5, claude-sonnet-5, claude-opus-5-5, claude-fable-5-1; self-contained/" +
+		"claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5, claude-fable-5-1; self-contained/" +
 		"algorithmic work — gpt-6-luna, gpt-6-1-sol, gpt-6-astra.";
 	pi.on("before_agent_start", (event) => {
 		if (!routingEnabled(loadConfig())) return;

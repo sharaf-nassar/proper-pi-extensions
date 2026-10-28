@@ -134,9 +134,10 @@ model change during a running reply applies from the next message.
 
 ## Built-in Claude prompts
 
-The package ships seven prompts for Claude models, adapted from Anthropic's
+The package ships eight prompts for Claude models, adapted from Anthropic's
 [prompting guides](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview)
-as published on 2026-09-23. Where Anthropic measured a prompt, the text stays
+as published on 2026-09-23, plus the Sonnet 5.5 and Haiku 5.5 guides as
+published on 2026-10-22. Where Anthropic measured a prompt, the text stays
 close to its published wording. Each block is appended, so Pi's own prompt and
 its prompt cache stay intact.
 
@@ -147,14 +148,19 @@ its prompt cache stay intact.
 | Claude Fable 5 and 5.1, Mythos 5 and 5.1 | all | Act once there is enough information, and recommend rather than survey options. |
 | Claude Fable 5 and 5.1, Mythos 5 and 5.1 | `tui`, `rpc` | Make a requested change, but answer a described problem, a question, or thinking aloud with an assessment and no fix until asked. `print` and `json` runs get the same rule from the unattended block. |
 | Claude Fable 5.1 and Mythos 5.1 | all | Progress updates and a closing recap, surgical file edits, one draft of long deliverables, and literal wording. |
+| Claude Sonnet 5.5 and Haiku 5.5 | all | Keep working until the task is done, then stop and report without starting review rounds or reviewer subagents nobody asked for. Run a real check (tests, type-checker, build, or the changed command) before reporting a code change done, and name any check that could not run. |
 | Every Claude model except Opus 5.5 | `print`, `json` | Finish the task without stopping to ask permission, because nobody is there to answer. A described problem still gets an assessment instead of a fix. |
 | Claude Opus 5.5 | `print`, `json` | Its own guide's version: don't end a turn on a summary that announces the next step, an offer to wait, a list of decisions that block nothing, or a pause to report, and put status notes in the same message as the next tool call. |
 
 The exact text is in [`defaults.ts`](./defaults.ts). Other Claude models, such
-as Sonnet 5 and Opus 4.8, get only the first block, plus the unattended one in
-`print` and `json` runs. Their guides say prompts written for the previous
-model carry over, and the rest of their advice concerns effort, API settings,
-or specific tasks such as frontend design and code review.
+as Sonnet 5, Haiku 4.5, and Opus 4.8, get only the first block, plus the
+unattended one in `print` and `json` runs. Their guides say prompts written
+for the previous model carry over, and the rest of their advice concerns
+effort, API settings, or specific tasks such as frontend design and code
+review. The Sonnet 5.5 and Haiku 5.5 guides say the same about older prompts,
+but both measured the two paragraphs above: at `medium` effort, Pi's default,
+Sonnet 5.5 checks in before a coding task is done and Haiku 5.5 stops early
+under a long system prompt and skips the check that exercises a change.
 
 To change a built-in prompt, set `"defaults": false` and copy the blocks you
 want from `defaults.ts` into your own entries. The core block tells the model
@@ -175,13 +181,15 @@ OpenAI published a starting prompt, the text stays close to it.
 
 | Models | Modes | What it asks for |
 | --- | --- | --- |
-| GPT-6 Astra, Sol, and Luna (`*gpt-6*`) | all | Infer intent and carry the task to completion, treating "can you..." as a request to act. Finish the reviewable work so approval is the last step, without unsolicited warnings or approval flows. Let your instructions override skills, and name the skill or instruction file behind any pause. Skip mirror tests for small reversible changes. Brief updates, continuing after compaction, and a final answer that leads with the outcome. Plain paragraphs without stock phrases. |
+| GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, and Luna (`*gpt-6*`) | all | Infer intent and carry the task to completion, treating "can you..." as a request to act. Finish the reviewable work so approval is the last step, without unsolicited warnings or approval flows. Let your instructions override skills, and name the skill or instruction file behind any pause. Skip mirror tests for small reversible changes. Brief updates, continuing after compaction, and a final answer that leads with the outcome. Plain paragraphs without stock phrases. |
 | GPT-5.6 Sol, Terra, and Luna (`*gpt-5.6*`) | all | Report on questions, reviews, and diagnoses without changing code. Make requested changes and validate them without asking, but confirm external writes, destructive actions, and scope growth. Preserve uncommitted changes it didn't make. Sparse updates, and answers that lead with the conclusion but keep required facts. |
 | GPT-5.5 (`*gpt-5.5*`) | all | The GPT-5.6 block without its first rule, because Codex tells GPT-5.5 to fix reported problems. |
 | Every model above | `print`, `json` | The general Claude unattended block without its exception for described problems. |
 
-Only GPT-5.6's own guidance asks for an assessment instead of a fix when you
-describe a problem; Codex tells GPT-6 and GPT-5.5 to act on it. Older GPT
+OpenAI's GPT-6 guide, checked again on 2026-10-22, offers the same starting
+prompts for GPT-6.1 Sol as for the rest of the family, so it shares the GPT-6
+block. Only GPT-5.6's own guidance asks for an assessment instead of a fix when
+you describe a problem; Codex tells GPT-6 and GPT-5.5 to act on it. Older GPT
 models get nothing. OpenAI's delegation prompt for GPT-6 is left out, because
 proper-base adds it whenever pi-subagents' `subagent` tool is active. The GPT-6
 block adds

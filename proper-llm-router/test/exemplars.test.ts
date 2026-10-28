@@ -11,7 +11,7 @@ const row = (prompt: string, rates: Record<string, number>) =>
 
 const CORPUS = [
 	row("refactor the widget renderer to cache layout computation results", {
-		"claude-sonnet-5": 1,
+		"claude-sonnet-5-5": 1,
 	}),
 	row("write a standalone quicksort implementation with unit tests", {
 		"gpt-6-1-sol": 0.5,
@@ -72,7 +72,7 @@ test("exemplarNote reloads when exemplarsPath changes", async () => {
 				"cache the widget layout computation results",
 			);
 			assert.match(noteA, /widget renderer/);
-			assert.match(noteA, /claude-sonnet-5 PASS/);
+			assert.match(noteA, /claude-sonnet-5-5 PASS/);
 
 			// the index must follow the configured path without a restart
 			const noteB = exemplarNote(

@@ -61,8 +61,8 @@ are normal task text unless pinned.
 | --- | --- |
 | `claude-fable-5-1` | Ambiguous architecture, protocol work, concurrency, migrations, and unclear scope. |
 | `claude-opus-5-5` | Cross-component diagnosis, authentication, data-loss risk, and high-impact changes. |
-| `claude-sonnet-5` | Routine multi-file repository work and test suites. |
-| `claude-haiku-4-5` | Localized repository fixes and mechanical edits. |
+| `claude-sonnet-5-5` | Routine multi-file repository work and test suites. |
+| `claude-haiku-5-5` | Localized repository fixes and mechanical edits. |
 | `gpt-6-astra` | Novel algorithms, proofs, math-heavy reasoning, and standalone work beyond Sol. |
 | `gpt-6-1-sol` | Fully specified standalone code, plus subtle correctness, algorithms, and performance work. |
 | `gpt-6-luna` | Trivial or mechanical standalone edits. |
@@ -78,12 +78,16 @@ the same price. GPT-6 Luna replaced GPT-5.6 Luna. GPT-6 Sol costs slightly
 less than GPT-5.6 Terra and scores about the same as GPT-5.6 Sol, so it takes
 over both of their roles, and GPT-6 Astra adds a stronger GPT tier above it.
 GPT-6.1 Sol, Pi 0.99.1's OpenAI Codex default, then replaced GPT-6 Sol in
-the `gpt-6-1-sol` slot. Sonnet 5 and Haiku 4.5 are still Anthropic's newest
-models in their tiers.
+the `gpt-6-1-sol` slot. The October 2026 update then moved the two lower
+Claude slots: Sonnet 5.5 replaced Sonnet 5 at the same price and Haiku 5.5
+replaced Haiku 4.5 at a tenth of its price, both with a 1M context window.
+Anthropic now lists Haiku 4.5 as legacy and Sonnet 5.5 as the replacement
+for the Sonnet 4.5 retirement. OpenAI has released nothing newer than GPT-6
+Astra, GPT-6.1 Sol, and GPT-6 Luna, so the Codex slots are unchanged.
 
 Names of the retired slots (`claude-opus-5`, `claude-fable-5`,
-`gpt-5-6-luna`, `gpt-5-6-terra`, `gpt-5-6-sol`, `gpt-6-sol`, and their model
-IDs) still
+`claude-sonnet-5`, `claude-haiku-4-5`, `gpt-5-6-luna`, `gpt-5-6-terra`,
+`gpt-5-6-sol`, `gpt-6-sol`, and their model IDs) still
 work in overrides, pins, and sentinels and select the slot that replaced them.
 The measured exemplars for the new slots come from the models they replaced,
 except `gpt-6-astra`, which has none yet.
@@ -194,8 +198,9 @@ modified.
 
 ## Install
 
-Use Node 22.19 or newer and Pi 0.99.1 or newer, the first release with
-virtual models and a built-in catalog listing every default model. The
+Use Node 22.19 or newer and Pi 1.1.0 or newer, the first release whose
+built-in catalog lists every default model (Claude Haiku 5.5 arrived in
+1.1.0; virtual models and GPT-6.1 Sol in 0.99.1). The
 extension and `ultra` compatibility layer are tested against Pi 1.4.0.
 
 Install the published package:

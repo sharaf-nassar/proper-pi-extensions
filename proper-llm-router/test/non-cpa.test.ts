@@ -37,12 +37,12 @@ const directModels = [
 	},
 	{
 		provider: "anthropic",
-		id: "claude-haiku-4-5",
+		id: "claude-haiku-5-5",
 		api: "anthropic-messages",
 	},
 	{
 		provider: "anthropic",
-		id: "claude-sonnet-5",
+		id: "claude-sonnet-5-5",
 		api: "anthropic-messages",
 	},
 	{

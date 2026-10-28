@@ -4,11 +4,11 @@ import { test } from "node:test";
 import { armAvailability, loadConfig } from "../llm-router.ts";
 
 const targets = {
-	"claude-haiku-4-5": {
+	"claude-haiku-5-5": {
 		provider: "cliproxyapi",
-		id: "claude-haiku-4-5-20251001",
+		id: "claude-haiku-5-5",
 	},
-	"claude-sonnet-5": { provider: "cliproxyapi", id: "claude-sonnet-5" },
+	"claude-sonnet-5-5": { provider: "cliproxyapi", id: "claude-sonnet-5-5" },
 	"claude-opus-5-5": { provider: "cliproxyapi", id: "claude-opus-5-5" },
 	"claude-fable-5-1": { provider: "cliproxyapi", id: "claude-fable-5-1" },
 	"gpt-6-luna": { provider: "cliproxyapi", id: "gpt-6-luna" },
@@ -63,7 +63,7 @@ test("codex limit_reached blocks the lane while used_percent is low", async () =
 		const availability = await armAvailability(cfg, targets);
 		assert.equal(availability["gpt-6-astra"]?.available, false);
 		assert.equal(availability["gpt-6-1-sol"]?.available, false);
-		assert.equal(availability["claude-sonnet-5"]?.available, true);
+		assert.equal(availability["claude-sonnet-5-5"]?.available, true);
 	} finally {
 		globalThis.fetch = originalFetch;
 	}

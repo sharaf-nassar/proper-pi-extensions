@@ -24,7 +24,7 @@ Every invalid shape fails as a located configuration error, including a model li
 
 Every built-in block appends, and each Claude and GPT family receives exactly its blocks across the id forms of Pi's catalog.
 
-Opus 5 and 5.5 share the Opus 5 block but only Opus 5.5 gets its own unattended paragraph, Fable 5 never gets Fable 5.1's block, aliases that name no version get only the Claude-wide blocks or nothing, and older GPT and other models get none.
+Opus 5 and 5.5 share the Opus 5 block but only Opus 5.5 gets its own unattended paragraph, Fable 5 never gets Fable 5.1's block, Sonnet 5.5 and Haiku 5.5 get the Claude 5.5 block in hyphenated and dotted id forms while Sonnet 5 and Haiku 4.5 do not, GPT-6.1 Sol gets the GPT-6 block, aliases that name no version get only the Claude-wide blocks or nothing, and older GPT and other models get none.
 
 The unattended blocks appear only in `print` and `json` modes, and the Fable change-versus-assessment block only in `tui` and `rpc`.
 
