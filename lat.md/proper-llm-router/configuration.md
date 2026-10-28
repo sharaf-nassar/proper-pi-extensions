@@ -63,9 +63,9 @@ Judge model overrides replace the execution model attached to a stable arm slot 
 
 `applyJudgeModelOverrides()` rewrites the complete judge system message, including the rubric and exemplar note. Each source arm becomes `<target> [selection key: <source>]`, and a preamble tells the judge that the target inherits the source slot's use cases. Replacement is simultaneous, so one target cannot trigger another configured replacement.
 
-The strict verdict schema still uses the seven stable arm keys. After judging and any slot-level availability swap, `judgeModelName()` maps the final slot to its configured target. The verdict records the resolved provider and model and identifies an overridden source slot.
+The strict verdict schema still uses the eight stable arm keys. After judging and any slot-level availability swap, `judgeModelName()` maps the final slot to its configured target. The verdict records the resolved provider and model and identifies an overridden source slot.
 
-The interactive picker offers the seven stable arm slots and authenticated models from Pi's registry. It stores `provider/model-id` and removes the override when the default is chosen. A stale JSON target remains unavailable until the matching provider and model become authenticated.
+The interactive picker offers the eight stable arm slots and authenticated models from Pi's registry. It stores `provider/model-id` and removes the override when the default is chosen. A stale JSON target remains unavailable until the matching provider and model become authenticated.
 
 ## Default command pins
 

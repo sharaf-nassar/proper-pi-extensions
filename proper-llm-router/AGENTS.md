@@ -29,7 +29,7 @@ npm run test:smoke -- ["task text"]
 ## Architecture Overview
 
 Single-file pi extension (`llm-router.ts`): a judge LLM routes each
-session's first prompt to one of 7 model arms via CPA/CLIProxyAPI, with
+session's first prompt to one of 8 model arms via CPA/CLIProxyAPI, with
 post-verdict quota swaps and an interactive `/llm-router-config` menu.
 `exemplars.jsonl` provides measured-outcome few-shot for the judge.
 See README.md for the full design.

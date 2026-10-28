@@ -6,7 +6,7 @@ The exemplar corpus gives the judge nearby tasks with measured verifier outcomes
 
 Each line of `exemplars.jsonl` is one JSON object with `task_id`, `prompt`, and `rates`.
 
-`prompt` is the prior task text. `rates` maps any evaluated arm to a score where `1.0` means reliable, a positive value below `1.0` means flaky, and `0.0` means failure. The current corpus uses only `0`, `0.5`, and `1`. Rows may contain one lane or both; no row rates `gpt-6-astra`.
+`prompt` is the prior task text. `rates` maps any evaluated arm to a score where `1.0` means reliable, a positive value below `1.0` means flaky, and `0.0` means failure. The current corpus uses only `0`, `0.5`, and `1`. Rows may contain one lane or both; no row rates `gpt-6-astra` or `gpt-6-1-terra`.
 
 `task_id` preserves corpus provenance for offline work. Runtime retrieval uses only `prompt` and `rates`.
 
@@ -31,6 +31,8 @@ The current file contains 112 unique task IDs and 112 unique prompts.
 These columns are not all measured on the same tasks: only 26 rows compare all six rated arms directly. The corpus-wide totals must not be read as a head-to-head ranking; the rubric's lane rule comes from the repository-task subset. These are routing evidence, not live health or quota data.
 
 The rows were measured on the previous catalog. The `claude-haiku-5-5` and `claude-sonnet-5-5` rates were measured on Haiku 4.5 and Sonnet 5 and moved unchanged to their successors in the October 2026 update. The `claude-opus-5-5`, `claude-fable-5-1`, `gpt-6-luna`, and `gpt-6-1-sol` rates were measured on Opus 5, Fable 5, GPT-5.6 Luna, and GPT-5.6 Sol and moved to the slot that replaced each model; the Sol rates moved again, unchanged, when GPT-6.1 Sol replaced GPT-6 Sol. GPT-5.6 Terra's rates were dropped because GPT-6 Sol outscores it, so its failures would understate that slot.
+
+GPT-6.1 Terra is a new specialist slot, with no inherited or fabricated rates. Its visual reasoning, computer-use, and writing guidance comes from OpenAI. Adding it leaves all 112 measured rows unchanged.
 
 The vendors report each successor at or above its predecessor, except that GPT-6 Sol trails GPT-5.6 Sol on DeepSWE while independent indexes put the two level. Anthropic reports Sonnet 5.5 well above Sonnet 5 on agentic coding and Haiku 5.5 above Haiku 4.5 across domains, so the moved Claude rates likely understate the lower slots. The moved rates therefore approximate the current slots rather than measure them.
 

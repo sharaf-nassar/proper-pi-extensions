@@ -58,7 +58,7 @@ Legacy router-owned provider auth fields must not survive configuration loading.
 
 The swap fixtures build a complete availability map with selected arms marked down.
 
-`availWith()` supports assertions that an available pick stays unchanged, Fable and Astra swap with each other, Sol swaps to Opus, Sonnet swaps to Luna, Luna swaps to Haiku, and a request throws when Fable and Astra are both unavailable.
+`availWith()` supports assertions that an available pick stays unchanged, Fable and Astra swap with each other, Sol swaps to Opus, Sonnet and Terra swap with each other, Luna swaps to Haiku, and a request throws when both Fable/Astra or both Terra/Sonnet are unavailable.
 
 These assertions exercise `resolveVerdictModel()` without network calls.
 
@@ -154,11 +154,17 @@ It verifies the shared thinking-level list ends in `ultra`, model capability fil
 
 The fixture does not instantiate a complete `AgentSession`, settings selector, or interactive mode. A host-process smoke check is still required when pi renames the exported classes or their thinking-level methods.
 
+## Current model catalog
+
+`test/model-catalog.test.ts` verifies all eight current arm keys, default model IDs, and routing through direct providers and CPA.
+
+Every arm must appear in the judge menu and rubric and execute without a swap when available. Terra additionally exercises command pins, provider-qualified overrides, and a missing-model swap to Sonnet. The old GPT-5.6 Terra name retains its Sol successor. Corpus keys must all be current arms, with no invented Terra measurements. The smoke covers Terra's aliases, ambiguous GPT-6.1 fragments, Codex quota blocking, reciprocal Sonnet swaps, and failure when both are unavailable.
+
 ## Offline integrated route
 
 The final smoke check runs the complete rubric, exemplar, injected judge, registry availability, optional quota logic, and swap path.
 
-Its default task is a README typo. Passing a CLI argument replaces that task. The script injects seven CPA-backed registry targets plus a deterministic judge result, then prints the full verdict as formatted JSON after validating required fields.
+Its default task is a README typo. Passing a CLI argument replaces that task. The script injects eight CPA-backed registry targets plus a deterministic judge result, then prints the full verdict as formatted JSON after validating required fields.
 
 This route uses built-in defaults. A personal `judgeModelOverrides` entry naming a model outside the injected snapshot would otherwise mark that arm unavailable and fail the check for reasons unrelated to the code.
 

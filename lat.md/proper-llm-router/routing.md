@@ -33,7 +33,7 @@ A pin wins over a sentinel when both appear in one command. Because the pin path
 
 `route()` combines the measured rubric, optional exemplar note, registry judge verdict, and concurrent registry plus optional CPA quota availability checks.
 
-The judge receives seven stable arm selection keys. Configured model overrides replace source-arm labels throughout the rubric and exemplar note, but the schema still returns the source key. After the verdict, `resolveVerdictModel()` keeps the slot, swaps it to a fixed partner, or throws when both choices are unavailable.
+The judge receives eight stable arm selection keys. Configured model overrides replace source-arm labels throughout the rubric and exemplar note, but the schema still returns the source key. After the verdict, `resolveVerdictModel()` keeps the slot, swaps it to a fixed partner, or throws when both choices are unavailable.
 
 The final slot maps to a resolved provider and model. The verdict exposes `arm`, `provider`, and `model`; an override records the source slot in `overridden_from`. `arms_unavailable` stays keyed by semantic slots and combines missing registry targets, CPA quota failures, and simulation.
 
@@ -45,7 +45,7 @@ The judge always runs through Pi's configured provider runtime.
 
 Pi 0.86 declares the judge prompt and tool schema in a leading system message, using `toolsAdded`; the task follows as a user message. Legacy top-level `systemPrompt` and `tools` fields are not used.
 
-The strict `route_model` tool requires `model` and `rationale`, rejects extra fields, and limits `model` to the seven stable arm keys. Override targets appear only in system-message labels, paired with their selection keys. The task is truncated to 4,000 characters, and exemplar retrieval scores the same slice. Rationale permits 500 characters; UI displays 150.
+The strict `route_model` tool requires `model` and `rationale`, rejects extra fields, and limits `model` to the eight stable arm keys. Override targets appear only in system-message labels, paired with their selection keys. The task is truncated to 4,000 characters, and exemplar retrieval scores the same slice. Rationale permits 500 characters; UI displays 150.
 
 Qualified and unqualified judge names resolve against `ctx.modelRegistry.getAvailable()`. `ctx.modelRegistry.complete()` delegates credentials, endpoint selection, headers, provider serialization, and OAuth refresh to Pi. It intentionally remains the raw, tool-capable registry call: Pi 0.86 exposes `streamSimple()`, but its provider-neutral options do not retain priority service and all managed-effort controls. The raw call retains those provider-specific options. An unresolved judge fails visibly and the input handler uses `fallbackModel`; llm-router has no raw endpoint or provider-key fallback.
 

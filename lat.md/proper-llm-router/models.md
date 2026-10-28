@@ -1,6 +1,6 @@
 # Model arms and rubric
 
-The router exposes seven stable arm keys and maps each key to a default model identifier resolved through Pi's authenticated model registry.
+The router exposes eight stable arm keys and maps each key to a default model identifier resolved through Pi's authenticated model registry.
 
 ## Arm catalog
 
@@ -13,6 +13,7 @@ Arm keys are internal routing names; default identifiers may resolve under CPA o
 | `claude-opus-5-5` | `claude-opus-5-5` | repository and agentic | cross-component diagnosis and high-impact changes |
 | `claude-fable-5-1` | `claude-fable-5-1` | repository and agentic | ambiguous architecture and protocol-level work |
 | `gpt-6-luna` | `gpt-6-luna` | self-contained | trivial or mechanical standalone edits |
+| `gpt-6-1-terra` | `gpt-6.1-terra` | visual and writing | visual reasoning, scoped screen interaction, and drafting or revising supplied text |
 | `gpt-6-1-sol` | `gpt-6.1-sol` | self-contained | well-specified functions, subtle algorithms, performance work, and tricky local logic |
 | `gpt-6-astra` | `gpt-6-astra` | self-contained | novel algorithms, proof- or math-heavy reasoning, and work beyond Sol |
 
@@ -24,17 +25,19 @@ The September 2026 catalog moved each slot to the newest model in its tier, foll
 
 Claude Opus 5.5 replaced Opus 5: Anthropic reports Fable 5.1-level results on most work at 40% lower cost than Opus 5. Fable 5.1 replaced Fable 5 at the same price, and Anthropic still recommends Fable over Opus for demanding reasoning and long-horizon work.
 
-The October 2026 update completed the Claude 5.5 family. Sonnet 5.5 (released September 28) replaced Sonnet 5 at the same $2/$10 price with faster output, cheaper cache reads, and a 1M context window; Anthropic names it the replacement for the retiring Sonnet 4.5. Haiku 5.5 (released October 7) replaced Haiku 4.5 at $0.10/$0.50, a tenth of Haiku 4.5's price, also with a 1M context window, and Anthropic now lists Haiku 4.5 as legacy with its earliest retirement floor already passed. Opus 5.5 and Fable 5.1 remain the newest models in their tiers. OpenAI has released nothing newer than GPT-6 Astra, GPT-6.1 Sol, and GPT-6 Luna, so the Codex slots are unchanged; the GPT-5.6 models OpenAI still serves stay retired here because GPT-6 Luna and GPT-6.1 Sol cost less and score at or above them.
+The October 2026 update completed the Claude 5.5 family. Sonnet 5.5 (released September 28) replaced Sonnet 5 at the same $2/$10 price with faster output, cheaper cache reads, and a 1M context window; Anthropic names it the replacement for the retiring Sonnet 4.5. Haiku 5.5 (released October 7) replaced Haiku 4.5 at $0.10/$0.50, a tenth of Haiku 4.5's price, also with a 1M context window, and Anthropic now lists Haiku 4.5 as legacy with its earliest retirement floor already passed. Opus 5.5 and Fable 5.1 remain the newest models in their tiers. The GPT-5.6 models OpenAI still serves stay retired here because GPT-6 Luna and GPT-6.1 Sol cost less and score at or above them.
+
+The October 28 review adds GPT-6.1 Terra, released October 26, following [OpenAI's model guidance](https://developers.openai.com/api/docs/models/gpt-6.1-terra). It is a separate specialist slot for visual reasoning, scoped computer use, and writing, not a replacement for Sol. The current [OpenAI lineup](https://developers.openai.com/api/docs/models) and [Anthropic lineup](https://platform.claude.com/docs/en/models/overview) contain these eight general-purpose models. Older generations, specialty APIs for images/audio/embeddings, and restricted-access models are outside the automatic menu. Historical aliases remain for saved configurations.
 
 GPT-6 Luna replaced GPT-5.6 Luna at about half its price. GPT-6 Sol costs slightly less than GPT-5.6 Terra and lands level with GPT-5.6 Sol on independent indexes, so one slot inherits both roles and Terra retires. GPT-6.1 Sol, which Pi 0.99.1 made its OpenAI Codex default, then replaced GPT-6 Sol in that slot under the key `gpt-6-1-sol`. GPT-6 Astra, OpenAI's strongest model at Fable's price, fills the new top Codex tier. The lane rule and the rubric's measured percentages still come from the previous generation, as described in [[exemplars#Corpus snapshot]].
 
-The package requires Pi 1.1.0, the first release whose built-in catalog lists Claude Haiku 5.5 alongside Sonnet 5.5, Opus 5.5, Fable 5.1, GPT-6.1 Sol, GPT-6 Astra, and GPT-6 Luna, so every default resolves on a direct provider without extra configuration. The virtual-model API that backs the placeholder described in [[lat.md/proper-llm-router/operations#Placeholder safety]] arrived earlier, in Pi 0.99.1.
+The package requires Pi 1.1.0, the first release whose built-in catalog lists Claude Haiku 5.5 alongside Sonnet 5.5, Opus 5.5, Fable 5.1, GPT-6.1 Sol, GPT-6 Astra, and GPT-6 Luna, so those seven defaults resolve on a direct provider without extra configuration. Terra requires a newer authenticated provider catalog or custom provider entry; Pi 1.1.0 alone does not guarantee it. Missing Terra follows the usual availability swap to Sonnet 5.5. The virtual-model API that backs the placeholder described in [[lat.md/proper-llm-router/operations#Placeholder safety]] arrived earlier, in Pi 0.99.1.
 
 ## Lane decision
 
 Lane selection depends on where the missing information lives.
 
-Any task that requires repository inspection, named project files, tests, integration work, or agentic tool use goes to the Claude lane. The Codex lane is limited to standalone tasks whose code and specification are already present in the prompt.
+Any task that requires repository inspection, named project files, tests, integration work, or agentic coding goes to the Claude lane. The Codex lane handles standalone tasks whose context is supplied, plus scoped screen interaction outside a repository through Terra.
 
 This distinction comes before model strength. A mechanically specified repository edit still belongs to the Claude lane because repository navigation was the measured reliability separator.
 
@@ -48,6 +51,7 @@ The judge chooses the cheapest tier expected to finish without quality loss.
 - Localized, well-reproduced repository work routes to `claude-haiku-5-5`.
 - Standalone work needing a novel algorithm, a proof, or a math-heavy derivation routes to `gpt-6-astra`, as does work whose similar measured tasks show `gpt-6-1-sol` failing.
 - Subtle standalone correctness, performance work, and fully specified standalone implementation route to `gpt-6-1-sol`.
+- Self-contained visual reasoning, scoped screen interaction outside a repository, and drafting or revising supplied text route to `gpt-6-1-terra`. Complex reasoning and code implementation use the stronger tiers above. This specialization follows vendor guidance and has no measured exemplar outcomes yet.
 - Trivial standalone edits route to `gpt-6-luna`.
 
 When two adjacent tiers both look plausible, the rubric chooses the stronger tier. Quality protection wins the tie.
@@ -60,13 +64,13 @@ Overrides use the same arm resolver as the judge output checks.
 
 The resolver normalizes dots and spaces to hyphens. It also accepts dated CPA IDs when they contain one complete arm key. Broad fragments such as `claude` or `gpt-6` remain invalid because they match several arms.
 
-Retired arm keys and their model IDs resolve to the slot that inherited their role: `claude-opus-5` to `claude-opus-5-5`, `claude-fable-5` to `claude-fable-5-1`, `claude-sonnet-5` to `claude-sonnet-5-5`, `claude-haiku-4-5` to `claude-haiku-5-5`, `gpt-5-6-luna` to `gpt-6-luna`, and `gpt-5-6-terra`, `gpt-5-6-sol`, and `gpt-6-sol` to `gpt-6-1-sol`. Saved overrides, pins, and subagent sentinels written for the previous catalog therefore keep working. The mapping is exact; a bare `terra` fragment matches nothing.
+Retired arm keys and their model IDs resolve to the slot that inherited their role: `claude-opus-5` to `claude-opus-5-5`, `claude-fable-5` to `claude-fable-5-1`, `claude-sonnet-5` to `claude-sonnet-5-5`, `claude-haiku-4-5` to `claude-haiku-5-5`, `gpt-5-6-luna` to `gpt-6-luna`, and `gpt-5-6-terra`, `gpt-5-6-sol`, and `gpt-6-sol` to `gpt-6-1-sol`. Saved overrides, pins, and subagent sentinels written for the previous catalog therefore keep working. The mapping is exact: `gpt-5.6-terra` keeps its existing Sol successor, while the bare `terra` fragment now selects `gpt-6-1-terra`. `gpt-6.1` is ambiguous between Sol and Terra.
 
 ## Judge model overrides
 
 Overrides replace the execution model occupying a semantic arm slot without changing that slot's calibrated lane or tier. Values may be model IDs or explicit `provider/model-id` references.
 
-The judge prompt shows the configured target model in every rubric and exemplar position owned by the source arm. A stable selection key remains beside the target because the strict verdict schema still returns one of the seven arm keys. Several slots may point to the same target.
+The judge prompt shows the configured target model in every rubric and exemplar position owned by the source arm. A stable selection key remains beside the target because the strict verdict schema still returns one of the eight arm keys. Several slots may point to the same target.
 
 Overrides apply only to judged routes. Command pins and sentinels continue to name and execute their configured arms directly. An availability swap moves between semantic slots first, then applies the target configured for the final slot.
 
@@ -74,7 +78,7 @@ Overrides apply only to judged routes. Command pins and sentinels continue to na
 
 The judge reasons about capability slots, not current provider or subscription state.
 
-The seven semantic arm slots remain fixed. The swap-resolution contract in `availability.md` applies registry availability and optional CPA quota after the verdict, using each slot's effective target model when overrides are configured. This keeps the rubric stable while providers change.
+The eight semantic arm slots remain fixed. The swap-resolution contract in `availability.md` applies registry availability and optional CPA quota after the verdict, using each slot's effective target model when overrides are configured. This keeps the rubric stable while providers change.
 
 The lane rule constrains the source slot, not necessarily the final execution model. Fixed swaps cross providers, and an arbitrary override target can belong to either provider without changing the source slot's rubric role.
 

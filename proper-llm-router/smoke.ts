@@ -52,6 +52,7 @@ const blocked = quotaBlockedArms(usages, 80);
 assert.deepStrictEqual([...blocked].sort(), [
 	"claude-opus-5-5",
 	"gpt-6-1-sol",
+	"gpt-6-1-terra",
 	"gpt-6-astra",
 	"gpt-6-luna",
 ]);
@@ -66,7 +67,7 @@ assert.ok(quotaBlockedArms(twoKeys, 85).has("claude-fable-5-1"));
 assert.ok(!quotaBlockedArms(twoKeys, 95).has("claude-fable-5-1")); // 90 < 95
 
 // pure-logic check: post-verdict swap pairs (fable<->astra, opus<->sol,
-// sonnet->luna, haiku<->luna); available pick stays; both dead throws
+// sonnet<->terra, haiku<->luna); available pick stays; both dead throws
 const availWith = (dead: string[]) =>
 	Object.fromEntries(
 		[
@@ -75,6 +76,7 @@ const availWith = (dead: string[]) =>
 			"claude-opus-5-5",
 			"claude-fable-5-1",
 			"gpt-6-luna",
+			"gpt-6-1-terra",
 			"gpt-6-1-sol",
 			"gpt-6-astra",
 		].map((a) => [a, { available: !dead.includes(a) }]),
@@ -93,7 +95,17 @@ assert.deepStrictEqual(
 );
 assert.deepStrictEqual(
 	resolveVerdictModel("claude-sonnet-5-5", availWith(["claude-sonnet-5-5"])),
-	{ final: "gpt-6-luna", swapped: true },
+	{ final: "gpt-6-1-terra", swapped: true },
+);
+assert.deepStrictEqual(
+	resolveVerdictModel("gpt-6-1-terra", availWith(["gpt-6-1-terra"])),
+	{ final: "claude-sonnet-5-5", swapped: true },
+);
+assert.throws(() =>
+	resolveVerdictModel(
+		"gpt-6-1-terra",
+		availWith(["gpt-6-1-terra", "claude-sonnet-5-5"]),
+	),
 );
 assert.deepStrictEqual(
 	resolveVerdictModel("gpt-6-luna", availWith(["gpt-6-luna"])),
@@ -127,6 +139,10 @@ assert.strictEqual(resolveArm("claude-opus-5.5"), "claude-opus-5-5"); // dotted 
 assert.strictEqual(resolveArm("gpt-6-1-sol"), "gpt-6-1-sol"); // arm key
 assert.strictEqual(resolveArm("Sol"), "gpt-6-1-sol"); // unique fragment
 assert.strictEqual(resolveArm("astra"), "gpt-6-astra");
+assert.strictEqual(resolveArm("Terra"), "gpt-6-1-terra");
+assert.strictEqual(resolveArm("gpt-6.1-terra"), "gpt-6-1-terra");
+assert.strictEqual(resolveArm("gpt-6-1-terra"), "gpt-6-1-terra");
+assert.strictEqual(resolveArm("gpt-6.1"), null);
 assert.strictEqual(resolveArm("haiku"), "claude-haiku-5-5");
 assert.strictEqual(resolveArm("claude-haiku-5-5-20261007"), "claude-haiku-5-5"); // dated id
 assert.strictEqual(resolveArm("claude"), null); // ambiguous
@@ -283,6 +299,7 @@ const models = [
 	"claude-opus-5-5",
 	"claude-fable-5-1",
 	"gpt-6-luna",
+	"gpt-6.1-terra",
 	"gpt-6.1-sol",
 	"gpt-6-astra",
 ].map((id) => ({ provider: "cliproxyapi", id }));

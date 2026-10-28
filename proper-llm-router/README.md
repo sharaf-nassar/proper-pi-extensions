@@ -31,7 +31,7 @@ are normal task text unless pinned.
 
 - The judge receives the first 4000 characters of text, not attached image
   contents.
-- It selects one of seven stable capability slots through strict JSON schema.
+- It selects one of eight stable capability slots through strict JSON schema.
 - Up to three related measured tasks from `exemplars.jsonl` are added as
   evidence when TF-IDF similarity is useful.
 - Judge model overrides can replace the model occupying a slot without changing
@@ -65,12 +65,13 @@ are normal task text unless pinned.
 | `claude-haiku-5-5` | Localized repository fixes and mechanical edits. |
 | `gpt-6-astra` | Novel algorithms, proofs, math-heavy reasoning, and standalone work beyond Sol. |
 | `gpt-6-1-sol` | Fully specified standalone code, plus subtle correctness, algorithms, and performance work. |
+| `gpt-6-1-terra` | Visual reasoning, scoped screen interaction, and drafting or revising supplied text. |
 | `gpt-6-luna` | Trivial or mechanical standalone edits. |
 
-Repository inspection and agentic tool use belong to the Claude lane.
-Self-contained work whose code and specification are already in the prompt can
-use the GPT lane. When two adjacent tiers fit, the judge chooses the stronger
-one.
+Repository inspection and agentic coding belong to the Claude lane.
+Self-contained work whose context is supplied can use the GPT lane. Terra also
+handles scoped screen interaction outside a repository. When two adjacent tiers
+fit, the judge chooses the stronger one.
 
 The September 2026 catalog moves each slot to the newest model in its tier.
 Opus 5.5 replaced Opus 5 at a lower price, and Fable 5.1 replaced Fable 5 at
@@ -82,15 +83,30 @@ the `gpt-6-1-sol` slot. The October 2026 update then moved the two lower
 Claude slots: Sonnet 5.5 replaced Sonnet 5 at the same price and Haiku 5.5
 replaced Haiku 4.5 at a tenth of its price, both with a 1M context window.
 Anthropic now lists Haiku 4.5 as legacy and Sonnet 5.5 as the replacement
-for the Sonnet 4.5 retirement. OpenAI has released nothing newer than GPT-6
-Astra, GPT-6.1 Sol, and GPT-6 Luna, so the Codex slots are unchanged.
+for the Sonnet 4.5 retirement.
+
+The October 28 review adds [GPT-6.1 Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra),
+released October 26, as a separate visual reasoning, computer-use, and writing
+slot. The eight defaults cover the current general-purpose families in
+[OpenAI's catalog](https://developers.openai.com/api/docs/models) and
+[Anthropic's catalog](https://platform.claude.com/docs/en/models/overview).
+Older generations remain excluded from the automatic menu. Specialty APIs
+such as image generation, audio, embeddings, and restricted-access models are
+outside this coding router's catalog.
+
+Terra must appear in Pi's authenticated registry, through an updated provider
+catalog or custom provider configuration. The package's Pi 1.1.0 minimum
+predates Terra and does not guarantee its built-in availability. If Terra is
+unavailable, it swaps to Sonnet 5.5; Sonnet's swap now uses Terra.
 
 Names of the retired slots (`claude-opus-5`, `claude-fable-5`,
 `claude-sonnet-5`, `claude-haiku-4-5`, `gpt-5-6-luna`, `gpt-5-6-terra`,
 `gpt-5-6-sol`, `gpt-6-sol`, and their model IDs) still
 work in overrides, pins, and sentinels and select the slot that replaced them.
+Use `sol` or `terra` rather than `gpt-6.1`, which now matches both slots.
 The measured exemplars for the new slots come from the models they replaced,
-except `gpt-6-astra`, which has none yet.
+except `gpt-6-astra` and `gpt-6-1-terra`, which have none yet. Terra's
+routing guidance comes from OpenAI, not inherited GPT-5.6 Terra measurements.
 
 ### Availability, quota, and fallback
 
@@ -110,7 +126,7 @@ A down slot swaps once to a fixed partner:
 
 - Fable and Astra swap with each other.
 - Opus and Sol swap with each other.
-- Sonnet swaps to Luna.
+- Sonnet and Terra swap with each other.
 - Haiku swaps to Luna; Luna swaps to Haiku.
 
 If both judged choices are down, or judging fails, the router uses
@@ -119,6 +135,9 @@ only the percentage gate and produce a visible warning. Direct pins and
 sentinels fail open: if availability cannot produce a usable swap, they keep
 the requested arm rather than block the prompt. If a direct target is missing
 from Pi's registry, routing falls through to the remaining precedence rules.
+Without Terra in the registry, an unavailable Sonnet now uses `fallbackModel`
+on judged routes; a quota-blocked Sonnet pin stays on Sonnet instead of moving
+to Luna.
 
 Notices show judging state, selected model, latency, rationale, command pins,
 forced routes, swaps, overrides, skipped quota checks, and fallback errors.
@@ -234,7 +253,7 @@ summary or an extension message sent without typed input, runs on
 from the model registry, that request fails with a named error; fix the
 model registry before retrying.
 
-The seven execution model IDs, `fallbackModel`, and active override targets
+The eight execution model IDs, `fallbackModel`, and active override targets
 must resolve to authenticated models in Pi's registry. They may come from
 built-in providers, `models.json`, or extension-registered providers. Exact
 `provider/model-id` values remove ambiguity.

@@ -41,7 +41,7 @@
  *   }
  * }
  *
- * Quota: the judge is NEVER menu-filtered — it always sees all 7 slots.
+ * Quota: the judge is NEVER menu-filtered; it always sees all 8 slots.
  * Availability is checked after the verdict (checks run concurrently
  * with the judge call). An arm is down when its target is missing from
  * Pi's authenticated model registry, which reports configured auth, not
@@ -50,7 +50,7 @@
  * targets also use per-account usage through CPA's management api-call
  * passthrough (claude: oauth/usage incl. per-model 7d; codex: wham/usage
  * used_percent). An out-of-quota pick swaps to its fixed cross-lane partner
- * (fable<->astra, opus<->sol, sonnet->luna, haiku<->luna); both sides dead
+ * (fable<->astra, opus<->sol, sonnet<->terra, haiku<->luna); both sides dead
  * falls back to fallbackModel. Usage is cached 60s; usage failures skip the
  * threshold gate. The judge always uses one strict Pi model-registry tool call.
  *
@@ -358,6 +358,7 @@ const ARMS = {
 	"claude-opus-5-5": { model: "claude-opus-5-5" },
 	"claude-fable-5-1": { model: "claude-fable-5-1" },
 	"gpt-6-luna": { model: "gpt-6-luna" },
+	"gpt-6-1-terra": { model: "gpt-6.1-terra" },
 	"gpt-6-1-sol": { model: "gpt-6.1-sol" },
 	"gpt-6-astra": { model: "gpt-6-astra" },
 } as const;
@@ -469,7 +470,8 @@ const SWAP: Record<Arm, Arm> = {
 	"gpt-6-astra": "claude-fable-5-1",
 	"claude-opus-5-5": "gpt-6-1-sol",
 	"gpt-6-1-sol": "claude-opus-5-5",
-	"claude-sonnet-5-5": "gpt-6-luna",
+	"claude-sonnet-5-5": "gpt-6-1-terra",
+	"gpt-6-1-terra": "claude-sonnet-5-5",
 	"claude-haiku-5-5": "gpt-6-luna",
 	"gpt-6-luna": "claude-haiku-5-5",
 };
@@ -625,6 +627,8 @@ escalate when scope is ambiguous or reasoning is deep.
     - claude-fable-5-1   (frontier: architecture, ambiguous scope)
   harness: codex (cheapest first) — self-contained/algorithmic lane
     - gpt-6-luna         (fast: trivial edits to code given in the prompt)
+    - gpt-6-1-terra      (specialist: visual reasoning, scoped computer use,
+                          drafting and revising supplied text)
     - gpt-6-1-sol        (balanced: implementing well-specified functions,
                           endpoints, or classes from a clear spec; hard
                           algorithmic work, performance optimization,
@@ -638,7 +642,11 @@ refactor, "our X", named files) -> claude lane. On agentic repo tasks
 the codex arms measured only 2-16% reliable vs 59-95% for claude arms.
 The codex lane is ONLY for self-contained work where everything needed
 is in the prompt itself: spec -> implementation, algorithm problems,
-or edits to code pasted into the task.
+or edits to code pasted into the task. GPT-6.1 Terra also handles scoped
+screen interaction outside a repository, visual reasoning, and writing
+when the task supplies the needed context. Repository work stays in the
+claude lane. Terra has no measured exemplar outcomes yet; its role comes
+from OpenAI's model guidance, not the historical coding measurements.
 
 Tier boundaries (apply in order, first match wins):
 1. Concurrency/distributed correctness, protocol or migration design, or
@@ -659,7 +667,10 @@ Tier boundaries (apply in order, first match wins):
    (boundary conditions, complexity bounds, performance targets), or
    an implementation that is fully specified -> gpt-6-1-sol (or
    claude-sonnet-5-5 if it must integrate into a repo).
-6. Mechanical one-line/one-symbol edits: inside a repo
+6. Self-contained visual reasoning, scoped screen interaction outside
+   a repository, or drafting/revising supplied text -> gpt-6-1-terra.
+   For complex reasoning or code implementation, use the tiers above.
+7. Mechanical one-line/one-symbol edits: inside a repo
    -> claude-haiku-5-5; on pasted/standalone code -> gpt-6-luna.
 
 Tie-break: when torn between two adjacent tiers, ALWAYS pick the higher
@@ -1454,7 +1465,7 @@ export interface RouteRuntime {
 	judge: JudgeRunner;
 }
 
-/** Routing verdict for one task. The judge always sees seven stable slots;
+/** Routing verdict for one task. The judge always sees eight stable slots;
  * configured targets replace their prompt labels and execution models.
  * Availability is checked after the verdict and can swap to a partner slot. */
 export async function route(
@@ -1675,7 +1686,8 @@ export default function (pi: ExtensionAPI) {
 		'task: "[[llm-router: claude-opus-5-5]] Fix the race in …". The marker is stripped ' +
 		"before the child sees it. Models, weakest to strongest: repo/agentic work — " +
 		"claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5, claude-fable-5-1; self-contained/" +
-		"algorithmic work — gpt-6-luna, gpt-6-1-sol, gpt-6-astra.";
+		"algorithmic work: gpt-6-luna, gpt-6-1-sol, gpt-6-astra; " +
+		"visual reasoning, scoped screen interaction, writing: gpt-6-1-terra.";
 	pi.on("before_agent_start", (event) => {
 		if (!routingEnabled(loadConfig())) return;
 		if (

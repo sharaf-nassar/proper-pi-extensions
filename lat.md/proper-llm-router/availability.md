@@ -50,17 +50,20 @@ A down verdict moves once to a fixed cross-lane target.
 | `gpt-6-astra` | `claude-fable-5-1` |
 | `claude-opus-5-5` | `gpt-6-1-sol` |
 | `gpt-6-1-sol` | `claude-opus-5-5` |
-| `claude-sonnet-5-5` | `gpt-6-luna` |
+| `claude-sonnet-5-5` | `gpt-6-1-terra` |
+| `gpt-6-1-terra` | `claude-sonnet-5-5` |
 | `claude-haiku-5-5` | `gpt-6-luna` |
 | `gpt-6-luna` | `claude-haiku-5-5` |
 
-The graph is intentionally asymmetric at the lower tiers. Luna returns to Haiku, while both Haiku and Sonnet can fall to Luna.
+All four pairs are reciprocal. Terra pairs with Sonnet for a balanced cross-provider alternative; Haiku and Luna retain their low-cost pair.
 
-The top pair joins the strongest model of each vendor at the same $10/$50 price. The September 2026 catalog kept the graph's shape: Astra took the old Sol position and Sol took the old Terra position.
+The top pair joins the strongest model of each vendor at the same $10/$50 price. The September 2026 catalog kept the graph's shape: Astra took the old Sol position and Sol took the old Terra position. The October 28 update adds the separate Terra/Sonnet pair.
 
 Every swap crosses the Claude/Codex lane boundary. Availability does not alter the judge's rubric, but it can change the provider and model that execute the task.
 
 A judged route swaps semantic slots first, then resolves the override configured for the final slot. It throws when both slots are unavailable, then the input handler uses `fallbackModel`. A direct command or sentinel keeps its requested arm when no usable swap exists, as defined by [[routing#Direct routes]].
+
+Without Terra in the registry, an unavailable Sonnet now has no usable partner, even if Luna is available. Judged routes use `fallbackModel`; a quota-blocked Sonnet command pin or sentinel stays on Sonnet under the direct-route fail-open policy.
 
 ## Failure policy
 
