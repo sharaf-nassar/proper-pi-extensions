@@ -1,6 +1,6 @@
 {
   "name": "proper-base",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Baseline Pi behavior for session naming, history, prompt editing, fullscreen navigation, and footer styling",
   "keywords": [
     "pi-package",
