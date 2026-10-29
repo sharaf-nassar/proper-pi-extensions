@@ -6,6 +6,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 T="$(mktemp -d /tmp/proper-flow-install.XXXXXX)"
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/home"
+# bd's detached metrics flusher writes $HOME/.beads/eventsData after exit and
+# races the cleanup above (rm: Directory not empty).
+export BD_DISABLE_METRICS=1
 
 # A legacy beads-flow install leaves symlinks into a checkout path that no
 # longer exists; link must redirect them instead of failing.
