@@ -507,6 +507,10 @@ function addUsage(total: Usage, usage: Usage): void {
 			throw new CompactError("Provider returned invalid cost metadata.");
 		total.cost[key] += usage.cost[key];
 	}
+	// Pi marks combined usage provider-billed only when every part is.
+	total.cost.totalFromProvider =
+		total.cost.totalFromProvider !== false &&
+		usage.cost.totalFromProvider === true;
 }
 async function untilAborted<T>(
 	promise: Promise<T>,

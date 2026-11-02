@@ -27,7 +27,7 @@ import {
 } from "../model-prompts.ts";
 import { session } from "./fixture.ts";
 
-const PREAMBLE = "You are an expert coding assistant operating inside pi";
+const PREAMBLE = "You are a coding assistant running inside pi";
 const block = (text: string) => `<${SECTION}>\n${text}\n</${SECTION}>`;
 const count = (text: string, part: string) => text.split(part).length - 1;
 const configError = (message: RegExp) => (error: unknown) =>

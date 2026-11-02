@@ -192,7 +192,8 @@ test("raw Anthropic judge preserves thinking with compatible tool choice", async
 		output_config: { effort: string };
 	};
 	assert.equal(managed.thinking.type, "adaptive");
-	assert.equal(managed.output_config.effort, "high");
+	// Pi 1.5.0 pins the top-level effort to a cap-safe "low"; markers carry the level.
+	assert.equal(managed.output_config.effort, "low");
 	assert.match(JSON.stringify(managed), /medium/);
 });
 

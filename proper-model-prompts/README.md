@@ -123,8 +123,8 @@ order.
   `<proper_model_prompts>` block at the end of the system prompt, after Pi's
   sections and those added by extensions that loaded earlier.
 - **Prepended** prompts are joined with blank lines and placed before
-  everything else, including Pi's opening line ("You are an expert coding
-  assistant...").
+  everything else, including Pi's opening line ("You are a coding assistant
+  running inside pi...").
 
 Prompts are chosen when you send a message, for the model that will answer it.
 After switching with `/model`, `Ctrl+P`, or a router, the next message uses the

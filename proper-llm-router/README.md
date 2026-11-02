@@ -94,9 +94,9 @@ Older generations remain excluded from the automatic menu. Specialty APIs
 such as image generation, audio, embeddings, and restricted-access models are
 outside this coding router's catalog.
 
-Terra must appear in Pi's authenticated registry, through an updated provider
-catalog or custom provider configuration. The package's Pi 1.1.0 minimum
-predates Terra and does not guarantee its built-in availability. If Terra is
+Terra must appear in Pi's authenticated registry. Pi 1.5.0 lists GPT-6.1
+Terra in its built-in catalog; the package's Pi 1.1.0 minimum predates it, so
+older hosts need an updated provider catalog or custom provider configuration. If Terra is
 unavailable, it swaps to Sonnet 5.5; Sonnet's swap now uses Terra.
 
 Names of the retired slots (`claude-opus-5`, `claude-fable-5`,
@@ -220,7 +220,7 @@ modified.
 Use Node 22.19 or newer and Pi 1.1.0 or newer, the first release whose
 built-in catalog lists every default model (Claude Haiku 5.5 arrived in
 1.1.0; virtual models and GPT-6.1 Sol in 0.99.1). The
-extension and `ultra` compatibility layer are tested against Pi 1.4.0.
+extension and `ultra` compatibility layer are tested against Pi 1.5.0.
 
 Install the published package:
 

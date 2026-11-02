@@ -35,6 +35,7 @@ export const usage: any = {
 		cacheRead: 0.01,
 		cacheWrite: 0,
 		total: 0.16,
+		totalFromProvider: true,
 	},
 };
 export const checkpoint = (evidence = "SOURCE_EVIDENCE") =>

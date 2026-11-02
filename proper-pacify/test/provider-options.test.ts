@@ -75,9 +75,11 @@ test("raw Anthropic payloads carry adaptive effort, budgeted thinking and explic
 			assert.equal(payload.thinking.type, "disabled");
 		} else {
 			assert.equal(payload.thinking.type, "adaptive");
+			// Pi 1.5.0 pins managed-effort models to a cap-safe top-level "low";
+			// the requested level travels in the effort marker messages.
 			assert.equal(
 				payload.output_config.effort,
-				variant === "managed" ? "high" : "medium",
+				variant === "managed" ? "low" : "medium",
 			);
 			if (variant === "managed")
 				assert.match(JSON.stringify(payload.messages), /medium/);

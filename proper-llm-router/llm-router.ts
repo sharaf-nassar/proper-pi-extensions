@@ -1940,6 +1940,8 @@ export default function (pi: ExtensionAPI) {
 					},
 				};
 			},
+			// Pi 1.5.0: report "waiting for user" to terminals with program status.
+			{ blocked: { kind: "question", message: title } },
 		);
 	};
 
@@ -1954,51 +1956,54 @@ export default function (pi: ExtensionAPI) {
 		if (typeof ctx.ui.custom !== "function") {
 			return ctx.ui.editor(title, ""); // older pi: visible fallback
 		}
-		return ctx.ui.custom((tui, theme, _keybindings, done) => {
-			let value = "";
-			const stripControls = (text: string) =>
-				[...text]
-					.filter((character) => {
-						const code = character.charCodeAt(0);
-						return code >= 32 && code !== 127;
-					})
-					.join("");
-			return {
-				invalidate() {},
-				// pi-tui aborts if a rendered line exceeds the terminal —
-				// clip every line to the width we're given (content is
-				// clipped BEFORE styling, so no ANSI-aware measuring needed)
-				render(width: number): string[] {
-					const w = Math.max(10, Math.floor(width) || 80);
-					const clip = (s: string) =>
-						s.length > w ? `${s.slice(0, w - 1)}…` : s;
-					const dots = Math.max(0, Math.min(value.length, w - 3));
-					return [
-						theme.fg("accent", clip(title)),
-						"",
-						`${clip(`  ${"•".repeat(dots)}`)}${theme.fg("dim", "▏")}`,
-						"",
-						theme.fg("dim", clip("  enter save · esc cancel · empty clears")),
-					];
-				},
-				handleInput(data: string): void {
-					if (data === "\r" || data === "\n") {
-						done(value);
-						return;
-					}
-					if (data === "\x1b" || data === "\x03") {
-						done(undefined);
-						return;
-					}
-					if (data === "\x7f" || data === "\b") value = value.slice(0, -1);
-					else if (data.startsWith("\x1b[200~"))
-						value += stripControls(data.slice(6).split("\x1b[201~").join(""));
-					else if (!data.startsWith("\x1b")) value += stripControls(data);
-					// other \x1b… sequences (arrows etc.): ignored
-					tui.requestRender();
-				},
-			};
-		});
+		return ctx.ui.custom(
+			(tui, theme, _keybindings, done) => {
+				let value = "";
+				const stripControls = (text: string) =>
+					[...text]
+						.filter((character) => {
+							const code = character.charCodeAt(0);
+							return code >= 32 && code !== 127;
+						})
+						.join("");
+				return {
+					invalidate() {},
+					// pi-tui aborts if a rendered line exceeds the terminal —
+					// clip every line to the width we're given (content is
+					// clipped BEFORE styling, so no ANSI-aware measuring needed)
+					render(width: number): string[] {
+						const w = Math.max(10, Math.floor(width) || 80);
+						const clip = (s: string) =>
+							s.length > w ? `${s.slice(0, w - 1)}…` : s;
+						const dots = Math.max(0, Math.min(value.length, w - 3));
+						return [
+							theme.fg("accent", clip(title)),
+							"",
+							`${clip(`  ${"•".repeat(dots)}`)}${theme.fg("dim", "▏")}`,
+							"",
+							theme.fg("dim", clip("  enter save · esc cancel · empty clears")),
+						];
+					},
+					handleInput(data: string): void {
+						if (data === "\r" || data === "\n") {
+							done(value);
+							return;
+						}
+						if (data === "\x1b" || data === "\x03") {
+							done(undefined);
+							return;
+						}
+						if (data === "\x7f" || data === "\b") value = value.slice(0, -1);
+						else if (data.startsWith("\x1b[200~"))
+							value += stripControls(data.slice(6).split("\x1b[201~").join(""));
+						else if (!data.startsWith("\x1b")) value += stripControls(data);
+						// other \x1b… sequences (arrows etc.): ignored
+						tui.requestRender();
+					},
+				};
+			},
+			{ blocked: { kind: "question", message: title } },
+		);
 	}
 
 	function configForEditor(cfg: Config, showCpa: boolean): Partial<Config> {

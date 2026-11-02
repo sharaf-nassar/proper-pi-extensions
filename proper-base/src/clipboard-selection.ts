@@ -30,6 +30,7 @@ type MarkdownHost = Component & {
 	paddingY: number;
 	theme: { codeBlockIndent?: string };
 	cachedLines?: string[];
+	blocks?: unknown;
 	renderToken(token: Token, width: number, ...rest: unknown[]): string[];
 };
 type Layout = {
@@ -93,6 +94,8 @@ function markdownRows(component: MarkdownHost, width: number) {
 		component,
 	) as MarkdownHost;
 	delete clone.cachedLines;
+	// Pi 1.5.0 reuses rendered blocks across renders; drop them so every token replays.
+	delete clone.blocks;
 	const renderToken = component.renderToken;
 	const rows = new Map<number, Row>();
 	let depth = 0;

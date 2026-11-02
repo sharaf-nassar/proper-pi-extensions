@@ -86,7 +86,7 @@ workflow can publish it.
   and deletes a legacy manual models.json entry for it (JSONC files are
   left alone and need a manual edit). Stray
   requests on the placeholder run on the router's `fallbackModel`.
-- Toolchain: Node 22.19+, Pi 1.4.0 tested (proper-llm-router requires
+- Toolchain: Node 22.19+, Pi 1.5.0 tested (proper-llm-router requires
   1.1.0 for Claude Haiku 5.5 in the built-in catalog; proper-pacify requires 0.99.0
   for prompt preflight dispositions; proper-compact and
   proper-model-prompts require 0.87.0), TypeScript 6.
